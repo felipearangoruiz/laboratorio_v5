@@ -1,0 +1,12 @@
+.venv/
+backend/.venv/
+node_modules/
+.next/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+data/uploads/
+*.egg-info/
+.pytest_cache/
+coverage/
