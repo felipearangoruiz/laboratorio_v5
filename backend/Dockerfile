@@ -16,6 +16,9 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev
 
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 COPY . .
 RUN chmod +x /app/entrypoint.sh
 
