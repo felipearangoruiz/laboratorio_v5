@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey
+from sqlalchemy import JSON, Column, DateTime, Enum as SAEnum, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
@@ -50,7 +50,9 @@ class ProcessingResult(SQLModel, table=True):
             nullable=False,
         )
     )
-    result: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
+    result: dict[str, Any] = Field(
+        sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
