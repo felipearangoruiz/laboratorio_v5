@@ -15,12 +15,21 @@ down_revision = None
 branch_labels = None
 depends_on = None
 
-user_role = sa.Enum("superadmin", "admin", name="user_role")
+user_role = sa.Enum("superadmin", "admin", name="user_role", create_type=False)
 member_token_status = sa.Enum(
-    "pending", "in_progress", "completed", "expired", name="member_token_status"
+    "pending",
+    "in_progress",
+    "completed",
+    "expired",
+    name="member_token_status",
+    create_type=False,
 )
-processing_type = sa.Enum("ciego", "orientado", "orientacion", name="processing_type")
-job_state = sa.Enum("pending", "running", "completed", "failed", name="job_state")
+processing_type = sa.Enum(
+    "ciego", "orientado", "orientacion", name="processing_type", create_type=False
+)
+job_state = sa.Enum(
+    "pending", "running", "completed", "failed", name="job_state", create_type=False
+)
 
 
 def upgrade() -> None:
