@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy import JSON, Column, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
@@ -39,7 +39,9 @@ class Interview(SQLModel, table=True):
             nullable=True,
         ),
     )
-    data: dict[str, Any] = Field(sa_column=Column(JSONB, nullable=False))
+    data: dict[str, Any] = Field(
+        sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False)
+    )
     submitted_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
