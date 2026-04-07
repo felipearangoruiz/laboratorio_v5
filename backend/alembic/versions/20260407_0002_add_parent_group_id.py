@@ -8,7 +8,6 @@ Create Date: 2026-04-07 00:00:02
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 
 revision = "20260407_0002"
@@ -20,10 +19,10 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "groups",
-        sa.Column("parent_group_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("parent_group_id", sa.Uuid(), nullable=True),
     )
     op.create_foreign_key(
-        op.f("fk_groups_parent_group_id_groups"),
+        "fk_groups_parent_group_id",
         "groups",
         "groups",
         ["parent_group_id"],
@@ -34,7 +33,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_constraint(
-        op.f("fk_groups_parent_group_id_groups"),
+        "fk_groups_parent_group_id",
         "groups",
         type_="foreignkey",
     )
