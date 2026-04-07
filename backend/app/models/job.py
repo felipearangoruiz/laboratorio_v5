@@ -10,10 +10,10 @@ from sqlmodel import Field, SQLModel
 
 
 class JobState(str, Enum):
-    PENDING = "pending"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
 
 
 class JobStatus(SQLModel, table=True):

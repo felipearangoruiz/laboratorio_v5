@@ -11,9 +11,9 @@ from sqlmodel import Field, SQLModel
 
 
 class ProcessingType(str, Enum):
-    CIEGO = "ciego"
-    ORIENTADO = "orientado"
-    ORIENTACION = "orientacion"
+    CIEGO = "CIEGO"
+    ORIENTADO = "ORIENTADO"
+    ORIENTACION = "ORIENTACION"
 
 
 class ProcessingResult(SQLModel, table=True):
