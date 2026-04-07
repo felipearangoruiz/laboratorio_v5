@@ -10,8 +10,8 @@ from sqlmodel import Field, SQLModel
 
 
 class UserRole(str, Enum):
-    SUPERADMIN = "superadmin"
-    ADMIN = "admin"
+    SUPERADMIN = "SUPERADMIN"
+    ADMIN = "ADMIN"
 
 
 class User(SQLModel, table=True):
@@ -26,7 +26,7 @@ class User(SQLModel, table=True):
     role: UserRole = Field(
         default=UserRole.ADMIN,
         sa_column=Column(
-            SAEnum(UserRole, name="user_role", native_enum=True, create_type=False, values_callable=lambda x: [e.value for e in x]),
+            SAEnum(UserRole, name="user_role", native_enum=True, create_type=False),
             nullable=False,
             server_default=UserRole.ADMIN.value,
         ),

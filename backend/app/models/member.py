@@ -10,10 +10,10 @@ from sqlmodel import Field, SQLModel
 
 
 class MemberTokenStatus(str, Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    EXPIRED = "expired"
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    EXPIRED = "EXPIRED"
 
 
 class Member(SQLModel, table=True):
