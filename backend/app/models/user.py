@@ -10,8 +10,8 @@ from sqlmodel import Field, SQLModel
 
 
 class UserRole(str, Enum):
-    SUPERADMIN = "SUPERADMIN"
-    ADMIN = "ADMIN"
+    SUPERADMIN = "superadmin"
+    ADMIN = "admin"
 
 
 class User(SQLModel, table=True):
