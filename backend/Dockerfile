@@ -13,8 +13,8 @@ RUN apt-get update \
 
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-COPY pyproject.toml uv.lock README.md ./
-RUN uv sync --frozen --no-dev
+COPY pyproject.toml README.md ./
+RUN uv sync --no-dev
 
 COPY . .
 
