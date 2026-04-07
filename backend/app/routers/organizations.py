@@ -23,6 +23,32 @@ def create_organization(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
 ) -> OrganizationRead:
+    if current_user.role == UserRole.ADMIN:
+        if current_user.organization_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+
+        if payload.admin_id is not None and payload.admin_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+
+        organization = Organization(
+            **payload.model_dump(exclude={"admin_id"}),
+            admin_id=current_user.id,
+        )
+        session.add(organization)
+        session.flush()
+
+        current_user.organization_id = organization.id
+        session.add(current_user)
+        session.commit()
+        session.refresh(organization)
+        return OrganizationRead.model_validate(organization)
+
     if current_user.role != UserRole.SUPERADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
