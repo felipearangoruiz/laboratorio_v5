@@ -29,8 +29,7 @@ def ensure_superadmin(
     else:
         superadmin.hashed_password = hashed_password
         superadmin.role = UserRole.SUPERADMIN
-        if superadmin.organization_id is None:
-            superadmin.organization_id = organization_id
+        superadmin.organization_id = organization_id
 
     session.add(superadmin)
     session.commit()
