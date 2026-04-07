@@ -40,7 +40,7 @@ class ProcessingResult(SQLModel, table=True):
     )
     type: ProcessingType = Field(
         sa_column=Column(
-            SAEnum(ProcessingType, name="processing_type", native_enum=True),
+            SAEnum(ProcessingType, name="processing_type", native_enum=True, create_type=False),
             nullable=False,
         )
     )

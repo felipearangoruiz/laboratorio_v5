@@ -33,7 +33,7 @@ class JobStatus(SQLModel, table=True):
     status: JobState = Field(
         default=JobState.PENDING,
         sa_column=Column(
-            SAEnum(JobState, name="job_state", native_enum=True),
+            SAEnum(JobState, name="job_state", native_enum=True, create_type=False),
             nullable=False,
             server_default=JobState.PENDING.value,
         ),

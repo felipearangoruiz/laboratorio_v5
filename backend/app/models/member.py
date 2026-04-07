@@ -50,7 +50,7 @@ class Member(SQLModel, table=True):
     token_status: MemberTokenStatus = Field(
         default=MemberTokenStatus.PENDING,
         sa_column=Column(
-            SAEnum(MemberTokenStatus, name="member_token_status", native_enum=True),
+            SAEnum(MemberTokenStatus, name="member_token_status", native_enum=True, create_type=False),
             nullable=False,
             server_default=MemberTokenStatus.PENDING.value,
         ),
