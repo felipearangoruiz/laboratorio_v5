@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlmodel import Session, create_engine, select
 
 from app.core.config import settings
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models import Group, Organization, User, UserRole
 
 SUPERADMIN_EMAIL = "superadmin@lab.com"
@@ -17,25 +17,45 @@ def ensure_superadmin(
     superadmin = session.exec(
         select(User).where(User.email == SUPERADMIN_EMAIL)
     ).first()
-    hashed_password = hash_password(SUPERADMIN_PASSWORD)
 
     if superadmin is None:
         print("[seed] Creando superadmin inicial.")
         superadmin = User(
             email=SUPERADMIN_EMAIL,
-            hashed_password=hashed_password,
+            hashed_password=hash_password(SUPERADMIN_PASSWORD),
             role=UserRole.SUPERADMIN,
             organization_id=organization_id,
         )
-    else:
-        print("[seed] Superadmin ya existe; actualizando credenciales y rol.")
-        superadmin.hashed_password = hashed_password
-        superadmin.role = UserRole.SUPERADMIN
-        superadmin.organization_id = organization_id
+        session.add(superadmin)
+        session.commit()
+        session.refresh(superadmin)
+        return superadmin
 
-    session.add(superadmin)
-    session.commit()
-    session.refresh(superadmin)
+    print("[seed] Superadmin ya existe; verificando estado.")
+    dirty = False
+
+    if not verify_password(SUPERADMIN_PASSWORD, superadmin.hashed_password):
+        print("[seed] Actualizando hash de contraseña de superadmin.")
+        superadmin.hashed_password = hash_password(SUPERADMIN_PASSWORD)
+        dirty = True
+
+    if superadmin.role != UserRole.SUPERADMIN:
+        print("[seed] Corrigiendo rol de superadmin.")
+        superadmin.role = UserRole.SUPERADMIN
+        dirty = True
+
+    if superadmin.organization_id != organization_id:
+        print("[seed] Corrigiendo organización del superadmin.")
+        superadmin.organization_id = organization_id
+        dirty = True
+
+    if dirty:
+        session.add(superadmin)
+        session.commit()
+        session.refresh(superadmin)
+    else:
+        print("[seed] Superadmin ya estaba en estado consistente.")
+
     return superadmin
 
 
