@@ -17,7 +17,9 @@ COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev
 
 COPY . .
-COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod 755 /app/entrypoint.sh
 
-CMD ["/app/entrypoint.sh"]
+# Keep entrypoint outside /app so bind mounts on /app do not override it.
+COPY entrypoint.sh /usr/local/bin/backend-entrypoint.sh
+RUN chmod 755 /usr/local/bin/backend-entrypoint.sh
+
+CMD ["/usr/local/bin/backend-entrypoint.sh"]
