@@ -1,5 +1,5 @@
-#!/bin/bash
-set -Eeuo pipefail
+#!/bin/sh
+set -eu
 
 PYTHON_BIN="/app/.venv/bin/python"
 
@@ -13,14 +13,14 @@ log() {
 }
 
 run_step() {
-  local label="$1"
+  label="$1"
   shift
 
   log "START: ${label}"
   if "$@"; then
     log "OK: ${label}"
   else
-    local code=$?
+    code=$?
     log "ERROR: ${label} (exit=${code})"
     exit "${code}"
   fi

@@ -34,6 +34,7 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
+    entrypoint: ["/usr/local/bin/backend-entrypoint.sh"]
     env_file:
       - .env
 
