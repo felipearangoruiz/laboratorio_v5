@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.routers.auth import router as auth_router
+from app.routers.groups import router as groups_router
 from app.routers.organizations import router as organizations_router
 
 app = FastAPI(title="Laboratorio API", version="0.1.0")
@@ -28,3 +29,5 @@ app.include_router(health_router)
 app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 app.include_router(organizations_router, prefix="/organizations", tags=["organizations"])
+
+app.include_router(groups_router)
