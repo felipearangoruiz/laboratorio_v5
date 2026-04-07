@@ -6,6 +6,37 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.models import Group, Organization, User, UserRole
 
+SUPERADMIN_EMAIL = "superadmin@lab.com"
+SUPERADMIN_PASSWORD = "changeme123"
+
+
+def ensure_superadmin(
+    session: Session,
+    organization_id,
+) -> User:
+    superadmin = session.exec(
+        select(User).where(User.email == SUPERADMIN_EMAIL)
+    ).first()
+    hashed_password = hash_password(SUPERADMIN_PASSWORD)
+
+    if superadmin is None:
+        superadmin = User(
+            email=SUPERADMIN_EMAIL,
+            hashed_password=hashed_password,
+            role=UserRole.SUPERADMIN,
+            organization_id=organization_id,
+        )
+    else:
+        superadmin.hashed_password = hashed_password
+        superadmin.role = UserRole.SUPERADMIN
+        if superadmin.organization_id is None:
+            superadmin.organization_id = organization_id
+
+    session.add(superadmin)
+    session.commit()
+    session.refresh(superadmin)
+    return superadmin
+
 
 def seed() -> None:
     engine = create_engine(settings.DATABASE_URL)
@@ -42,24 +73,10 @@ def seed() -> None:
             )
             session.add(default_group)
 
-        superadmin = session.exec(
-            select(User).where(User.email == "superadmin@lab.com")
-        ).first()
-
-        if superadmin is None:
-            superadmin = User(
-                email="superadmin@lab.com",
-                hashed_password=hash_password("changeme123"),
-                role=UserRole.SUPERADMIN,
-                organization_id=organization.id,
-            )
-            session.add(superadmin)
-            session.commit()
-            session.refresh(superadmin)
-        elif not superadmin.hashed_password.startswith("$2"):
-            superadmin.hashed_password = hash_password("changeme123")
-            superadmin.role = UserRole.SUPERADMIN
-            session.add(superadmin)
+        superadmin = ensure_superadmin(
+            session=session,
+            organization_id=organization.id,
+        )
 
         if organization.admin_id != superadmin.id:
             organization.admin_id = superadmin.id
