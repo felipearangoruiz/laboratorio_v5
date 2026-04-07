@@ -11,9 +11,9 @@ from sqlmodel import Field, SQLModel
 
 
 class ProcessingType(str, Enum):
-    CIEGO = "CIEGO"
-    ORIENTADO = "ORIENTADO"
-    ORIENTACION = "ORIENTACION"
+    CIEGO = "ciego"
+    ORIENTADO = "orientado"
+    ORIENTACION = "orientacion"
 
 
 class ProcessingResult(SQLModel, table=True):
@@ -40,7 +40,13 @@ class ProcessingResult(SQLModel, table=True):
     )
     type: ProcessingType = Field(
         sa_column=Column(
-            SAEnum(ProcessingType, name="processing_type", native_enum=True, create_type=False),
+            SAEnum(
+                ProcessingType,
+                name="processing_type",
+                native_enum=True,
+                create_type=False,
+                values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            ),
             nullable=False,
         )
     )

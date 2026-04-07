@@ -10,10 +10,10 @@ from sqlmodel import Field, SQLModel
 
 
 class MemberTokenStatus(str, Enum):
-    PENDING = "PENDING"
-    IN_PROGRESS = "IN_PROGRESS"
-    COMPLETED = "COMPLETED"
-    EXPIRED = "EXPIRED"
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    EXPIRED = "expired"
 
 
 class Member(SQLModel, table=True):
@@ -50,7 +50,13 @@ class Member(SQLModel, table=True):
     token_status: MemberTokenStatus = Field(
         default=MemberTokenStatus.PENDING,
         sa_column=Column(
-            SAEnum(MemberTokenStatus, name="member_token_status", native_enum=True, create_type=False),
+            SAEnum(
+                MemberTokenStatus,
+                name="member_token_status",
+                native_enum=True,
+                create_type=False,
+                values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            ),
             nullable=False,
             server_default=MemberTokenStatus.PENDING.value,
         ),

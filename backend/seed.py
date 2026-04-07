@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from sqlmodel import SQLModel, Session, create_engine, select
+from sqlmodel import Session, create_engine, select
 
 from app.core.config import settings
 from app.core.security import hash_password
@@ -40,7 +40,6 @@ def ensure_superadmin(
 
 def seed() -> None:
     engine = create_engine(settings.DATABASE_URL)
-    SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
         organization = session.exec(

@@ -26,7 +26,13 @@ class User(SQLModel, table=True):
     role: UserRole = Field(
         default=UserRole.ADMIN,
         sa_column=Column(
-            SAEnum(UserRole, name="user_role", native_enum=True, create_type=False),
+            SAEnum(
+                UserRole,
+                name="user_role",
+                native_enum=True,
+                create_type=False,
+                values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            ),
             nullable=False,
             server_default=UserRole.ADMIN.value,
         ),
