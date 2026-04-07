@@ -50,8 +50,8 @@ def seed() -> None:
         if superadmin is None:
             superadmin = User(
                 email="superadmin@lab.com",
-                hashed_password=pwd_context.hash("changeme123"),
-                role=UserRole.SUPERADMIN,
+                hashed_password="fakehashedpassword",
+                role="superadmin",
                 organization_id=organization.id,
             )
             session.add(superadmin)
