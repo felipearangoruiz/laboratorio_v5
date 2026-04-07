@@ -10,10 +10,10 @@ from sqlmodel import Field, SQLModel
 
 
 class JobState(str, Enum):
-    PENDING = "PENDING"
-    RUNNING = "RUNNING"
-    COMPLETED = "COMPLETED"
-    FAILED = "FAILED"
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class JobStatus(SQLModel, table=True):
@@ -33,7 +33,13 @@ class JobStatus(SQLModel, table=True):
     status: JobState = Field(
         default=JobState.PENDING,
         sa_column=Column(
-            SAEnum(JobState, name="job_state", native_enum=True, create_type=False),
+            SAEnum(
+                JobState,
+                name="job_state",
+                native_enum=True,
+                create_type=False,
+                values_callable=lambda enum_cls: [member.value for member in enum_cls],
+            ),
             nullable=False,
             server_default=JobState.PENDING.value,
         ),
