@@ -32,6 +32,20 @@ class Organization(SQLModel, table=True):
     )
 
 
+class OrganizationCreate(SQLModel):
+    name: str
+    description: str = ""
+    sector: str = ""
+    admin_id: UUID | None = None
+
+
+class OrganizationUpdate(SQLModel):
+    name: str | None = None
+    description: str | None = None
+    sector: str | None = None
+    admin_id: UUID | None = None
+
+
 class OrganizationRead(SQLModel):
     id: UUID
     name: str
