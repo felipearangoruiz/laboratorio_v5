@@ -22,6 +22,14 @@ class Group(SQLModel, table=True):
             nullable=False,
         )
     )
+    parent_group_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey("groups.id", ondelete="RESTRICT"),
+            nullable=True,
+        ),
+    )
     name: str = Field(nullable=False, max_length=255)
     description: str = Field(default="", nullable=False)
     tarea_general: str = Field(default="", nullable=False)
@@ -37,6 +45,7 @@ class Group(SQLModel, table=True):
 class GroupRead(SQLModel):
     id: UUID
     organization_id: UUID
+    parent_group_id: UUID | None
     name: str
     description: str
     tarea_general: str
