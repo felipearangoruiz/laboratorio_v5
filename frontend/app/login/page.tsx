@@ -16,7 +16,8 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/login`, {
+      const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+      const response = await fetch(`${apiBaseUrl}/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
@@ -32,7 +33,15 @@ export default function LoginPage() {
       document.cookie = `auth_token=${data.access_token}; path=/; max-age=900`;
       router.push("/admin");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al iniciar sesión");
+      if (err instanceof Error) {
+        if (err.message === "Failed to fetch") {
+          setError("No se pudo conectar con el servidor. Intenta nuevamente.");
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError("Error al iniciar sesión");
+      }
     } finally {
       setLoading(false);
     }
