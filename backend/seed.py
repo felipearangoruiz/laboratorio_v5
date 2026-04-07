@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-from passlib.context import CryptContext
-from sqlmodel import Session, create_engine, select
+from sqlmodel import SQLModel, Session, create_engine, select
 
 from app.core.config import settings
+from app.core.security import hash_password
 from app.models import Group, Organization, User, UserRole
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def seed() -> None:
     engine = create_engine(settings.DATABASE_URL)
+    SQLModel.metadata.create_all(engine)
 
     with Session(engine) as session:
         organization = session.exec(
@@ -50,13 +49,17 @@ def seed() -> None:
         if superadmin is None:
             superadmin = User(
                 email="superadmin@lab.com",
-                hashed_password="fakehashedpassword",
-                role="superadmin",
+                hashed_password=hash_password("changeme123"),
+                role=UserRole.SUPERADMIN,
                 organization_id=organization.id,
             )
             session.add(superadmin)
             session.commit()
             session.refresh(superadmin)
+        elif not superadmin.hashed_password.startswith("$2"):
+            superadmin.hashed_password = hash_password("changeme123")
+            superadmin.role = UserRole.SUPERADMIN
+            session.add(superadmin)
 
         if organization.admin_id != superadmin.id:
             organization.admin_id = superadmin.id
