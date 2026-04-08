@@ -356,7 +356,7 @@ export default function GroupsPage() {
       {!loading && generalError ? <p className="mb-4 text-sm text-red-600">{generalError}</p> : null}
 
       {!loading && !generalError && groups.length === 0 ? (
-        <p className="text-sm text-gray-600">No hay grupos</p>
+        <p className="text-sm text-gray-600">No hay grupos creados aún.</p>
       ) : null}
 
       {!loading && !generalError && groups.length > 0 ? (
