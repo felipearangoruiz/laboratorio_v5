@@ -43,19 +43,19 @@ jobs:
       - name: Run Alembic migrations
         working-directory: backend
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/laboratorio
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/laboratorio
         run: alembic upgrade head
 
       - name: Seed database
         working-directory: backend
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/laboratorio
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/laboratorio
         run: python seed.py
 
       - name: Start backend server
         working-directory: backend
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/laboratorio
+          DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/laboratorio
         run: |
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           sleep 10
