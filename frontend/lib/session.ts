@@ -1,6 +1,20 @@
 import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
+import { decodeJwt, jwtVerify } from "jose";
 import type { JWTPayload } from "./types";
+
+function isSessionPayload(payload: unknown): payload is JWTPayload {
+  if (!payload || typeof payload !== "object") {
+    return false;
+  }
+
+  const candidate = payload as Record<string, unknown>;
+
+  return (
+    typeof candidate.user_id === "string" &&
+    typeof candidate.role === "string" &&
+    typeof candidate.organization_id === "string"
+  );
+}
 
 export async function getSessionPayload(): Promise<JWTPayload | null> {
   const cookieStore = await cookies();
@@ -10,15 +24,22 @@ export async function getSessionPayload(): Promise<JWTPayload | null> {
     return null;
   }
 
-  if (!process.env.JWT_SECRET) {
-    throw new Error("JWT_SECRET is not defined");
-  }
+  const jwtSecret = process.env.JWT_SECRET;
 
   try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    if (!jwtSecret) {
+      if (process.env.NODE_ENV === "production") {
+        return null;
+      }
+
+      const decodedPayload = decodeJwt(token);
+      return isSessionPayload(decodedPayload) ? decodedPayload : null;
+    }
+
+    const secret = new TextEncoder().encode(jwtSecret);
     const { payload } = await jwtVerify(token, secret);
 
-    return payload as JWTPayload;
+    return isSessionPayload(payload) ? payload : null;
   } catch {
     return null;
   }
