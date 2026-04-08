@@ -2,10 +2,14 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.core.dependencies import get_current_user
 from app.db import get_session
+from app.models.group import Group
+from app.models.member import Member
 from app.models.organization import (
     Organization,
     OrganizationCreate,
@@ -15,6 +19,13 @@ from app.models.organization import (
 from app.models.user import User, UserRole
 
 router = APIRouter()
+
+
+class OrgStats(BaseModel):
+    total_members: int
+    total_groups: int
+    completed_interviews: int
+    pending_interviews: int
 
 
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
@@ -156,3 +167,52 @@ def delete_organization(
 
     session.delete(organization)
     session.commit()
+
+
+@router.get("/{organization_id}/stats", response_model=OrgStats)
+def get_organization_stats(
+    organization_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Session = Depends(get_session),
+) -> OrgStats:
+    organization = session.get(Organization, organization_id)
+    if not organization:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
+    if (
+        current_user.role != UserRole.SUPERADMIN
+        and current_user.organization_id != organization_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+
+    total_members = session.exec(
+        select(func.count(Member.id)).where(Member.organization_id == organization_id)
+    ).one()
+    total_groups = session.exec(
+        select(func.count(Group.id)).where(Group.organization_id == organization_id)
+    ).one()
+    completed_interviews = session.exec(
+        select(func.count(Member.id)).where(
+            Member.organization_id == organization_id,
+            Member.token_status == "completed",
+        )
+    ).one()
+    pending_interviews = session.exec(
+        select(func.count(Member.id)).where(
+            Member.organization_id == organization_id,
+            Member.token_status == "pending",
+        )
+    ).one()
+
+    return OrgStats(
+        total_members=total_members,
+        total_groups=total_groups,
+        completed_interviews=completed_interviews,
+        pending_interviews=pending_interviews,
+    )
