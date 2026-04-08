@@ -6,6 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, SQLModel, create_engine
 
+import app.models
 from app.core.security import create_access_token, hash_password
 from app.db import get_session
 from app.main import app
