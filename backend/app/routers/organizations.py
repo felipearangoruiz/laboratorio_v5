@@ -211,8 +211,8 @@ def get_organization_stats(
     ).one()
 
     return OrgStats(
-        total_members=total_members,
-        total_groups=total_groups,
-        completed_interviews=completed_interviews,
-        pending_interviews=pending_interviews,
+        total_members=int(total_members),
+        total_groups=int(total_groups),
+        completed_interviews=int(completed_interviews),
+        pending_interviews=int(pending_interviews),
     )
