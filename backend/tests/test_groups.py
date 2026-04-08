@@ -59,16 +59,16 @@ def seeded_data(session: Session) -> dict[str, User | Organization | Group]:
         role=UserRole.ADMIN,
         organization_id=other_org.id,
     )
+    superadmin = User(
+        email="superadmin@test.com",
+        hashed_password=hash_password("secret"),
+        role=UserRole.SUPERADMIN,
+        organization_id=own_org.id,
+    )
     session.add(admin)
     session.add(other_admin)
+    session.add(superadmin)
     session.commit()
-    session.refresh(admin)
-    session.refresh(other_admin)
-
-    own_org.admin_id = admin.id
-    other_org.admin_id = other_admin.id
-    session.add(own_org)
-    session.add(other_org)
 
     default_group = Group(
         organization_id=own_org.id,
@@ -90,6 +90,7 @@ def seeded_data(session: Session) -> dict[str, User | Organization | Group]:
     return {
         "admin": admin,
         "other_admin": other_admin,
+        "superadmin": superadmin,
         "own_org": own_org,
         "other_org": other_org,
         "default_group": default_group,
@@ -105,10 +106,12 @@ def auth_headers(user: User) -> dict[str, str]:
 def create_group(
     client: TestClient,
     user: User,
+    organization_id: str,
     name: str,
     parent_group_id: str | None = None,
 ) -> dict:
     payload = {
+        "organization_id": organization_id,
         "name": name,
         "description": f"{name} desc",
         "tarea_general": "tarea",
@@ -124,16 +127,19 @@ def create_group(
 
 
 def test_crear_jerarquia_de_3_niveles(client: TestClient, seeded_data: dict) -> None:
-    root = create_group(client, seeded_data["admin"], "Root")
+    org_id = str(seeded_data["own_org"].id)
+    root = create_group(client, seeded_data["admin"], org_id, "Root")
     child = create_group(
         client,
         seeded_data["admin"],
+        org_id,
         "Child",
         parent_group_id=root["id"],
     )
     grandchild = create_group(
         client,
         seeded_data["admin"],
+        org_id,
         "GrandChild",
         parent_group_id=child["id"],
     )
@@ -148,6 +154,7 @@ def test_impedir_parent_de_otra_organizacion(
     response = client.post(
         "/groups",
         json={
+            "organization_id": str(seeded_data["own_org"].id),
             "name": "Invalid Parent",
             "description": "no",
             "tarea_general": "x",
@@ -156,16 +163,18 @@ def test_impedir_parent_de_otra_organizacion(
         headers=auth_headers(seeded_data["admin"]),
     )
 
-    assert response.status_code in {400, 403}
+    assert response.status_code == 400
 
 
 def test_impedir_eliminar_grupo_con_hijos(
     client: TestClient, seeded_data: dict
 ) -> None:
-    parent = create_group(client, seeded_data["admin"], "Parent")
+    org_id = str(seeded_data["own_org"].id)
+    parent = create_group(client, seeded_data["admin"], org_id, "Parent")
     create_group(
         client,
         seeded_data["admin"],
+        org_id,
         "Child",
         parent_group_id=parent["id"],
     )
@@ -175,7 +184,7 @@ def test_impedir_eliminar_grupo_con_hijos(
         headers=auth_headers(seeded_data["admin"]),
     )
 
-    assert response.status_code in {400, 409}
+    assert response.status_code == 400
 
 
 def test_impedir_eliminar_grupo_default(client: TestClient, seeded_data: dict) -> None:
@@ -184,35 +193,38 @@ def test_impedir_eliminar_grupo_default(client: TestClient, seeded_data: dict) -
         headers=auth_headers(seeded_data["admin"]),
     )
 
-    assert response.status_code in {400, 403}
+    assert response.status_code == 400
 
 
 def test_endpoint_tree_devuelve_estructura_anidada(
     client: TestClient, seeded_data: dict
 ) -> None:
-    root = create_group(client, seeded_data["admin"], "Root")
+    org_id = str(seeded_data["own_org"].id)
+    root = create_group(client, seeded_data["admin"], org_id, "Root")
     child = create_group(
         client,
         seeded_data["admin"],
+        org_id,
         "Child",
         parent_group_id=root["id"],
     )
     grandchild = create_group(
         client,
         seeded_data["admin"],
+        org_id,
         "GrandChild",
         parent_group_id=child["id"],
     )
 
-    response = client.get("/groups/tree", headers=auth_headers(seeded_data["admin"]))
+    response = client.get(
+        f"/organizations/{org_id}/groups/tree",
+        headers=auth_headers(seeded_data["admin"]),
+    )
 
     assert response.status_code == 200
     tree = response.json()
-    assert isinstance(tree, list)
     root_node = next(node for node in tree if node["id"] == root["id"])
-    assert len(root_node["children"]) >= 1
     child_node = next(node for node in root_node["children"] if node["id"] == child["id"])
-    assert len(child_node["children"]) >= 1
     assert any(node["id"] == grandchild["id"] for node in child_node["children"])
 
 
@@ -226,3 +238,19 @@ def test_admin_no_puede_tocar_grupos_de_otra_organizacion(
     )
 
     assert response.status_code == 403
+
+
+def test_superadmin_puede_operar_grupos_de_cualquier_organizacion(
+    client: TestClient, seeded_data: dict
+) -> None:
+    response = client.post(
+        "/groups",
+        json={
+            "organization_id": str(seeded_data["other_org"].id),
+            "name": "cross-org",
+            "description": "ok",
+        },
+        headers=auth_headers(seeded_data["superadmin"]),
+    )
+
+    assert response.status_code == 201

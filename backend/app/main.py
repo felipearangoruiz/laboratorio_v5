@@ -5,6 +5,7 @@ from app.core.config import settings
 from app.routers.auth import router as auth_router
 from app.routers.organizations import router as organizations_router
 from app.routers.groups import router as groups_router
+from app.routers.members import router as members_router
 
 app = FastAPI(title="Laboratorio API", version="0.1.0")
 
@@ -30,3 +31,4 @@ app.include_router(auth_router, prefix="/auth", tags=["auth"])
 
 app.include_router(organizations_router, prefix="/organizations", tags=["organizations"])
 app.include_router(groups_router, tags=["groups"])
+app.include_router(members_router, tags=["members"])
