@@ -1,7 +1,10 @@
 import { cookies } from "next/headers";
 
 export async function serverFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://backend:8000";
+  const baseUrl = (process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(
+    /\/$/,
+    ""
+  );
   const url = `${baseUrl}${path}`;
 
   const cookieStore = cookies();
