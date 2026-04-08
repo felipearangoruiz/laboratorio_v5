@@ -4,17 +4,22 @@ import { NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
   const token = request.cookies.get("auth_token")?.value;
+  const jwtSecret = process.env.JWT_SECRET;
 
   if (!token) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (!process.env.JWT_SECRET) {
-    throw new Error("JWT_SECRET is not defined");
+  if (!jwtSecret) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    return NextResponse.next();
   }
 
   try {
-    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    const secret = new TextEncoder().encode(jwtSecret);
     const { payload } = await jwtVerify(token, secret);
 
     if (payload.role === "admin" && request.nextUrl.pathname.startsWith("/superadmin")) {
