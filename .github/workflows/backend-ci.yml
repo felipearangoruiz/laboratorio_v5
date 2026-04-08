@@ -60,9 +60,7 @@ jobs:
           uvicorn app.main:app --host 0.0.0.0 --port 8000 &
           sleep 10
 
-      # ─────────────────────────────
       # SMOKE TESTS BASE
-      # ─────────────────────────────
 
       - name: Health check
         run: curl -f http://localhost:8000/health
@@ -74,9 +72,7 @@ jobs:
         run: |
           curl -s http://localhost:8000/openapi.json | grep '/organizations/{organization_id}/stats'
 
-      # ─────────────────────────────
       # AUTH
-      # ─────────────────────────────
 
       - name: Login y captura de token
         run: |
@@ -86,9 +82,7 @@ jobs:
             | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
           echo "TOKEN=$TOKEN" >> $GITHUB_ENV
 
-      # ─────────────────────────────
       # VALIDACIONES EXISTENTES
-      # ─────────────────────────────
 
       - name: Listar organizaciones
         run: |
@@ -123,9 +117,7 @@ jobs:
             http://localhost:8000/organizations/11111111-1111-1111-1111-111111111111/stats)
           test "$STATUS" = "404"
 
-      # ─────────────────────────────
       # NUEVAS PRUEBAS (PRODUCTO REAL)
-      # ─────────────────────────────
 
       - name: Crear organización de prueba
         run: |
@@ -152,7 +144,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"organization_id\":\"$NEW_ORG_ID\",\"group_id\":\"$NEW_GROUP_ID\",\"name\":\"Miembro CI\",\"role\":\"Analista\"}"
 
-            - name: Validar stats después de crear miembro
+      - name: Validar stats después de crear miembro
         run: |
           curl -s \
             -H "Authorization: Bearer $TOKEN" \
@@ -160,14 +152,14 @@ jobs:
             > stats.json
 
           python3 <<EOF
-import json
+          import json
 
-with open("stats.json") as f:
-    data = json.load(f)
+          with open("stats.json") as f:
+              data = json.load(f)
 
-assert data["total_members"] == 1, f"Esperaba total_members=1 y llegó {data['total_members']}"
-assert data["total_groups"] >= 1, f"Esperaba total_groups>=1 y llegó {data['total_groups']}"
-assert data["pending_interviews"] == 1, f"Esperaba pending_interviews=1 y llegó {data['pending_interviews']}"
+          assert data["total_members"] == 1, f"Esperaba total_members=1 y llegó {data['total_members']}"
+          assert data["total_groups"] >= 1, f"Esperaba total_groups>=1 y llegó {data['total_groups']}"
+          assert data["pending_interviews"] == 1, f"Esperaba pending_interviews=1 y llegó {data['pending_interviews']}"
 
-print("Stats OK")
-EOF
+          print("Stats OK")
+          EOF
