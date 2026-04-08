@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import Session, func, select
 
 from app.core.dependencies import get_current_user
 from app.db import get_session
@@ -45,6 +45,7 @@ class GroupTreeNode(BaseModel):
     nivel_jerarquico: int | None
     tipo_nivel: str | None
     is_default: bool
+    member_count: int
     children: list["GroupTreeNode"]
 
 
@@ -234,6 +235,14 @@ def get_organization_groups_tree(
         )
 
     groups = session.exec(select(Group).where(Group.organization_id == org_id)).all()
+    member_counts_rows = session.exec(
+        select(Member.group_id, func.count(Member.id))
+        .join(Group, Group.id == Member.group_id)
+        .where(Group.organization_id == org_id)
+        .group_by(Member.group_id)
+    ).all()
+    member_counts: dict[UUID, int] = {group_id: count for group_id, count in member_counts_rows}
+
     by_parent: dict[UUID | None, list[Group]] = {}
     for group in groups:
         by_parent.setdefault(group.parent_group_id, []).append(group)
@@ -252,6 +261,7 @@ def get_organization_groups_tree(
                     "nivel_jerarquico": group.nivel_jerarquico,
                     "tipo_nivel": group.tipo_nivel,
                     "is_default": group.is_default,
+                    "member_count": member_counts.get(group.id, 0),
                     "children": build(group.id),
                 }
             )

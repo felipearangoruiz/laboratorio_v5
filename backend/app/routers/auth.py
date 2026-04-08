@@ -26,7 +26,14 @@ def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    access_token = create_access_token(data={"sub": str(user.id)})
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "user_id": str(user.id),
+            "role": user.role.value,
+            "organization_id": str(user.organization_id) if user.organization_id else None,
+        }
+    )
     refresh_token = create_access_token(
         data={"sub": str(user.id), "type": "refresh"},
         expires_delta=timedelta(days=7),
