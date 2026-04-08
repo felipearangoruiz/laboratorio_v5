@@ -10,12 +10,14 @@ from sqlmodel import Session, select
 from app.core.dependencies import get_current_user
 from app.db import get_session
 from app.models.group import Group, GroupRead
+from app.models.member import Member
 from app.models.user import User, UserRole
 
 router = APIRouter()
 
 
 class GroupCreate(BaseModel):
+    organization_id: UUID
     name: str
     description: str = ""
     tarea_general: str = ""
@@ -33,12 +35,71 @@ class GroupUpdate(BaseModel):
     parent_group_id: UUID | None = None
 
 
+class GroupTreeNode(BaseModel):
+    id: UUID
+    organization_id: UUID
+    parent_group_id: UUID | None
+    name: str
+    description: str
+    tarea_general: str
+    nivel_jerarquico: int | None
+    tipo_nivel: str | None
+    is_default: bool
+    children: list["GroupTreeNode"]
+
+
+def _can_access_org(user: User, organization_id: UUID) -> bool:
+    return user.role == UserRole.SUPERADMIN or user.organization_id == organization_id
+
+
 def _ensure_group_access(group: Group, user: User) -> None:
-    if user.role != UserRole.SUPERADMIN and user.organization_id != group.organization_id:
+    if not _can_access_org(user, group.organization_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions",
         )
+
+
+def _validate_parent_group(
+    session: Session,
+    organization_id: UUID,
+    parent_group_id: UUID,
+    current_group_id: UUID | None = None,
+) -> None:
+    parent = session.get(Group, parent_group_id)
+    if not parent:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Parent group not found",
+        )
+    if parent.organization_id != organization_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Parent group must belong to same organization",
+        )
+
+    if current_group_id is not None:
+        if parent_group_id == current_group_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Group cannot be parent of itself",
+            )
+
+        visited: set[UUID] = set()
+        cursor = parent
+        while cursor.parent_group_id is not None:
+            if cursor.id in visited:
+                break
+            visited.add(cursor.id)
+            if cursor.parent_group_id == current_group_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Group hierarchy cycle detected",
+                )
+            next_group = session.get(Group, cursor.parent_group_id)
+            if not next_group:
+                break
+            cursor = next_group
 
 
 @router.post("/groups", response_model=GroupRead, status_code=status.HTTP_201_CREATED)
@@ -47,22 +108,14 @@ def create_group(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
 ) -> GroupRead:
-    if current_user.organization_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current user has no organization",
-        )
+    if not _can_access_org(current_user, payload.organization_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
 
     if payload.parent_group_id is not None:
-        parent = session.get(Group, payload.parent_group_id)
-        if not parent or parent.organization_id != current_user.organization_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid parent group",
-            )
+        _validate_parent_group(session, payload.organization_id, payload.parent_group_id)
 
     group = Group(
-        organization_id=current_user.organization_id,
+        organization_id=payload.organization_id,
         name=payload.name,
         description=payload.description,
         tarea_general=payload.tarea_general,
@@ -118,12 +171,12 @@ def update_group(
 
     update_data = payload.model_dump(exclude_unset=True)
     if "parent_group_id" in update_data and update_data["parent_group_id"] is not None:
-        parent = session.get(Group, update_data["parent_group_id"])
-        if not parent or parent.organization_id != group.organization_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid parent group",
-            )
+        _validate_parent_group(
+            session,
+            group.organization_id,
+            update_data["parent_group_id"],
+            current_group_id=group.id,
+        )
 
     for field, value in update_data.items():
         setattr(group, field, value)
@@ -152,8 +205,15 @@ def delete_group(
     has_children = session.exec(select(Group).where(Group.parent_group_id == group.id)).first()
     if has_children:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Group has children",
+        )
+
+    has_members = session.exec(select(Member).where(Member.group_id == group.id)).first()
+    if has_members:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Group has members",
         )
 
     session.delete(group)
@@ -161,13 +221,13 @@ def delete_group(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/organizations/{org_id}/groups/tree")
+@router.get("/organizations/{org_id}/groups/tree", response_model=list[GroupTreeNode])
 def get_organization_groups_tree(
     org_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
 ) -> list[dict[str, Any]]:
-    if current_user.role != UserRole.SUPERADMIN and current_user.organization_id != org_id:
+    if not _can_access_org(current_user, org_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions",
@@ -179,20 +239,22 @@ def get_organization_groups_tree(
         by_parent.setdefault(group.parent_group_id, []).append(group)
 
     def build(parent_id: UUID | None) -> list[dict[str, Any]]:
-        return [
-            {
-                "id": str(group.id),
-                "organization_id": str(group.organization_id),
-                "parent_group_id": str(group.parent_group_id) if group.parent_group_id else None,
-                "name": group.name,
-                "description": group.description,
-                "tarea_general": group.tarea_general,
-                "nivel_jerarquico": group.nivel_jerarquico,
-                "tipo_nivel": group.tipo_nivel,
-                "is_default": group.is_default,
-                "children": build(group.id),
-            }
-            for group in by_parent.get(parent_id, [])
-        ]
+        nodes: list[dict[str, Any]] = []
+        for group in by_parent.get(parent_id, []):
+            nodes.append(
+                {
+                    "id": group.id,
+                    "organization_id": group.organization_id,
+                    "parent_group_id": group.parent_group_id,
+                    "name": group.name,
+                    "description": group.description,
+                    "tarea_general": group.tarea_general,
+                    "nivel_jerarquico": group.nivel_jerarquico,
+                    "tipo_nivel": group.tipo_nivel,
+                    "is_default": group.is_default,
+                    "children": build(group.id),
+                }
+            )
+        return nodes
 
     return build(None)
