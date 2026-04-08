@@ -152,21 +152,22 @@ jobs:
             -H "Content-Type: application/json" \
             -d "{\"organization_id\":\"$NEW_ORG_ID\",\"group_id\":\"$NEW_GROUP_ID\",\"name\":\"Miembro CI\",\"role\":\"Analista\"}"
 
-      - name: Validar stats después de crear miembro
+            - name: Validar stats después de crear miembro
         run: |
           curl -s \
             -H "Authorization: Bearer $TOKEN" \
             http://localhost:8000/organizations/$NEW_ORG_ID/stats \
             > stats.json
 
-          python3 -c "
+          python3 <<EOF
 import json
-with open('stats.json') as f:
+
+with open("stats.json") as f:
     data = json.load(f)
 
-assert data['total_members'] == 1, f\"Esperaba total_members=1 y llegó {data['total_members']}\"
-assert data['total_groups'] >= 1, f\"Esperaba total_groups>=1 y llegó {data['total_groups']}\"
-assert data['pending_interviews'] == 1, f\"Esperaba pending_interviews=1 y llegó {data['pending_interviews']}\"
+assert data["total_members"] == 1, f"Esperaba total_members=1 y llegó {data['total_members']}"
+assert data["total_groups"] >= 1, f"Esperaba total_groups>=1 y llegó {data['total_groups']}"
+assert data["pending_interviews"] == 1, f"Esperaba pending_interviews=1 y llegó {data['pending_interviews']}"
 
-print('Stats OK')
-"
+print("Stats OK")
+EOF
