@@ -27,9 +27,9 @@ export default async function AdminLayout({
         <nav>
           <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: "0.75rem" }}>
             <li><Link href="/admin">/admin</Link></li>
-            <li><Link href="/admin/organizacion">/admin/organizacion</Link></li>
-            <li><Link href="/admin/grupos">/admin/grupos</Link></li>
-            <li><Link href="/admin/miembros">/admin/miembros</Link></li>
+            <li><Link href="/admin">/admin</Link></li>
+            <li><Link href="/groups">/groups</Link></li>
+            <li><Link href="/members">/members</Link></li>
             <li><Link href="/admin/entrevistas">/admin/entrevistas</Link></li>
             <li><Link href="/admin/procesamiento">/admin/procesamiento</Link></li>
             <li><Link href="/admin/diagnostico">/admin/diagnostico</Link></li>
