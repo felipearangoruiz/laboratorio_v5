@@ -210,6 +210,43 @@ def run_debugger(doc: str, sprint: dict, plan: dict, backend_result: dict, test_
     return debugger_result
 
 
+def run_frontend_integration_tester(
+    doc: str,
+    sprint: dict,
+    plan: dict,
+    backend_result: dict,
+    test_result: dict,
+    qa_result: dict,
+    guardrails_result: dict,
+    debugger_result: dict,
+) -> dict:
+    """
+    Simula la validación del flujo de usuario completo (frontend + backend).
+    """
+    _ = doc
+    _ = plan
+    _ = backend_result
+    _ = test_result
+    _ = qa_result
+    _ = guardrails_result
+    _ = debugger_result
+
+    frontend_result = {
+        "status": "PASS",
+        "checked_flows": [
+            f"Validate frontend flow for sprint: {sprint.get('goal', '')}"
+        ],
+        "failed_flows": [],
+        "observations": [
+            "Frontend integration simulated (no real browser execution)"
+        ],
+        "summary": "FrontendIntegrationTester found no blocking issues"
+    }
+
+    print("FrontendIntegrationTester completed validation")
+    return frontend_result
+
+
 def run_release_gate(
     doc: str,
     sprint: dict,
@@ -219,6 +256,7 @@ def run_release_gate(
     qa_result: dict,
     guardrails_result: dict,
     debugger_result: dict,
+    frontend_result: dict,
 ) -> dict:
     """
     Simula la ejecución del agente ReleaseGate.
@@ -234,6 +272,7 @@ def run_release_gate(
         qa_result.get("status") == "PASS"
         and guardrails_result.get("status") == "PASS"
         and debugger_result.get("status") == "NO_ACTION"
+        and frontend_result.get("status") == "PASS"
     ):
         release_result = {
             "status": "PASS",
@@ -242,6 +281,7 @@ def run_release_gate(
                 "QARunner",
                 "Guardrails",
                 "Debugger",
+                "FrontendIntegrationTester",
             ],
             "blocking_issues": [],
             "summary": "ReleaseGate approved the sprint for progression",
@@ -254,6 +294,7 @@ def run_release_gate(
                 "QARunner",
                 "Guardrails",
                 "Debugger",
+                "FrontendIntegrationTester",
             ],
             "blocking_issues": [
                 "One or more validation stages did not pass",
@@ -331,6 +372,18 @@ def main():
     debugger_result = run_debugger(doc, sprint, plan, backend_result, test_result, qa_result, guardrails_result)
     print(debugger_result)
 
+    frontend_result = run_frontend_integration_tester(
+        doc,
+        sprint,
+        plan,
+        backend_result,
+        test_result,
+        qa_result,
+        guardrails_result,
+        debugger_result,
+    )
+    print(frontend_result)
+
     release_result = run_release_gate(
         doc,
         sprint,
@@ -340,6 +393,7 @@ def main():
         qa_result,
         guardrails_result,
         debugger_result,
+        frontend_result,
     )
     print(release_result)
 
