@@ -2,6 +2,8 @@ import argparse
 import json
 from pathlib import Path
 
+from checks.check_scope import validate_scope
+
 BASE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = BASE_DIR.parent
 
@@ -138,6 +140,30 @@ def run_qa_runner(doc: str, sprint: dict, plan: dict, backend_result: dict, test
     print("QARunner completed validation")
     return qa_result
 
+
+def run_guardrails(doc: str, sprint: dict, plan: dict, backend_result: dict, test_result: dict, qa_result: dict) -> dict:
+    """
+    Simula la ejecución del agente Guardrails.
+    Por ahora valida solo restricciones de scope y consistencia del flujo actual.
+    """
+    _ = doc
+    _ = sprint
+    _ = test_result
+    _ = qa_result
+
+    scope_result = validate_scope(plan, backend_result)
+
+    guardrails_result = {
+        "status": scope_result["status"],
+        "checks_run": scope_result["checks_run"],
+        "passed_checks": scope_result["passed_checks"],
+        "failed_checks": scope_result["failed_checks"],
+        "summary": scope_result["summary"],
+    }
+
+    print("Guardrails completed validation")
+    return guardrails_result
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", required=True)
@@ -160,6 +186,9 @@ def main():
 
     qa_result = run_qa_runner(doc, sprint, plan, backend_result, test_result)
     print(qa_result)
+
+    guardrails_result = run_guardrails(doc, sprint, plan, backend_result, test_result, qa_result)
+    print(guardrails_result)
 
 
 if __name__ == "__main__":
