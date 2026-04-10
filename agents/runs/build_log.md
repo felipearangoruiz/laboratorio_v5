@@ -46,3 +46,11 @@
 
 * Summary: ReleaseGate approved the sprint after Codex execution and passing tests
 
+## Sprint S3-4 — Crear un endpoint backend GET /organizations/{org_id}/interviews para listar entrevistas por organización y una página admin en frontend/app/(admin)/interviews/page.tsx para visualizarlas en una tabla con detalle de respuestas cuando existan
+
+* Release status: PASS
+
+* Release decision: APPROVED
+
+* Summary: ReleaseGate approved the sprint after Codex execution and passing tests
+
