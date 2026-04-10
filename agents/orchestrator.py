@@ -49,6 +49,30 @@ def run_sprint_architect(doc: str, sprint: dict) -> dict:
     return plan
 
 
+def run_backend_builder(doc: str, sprint: dict, plan: dict) -> dict:
+    """
+    Simula la ejecución del agente BackendBuilder.
+    Por ahora no modifica el producto.
+    Solo genera una propuesta backend estructurada.
+    """
+    _ = doc
+
+    backend_result = {
+        "files_to_touch": plan.get("allowed_paths", []),
+        "backend_tasks": [
+            f"Review backend scope for sprint: {sprint.get('goal', '')}"
+        ],
+        "backend_tests_to_add": [],
+        "assumptions": [
+            "No frontend changes allowed in this role",
+            "No product code changes in this step",
+        ],
+    }
+
+    print("BackendBuilder generated backend proposal")
+    return backend_result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", required=True)
@@ -62,6 +86,9 @@ def main():
     doc = load_document(config["docs_path"])
     plan = run_sprint_architect(doc, sprint)
     print(plan)
+
+    backend_result = run_backend_builder(doc, sprint, plan)
+    print(backend_result)
 
 
 if __name__ == "__main__":
