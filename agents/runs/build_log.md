@@ -30,3 +30,19 @@
 
 * Summary: ReleaseGate blocked the sprint due to Codex or test failures
 
+## Sprint S3-3 — Crear la página pública de entrevista en frontend/app/entrevista/[token]/page.tsx para leer el token de la ruta, consumir GET /entrevista/{token} y POST /entrevista/{token}/submit, renderizar el formulario de 15 preguntas y manejar los estados de carga, token inválido, token expirado, entrevista completada y envío exitoso
+
+* Release status: PASS
+
+* Release decision: APPROVED
+
+* Summary: ReleaseGate approved the sprint after Codex execution and passing tests
+
+## Sprint S3-3 — Crear la página pública de entrevista en frontend/app/entrevista/[token]/page.tsx para leer el token de la ruta, consumir GET /entrevista/{token} y POST /entrevista/{token}/submit, renderizar el formulario de 15 preguntas y manejar los estados de carga, token inválido, token expirado, entrevista completada y envío exitoso
+
+* Release status: PASS
+
+* Release decision: APPROVED
+
+* Summary: ReleaseGate approved the sprint after Codex execution and passing tests
+
