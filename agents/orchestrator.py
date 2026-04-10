@@ -204,7 +204,9 @@ def run_debugger(
     _ = backend_result
     _ = test_result
 
-    has_frontend_problem = frontend_result.get("status") == "FAIL" or bool(debug_context.strip())
+    has_frontend_failure = frontend_result.get("status") == "FAIL"
+    has_debug_context = bool(debug_context.strip())
+    has_frontend_problem = has_frontend_failure or has_debug_context
 
     if (
         qa_result.get("status") == "PASS"
@@ -223,17 +225,21 @@ def run_debugger(
             debugger_result = {
                 "status": "FIX_PROPOSED",
                 "issues_detected": [
-                    "Frontend issue reported in debug context"
+                    "Frontend flow is broken (possible blank screen or render failure)"
                 ],
                 "proposed_fixes": [
-                    "Inspect frontend rendering path",
-                    "Inspect auth flow integration",
-                    "Inspect blank screen/root render issue",
+                    "Check root frontend entry (e.g. pages/index.tsx or app/page.tsx)",
+                    "Verify API integration for auth endpoints",
+                    "Check frontend environment variables for backend URL",
+                    "Inspect console errors in browser (React render issues)"
                 ],
                 "files_to_review": [
-                    "frontend"
+                    "frontend/pages",
+                    "frontend/app",
+                    "frontend/lib",
+                    "frontend/.env"
                 ],
-                "summary": "Debugger proposed investigation steps for reported frontend issue",
+                "summary": "Debugger identified likely frontend failure zones and proposed targeted investigation steps",
             }
             print("Debugger completed review")
             return debugger_result
