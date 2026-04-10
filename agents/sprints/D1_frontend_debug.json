@@ -1,0 +1,18 @@
+{
+"id": "D1",
+"goal": "Fix broken frontend flow",
+"allowed_paths": [
+"frontend",
+"backend/app/auth",
+"backend/app/organization"
+],
+"forbidden_paths": [
+"backend/app/analysis"
+],
+"done_when": [
+"login screen renders",
+"frontend can call backend auth endpoint",
+"home screen is not blank",
+"no frontend runtime errors"
+]
+}
