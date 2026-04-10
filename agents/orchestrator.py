@@ -164,6 +164,51 @@ def run_guardrails(doc: str, sprint: dict, plan: dict, backend_result: dict, tes
     print("Guardrails completed validation")
     return guardrails_result
 
+
+def run_debugger(doc: str, sprint: dict, plan: dict, backend_result: dict, test_result: dict, qa_result: dict, guardrails_result: dict) -> dict:
+    """
+    Simula la ejecución del agente Debugger.
+    Por ahora no modifica archivos.
+    Solo propone correcciones si QA o Guardrails fallan.
+    """
+    _ = doc
+    _ = sprint
+    _ = plan
+    _ = backend_result
+    _ = test_result
+
+    if qa_result.get("status") == "PASS" and guardrails_result.get("status") == "PASS":
+        debugger_result = {
+            "status": "NO_ACTION",
+            "issues_detected": [],
+            "proposed_fixes": [],
+            "files_to_review": [],
+            "summary": "Debugger found no issues requiring fixes",
+        }
+    else:
+        issues_detected = []
+        if qa_result.get("status") != "PASS":
+            issues_detected.extend(qa_result.get("failed_checks", []))
+        if guardrails_result.get("status") != "PASS":
+            issues_detected.extend(guardrails_result.get("failed_checks", []))
+
+        debugger_result = {
+            "status": "FIX_PROPOSED",
+            "issues_detected": issues_detected,
+            "proposed_fixes": [
+                "Review failing checks and align outputs with sprint scope",
+                "Update /agents flow outputs to satisfy QA and Guardrails validations",
+            ],
+            "files_to_review": [
+                "agents/orchestrator.py",
+                "agents/checks/check_scope.py",
+            ],
+            "summary": "Debugger proposed fixes for detected QA/Guardrails issues",
+        }
+
+    print("Debugger completed review")
+    return debugger_result
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", required=True)
@@ -172,7 +217,7 @@ def main():
     config = load_config()
     sprint = load_sprint(args.sprint)
 
-    print(f"Orchestrator ready for sprint: {args.sprint}")
+    print(f"orchestrator ready for sprint: {args.sprint}")
 
     doc = load_document(config["docs_path"])
     plan = run_sprint_architect(doc, sprint)
@@ -189,6 +234,9 @@ def main():
 
     guardrails_result = run_guardrails(doc, sprint, plan, backend_result, test_result, qa_result)
     print(guardrails_result)
+
+    debugger_result = run_debugger(doc, sprint, plan, backend_result, test_result, qa_result, guardrails_result)
+    print(debugger_result)
 
 
 if __name__ == "__main__":
