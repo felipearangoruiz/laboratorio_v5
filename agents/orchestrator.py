@@ -209,6 +209,62 @@ def run_debugger(doc: str, sprint: dict, plan: dict, backend_result: dict, test_
     print("Debugger completed review")
     return debugger_result
 
+
+def run_release_gate(
+    doc: str,
+    sprint: dict,
+    plan: dict,
+    backend_result: dict,
+    test_result: dict,
+    qa_result: dict,
+    guardrails_result: dict,
+    debugger_result: dict,
+) -> dict:
+    """
+    Simula la ejecución del agente ReleaseGate.
+    Decide si el sprint actual pasa o falla.
+    """
+    _ = doc
+    _ = sprint
+    _ = plan
+    _ = backend_result
+    _ = test_result
+
+    if (
+        qa_result.get("status") == "PASS"
+        and guardrails_result.get("status") == "PASS"
+        and debugger_result.get("status") == "NO_ACTION"
+    ):
+        release_result = {
+            "status": "PASS",
+            "release_decision": "APPROVED",
+            "checks_considered": [
+                "QARunner",
+                "Guardrails",
+                "Debugger",
+            ],
+            "blocking_issues": [],
+            "summary": "ReleaseGate approved the sprint for progression",
+        }
+    else:
+        release_result = {
+            "status": "FAIL",
+            "release_decision": "BLOCKED",
+            "checks_considered": [
+                "QARunner",
+                "Guardrails",
+                "Debugger",
+            ],
+            "blocking_issues": [
+                "One or more validation stages did not pass",
+            ],
+            "summary": "ReleaseGate blocked the sprint",
+        }
+
+    print("ReleaseGate completed decision")
+    return release_result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", required=True)
@@ -237,6 +293,18 @@ def main():
 
     debugger_result = run_debugger(doc, sprint, plan, backend_result, test_result, qa_result, guardrails_result)
     print(debugger_result)
+
+    release_result = run_release_gate(
+        doc,
+        sprint,
+        plan,
+        backend_result,
+        test_result,
+        qa_result,
+        guardrails_result,
+        debugger_result,
+    )
+    print(release_result)
 
 
 if __name__ == "__main__":
