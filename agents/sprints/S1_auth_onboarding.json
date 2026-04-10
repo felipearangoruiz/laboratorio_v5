@@ -1,0 +1,11 @@
+{
+  "id": "S1",
+  "goal": "Auth + onboarding",
+  "allowed_paths": ["backend/app/auth", "backend/app/organization"],
+  "forbidden_paths": ["frontend", "analysis"],
+  "done_when": [
+    "register endpoint funciona",
+    "login endpoint funciona",
+    "crear organización funciona"
+  ]
+}
