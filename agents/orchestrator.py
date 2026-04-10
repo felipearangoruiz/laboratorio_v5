@@ -265,6 +265,43 @@ def run_release_gate(
     return release_result
 
 
+def run_build_log(
+    sprint: dict,
+    plan: dict,
+    backend_result: dict,
+    test_result: dict,
+    qa_result: dict,
+    guardrails_result: dict,
+    debugger_result: dict,
+    release_result: dict,
+) -> dict:
+    """
+    Registra el resultado de la corrida en agents/runs/build_log.md.
+    """
+    _ = plan
+    _ = backend_result
+    _ = test_result
+    _ = qa_result
+    _ = guardrails_result
+    _ = debugger_result
+
+    log_path = BASE_DIR / "runs" / "build_log.md"
+    with log_path.open("a", encoding="utf-8") as log_file:
+        log_file.write(f"## Sprint {sprint.get('id', '')} — {sprint.get('goal', '')}\n\n")
+        log_file.write(f"* Release status: {release_result.get('status', '')}\n\n")
+        log_file.write(f"* Release decision: {release_result.get('release_decision', '')}\n\n")
+        log_file.write(f"* Summary: {release_result.get('summary', '')}\n\n")
+
+    build_log_result = {
+        "status": "RECORDED",
+        "log_file": "agents/runs/build_log.md",
+        "summary": f"BuildLog recorded sprint {sprint.get('id', '')}",
+    }
+
+    print("BuildLog recorded sprint result")
+    return build_log_result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", required=True)
@@ -305,6 +342,18 @@ def main():
         debugger_result,
     )
     print(release_result)
+
+    build_log_result = run_build_log(
+        sprint,
+        plan,
+        backend_result,
+        test_result,
+        qa_result,
+        guardrails_result,
+        debugger_result,
+        release_result,
+    )
+    print(build_log_result)
 
 
 if __name__ == "__main__":
