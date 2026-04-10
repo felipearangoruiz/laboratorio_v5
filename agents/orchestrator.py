@@ -73,6 +73,39 @@ def run_backend_builder(doc: str, sprint: dict, plan: dict) -> dict:
     return backend_result
 
 
+def run_spec_test_builder(doc: str, sprint: dict, plan: dict, backend_result: dict) -> dict:
+    """
+    Simula la ejecución del agente SpecTestBuilder.
+    Por ahora no crea tests reales.
+    Solo genera una propuesta estructurada de tests del sprint.
+    """
+    _ = doc
+    _ = plan
+    _ = backend_result
+
+    test_result = {
+        "unit_tests": [
+            f"Validate backend contract for sprint: {sprint.get('goal', '')}"
+        ],
+        "integration_tests": [
+            "Validate orchestrator flow through SprintArchitect and BackendBuilder"
+        ],
+        "policy_tests": [
+            "Ensure no scope expansion outside allowed_paths"
+        ],
+        "smoke_checks": [
+            f"Run orchestrator for sprint {sprint.get('id', '')} and verify ordered output"
+        ],
+        "assumptions": [
+            "No real product tests are created in this step",
+            "Tests are derived from sprint scope and architecture document",
+        ],
+    }
+
+    print("SpecTestBuilder generated test proposal")
+    return test_result
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--sprint", required=True)
@@ -89,6 +122,9 @@ def main():
 
     backend_result = run_backend_builder(doc, sprint, plan)
     print(backend_result)
+
+    test_result = run_spec_test_builder(doc, sprint, plan, backend_result)
+    print(test_result)
 
 
 if __name__ == "__main__":
