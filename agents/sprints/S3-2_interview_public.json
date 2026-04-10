@@ -1,0 +1,22 @@
+{
+  "id": "S3-2",
+  "goal": "Crear router público de entrevista con GET /entrevista/{token} y POST /entrevista/{token}/submit, y registrarlo en backend/app/main.py",
+  "allowed_paths": [
+    "backend/app/routers/interview_public.py",
+    "backend/app/main.py"
+  ],
+  "forbidden_paths": [
+    "frontend",
+    "backend/app/models",
+    "alembic"
+  ],
+  "done_when": [
+    "backend/app/routers/interview_public.py existe",
+    "GET /entrevista/{token} está implementado en el router público",
+    "POST /entrevista/{token}/submit está implementado en el router público",
+    "El router está registrado en backend/app/main.py",
+    "No se crearon modelos nuevos",
+    "No se usó alembic",
+    "No se hicieron cambios fuera de allowed_paths"
+  ]
+}
