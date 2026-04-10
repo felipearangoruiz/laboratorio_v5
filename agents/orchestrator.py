@@ -1,5 +1,8 @@
 import argparse
 import json
+import os
+import shlex
+import subprocess
 from pathlib import Path
 
 from checks.check_scope import validate_scope
@@ -29,6 +32,15 @@ def load_document(doc_path: str) -> str:
         return source_file.read()
 
 
+def load_prompt(prompt_name: str) -> str:
+    prompt_path = BASE_DIR / "prompts" / prompt_name
+    if not prompt_path.exists():
+        return ""
+
+    with prompt_path.open("r", encoding="utf-8") as prompt_file:
+        return prompt_file.read()
+
+
 def load_debug_context(sprint: dict) -> str:
     """
     Carga contexto de debugging si existe un archivo con el mismo id del sprint
@@ -44,6 +56,96 @@ def load_debug_context(sprint: dict) -> str:
 
     with debug_context_path.open("r", encoding="utf-8") as debug_context_file:
         return debug_context_file.read()
+
+
+def run_command(
+    command: list[str],
+    cwd: Path,
+    input_text: str | None = None,
+    env: dict[str, str] | None = None,
+    timeout: int = 900,
+) -> dict:
+    print(f"Running command: {' '.join(command)}")
+    completed = subprocess.run(
+        command,
+        cwd=str(cwd),
+        env=env,
+        input=input_text,
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        check=False,
+    )
+    return {
+        "command": command,
+        "returncode": completed.returncode,
+        "stdout": completed.stdout,
+        "stderr": completed.stderr,
+    }
+
+
+def collect_repo_state() -> set[str]:
+    tracked = run_command(
+        ["git", "diff", "--name-only", "HEAD", "--"],
+        cwd=REPO_ROOT,
+        timeout=60,
+    )
+    untracked = run_command(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=REPO_ROOT,
+        timeout=60,
+    )
+
+    paths: set[str] = set()
+    for result in (tracked, untracked):
+        for line in result["stdout"].splitlines():
+            path = line.strip()
+            if path:
+                paths.add(path)
+
+    return paths
+
+
+def is_path_allowed(file_path: str, allowed_paths: list[str]) -> bool:
+    normalized = file_path.strip().rstrip("/")
+    for allowed_path in allowed_paths:
+        allowed = allowed_path.strip().rstrip("/")
+        if normalized == allowed or normalized.startswith(f"{allowed}/"):
+            return True
+    return False
+
+
+def build_backend_builder_prompt(doc: str, sprint: dict, plan: dict) -> str:
+    role_prompt = load_prompt("backend_builder.md")
+    sprint_json = json.dumps(sprint, ensure_ascii=False, indent=2)
+    plan_json = json.dumps(plan, ensure_ascii=False, indent=2)
+    architecture_excerpt = doc[:12000]
+
+    return f"""
+You are BackendBuilder running inside the repository root.
+
+Your job is to implement the current sprint by making REAL code changes in this repo.
+
+Hard constraints:
+- Touch only files inside these allowed paths: {plan.get("allowed_paths", [])}
+- Never touch files inside these forbidden paths: {plan.get("forbidden_paths", [])}
+- Do not modify frontend code.
+- Keep changes minimal and directly tied to the sprint.
+- Prefer editing existing files when possible.
+- After applying changes, stop. Do not run frontend work.
+
+Sprint JSON:
+{sprint_json}
+
+Execution plan:
+{plan_json}
+
+Role prompt:
+{role_prompt}
+
+Source of truth excerpt:
+{architecture_excerpt}
+""".strip()
 
 
 def run_sprint_architect(doc: str, sprint: dict) -> dict:
@@ -70,25 +172,53 @@ def run_sprint_architect(doc: str, sprint: dict) -> dict:
 
 def run_backend_builder(doc: str, sprint: dict, plan: dict) -> dict:
     """
-    Simula la ejecución del agente BackendBuilder.
-    Por ahora no modifica el producto.
-    Solo genera una propuesta backend estructurada.
+    Ejecuta BackendBuilder usando Codex CLI para aplicar cambios reales en el repo.
     """
-    _ = doc
+    before_state = collect_repo_state()
+    prompt = build_backend_builder_prompt(doc, sprint, plan)
+    codex_result = run_command(
+        ["codex", "exec", "--full-auto", "--cd", str(REPO_ROOT), "-"],
+        cwd=REPO_ROOT,
+        input_text=prompt,
+        timeout=1800,
+    )
+    after_state = collect_repo_state()
+
+    changed_files = sorted(after_state - before_state)
+    disallowed_files = [
+        file_path
+        for file_path in changed_files
+        if not is_path_allowed(file_path, plan.get("allowed_paths", []))
+    ]
+
+    status = "PASS"
+    assumptions = [
+        "Codex CLI executed in non-interactive mode",
+        "Scope restricted by sprint allowed_paths and forbidden_paths",
+    ]
+    if codex_result["returncode"] != 0:
+        status = "FAIL"
+        assumptions.append("Codex CLI returned a non-zero exit code")
+    if disallowed_files:
+        status = "FAIL"
+        assumptions.append("Codex changed files outside allowed_paths")
 
     backend_result = {
+        "status": status,
         "files_to_touch": plan.get("allowed_paths", []),
+        "changed_files": changed_files,
+        "disallowed_files": disallowed_files,
         "backend_tasks": [
-            f"Review backend scope for sprint: {sprint.get('goal', '')}"
+            f"Implement sprint with Codex: {sprint.get('goal', '')}"
         ],
         "backend_tests_to_add": [],
-        "assumptions": [
-            "No frontend changes allowed in this role",
-            "No product code changes in this step",
-        ],
+        "assumptions": assumptions,
+        "codex_returncode": codex_result["returncode"],
+        "codex_stdout": codex_result["stdout"],
+        "codex_stderr": codex_result["stderr"],
     }
 
-    print("BackendBuilder generated backend proposal")
+    print(f"BackendBuilder completed with status {status}")
     return backend_result
 
 
@@ -128,30 +258,63 @@ def run_spec_test_builder(doc: str, sprint: dict, plan: dict, backend_result: di
 
 def run_qa_runner(doc: str, sprint: dict, plan: dict, backend_result: dict, test_result: dict) -> dict:
     """
-    Simula la ejecución del agente QARunner.
-    Por ahora no corre tests reales del producto.
-    Solo valida que los pasos previos hayan producido estructuras válidas.
+    Ejecuta tests reales de backend con pytest.
     """
     _ = doc
     _ = sprint
     _ = plan
-    _ = backend_result
     _ = test_result
 
+    if backend_result.get("status") != "PASS":
+        qa_result = {
+            "status": "FAIL",
+            "checks_run": ["Skip pytest because Codex execution failed"],
+            "passed_checks": [],
+            "failed_checks": ["BackendBuilder did not complete successfully"],
+            "summary": "QARunner skipped pytest because Codex failed",
+            "pytest_returncode": None,
+            "pytest_stdout": "",
+            "pytest_stderr": "",
+        }
+        print("QARunner completed validation")
+        return qa_result
+
+    config = load_config()
+    pytest_command = shlex.split(config["test_command_backend"])
+    pytest_env = os.environ.copy()
+    pytest_env["PYTHONPATH"] = config["backend_path"]
+
+    pytest_result = run_command(
+        pytest_command,
+        cwd=REPO_ROOT,
+        env=pytest_env,
+        timeout=1800,
+    )
+
+    status = "PASS" if pytest_result["returncode"] == 0 else "FAIL"
+
+    passed_checks = []
+    failed_checks = []
+    if status == "PASS":
+        passed_checks.append("Backend pytest passed")
+    else:
+        failed_checks.append("Backend pytest failed")
+
     qa_result = {
-        "status": "PASS",
+        "status": status,
         "checks_run": [
-            "Sprint plan generated",
-            "Backend proposal generated",
-            "Test proposal generated"
+            f"Run backend tests: {' '.join(pytest_command)}"
         ],
-        "passed_checks": [
-            "SprintArchitect output is present",
-            "BackendBuilder output is present",
-            "SpecTestBuilder output is present"
-        ],
-        "failed_checks": [],
-        "summary": "QARunner validated the current orchestrator flow successfully"
+        "passed_checks": passed_checks,
+        "failed_checks": failed_checks,
+        "summary": (
+            "QARunner validated backend tests successfully"
+            if status == "PASS"
+            else "QARunner detected backend test failures"
+        ),
+        "pytest_returncode": pytest_result["returncode"],
+        "pytest_stdout": pytest_result["stdout"],
+        "pytest_stderr": pytest_result["stderr"],
     }
 
     print("QARunner completed validation")
@@ -361,63 +524,42 @@ def run_release_gate(
     frontend_result: dict,
 ) -> dict:
     """
-    Simula la ejecución del agente ReleaseGate.
-    Decide si el sprint actual pasa o falla.
+    Decide PASS/FAIL basado en la ejecución real de Codex y pytest.
     """
     _ = doc
     _ = sprint
     _ = plan
-    _ = backend_result
     _ = test_result
+    _ = guardrails_result
+    _ = debugger_result
+    _ = frontend_result
 
-    if frontend_result.get("status") == "FAIL":
-        release_result = {
-            "status": "FAIL",
-            "release_decision": "BLOCKED",
-            "checks_considered": [
-                "QARunner",
-                "Guardrails",
-                "Debugger",
-                "FrontendIntegrationTester",
-            ],
-            "blocking_issues": [
-                "FrontendIntegrationTester reported failed frontend flows",
-            ],
-            "summary": "ReleaseGate blocked the sprint due to frontend integration failures",
-        }
-    elif (
-        qa_result.get("status") == "PASS"
-        and guardrails_result.get("status") == "PASS"
-        and debugger_result.get("status") == "NO_ACTION"
-        and frontend_result.get("status") == "PASS"
-    ):
-        release_result = {
-            "status": "PASS",
-            "release_decision": "APPROVED",
-            "checks_considered": [
-                "QARunner",
-                "Guardrails",
-                "Debugger",
-                "FrontendIntegrationTester",
-            ],
-            "blocking_issues": [],
-            "summary": "ReleaseGate approved the sprint for progression",
-        }
-    else:
-        release_result = {
-            "status": "FAIL",
-            "release_decision": "BLOCKED",
-            "checks_considered": [
-                "QARunner",
-                "Guardrails",
-                "Debugger",
-                "FrontendIntegrationTester",
-            ],
-            "blocking_issues": [
-                "One or more validation stages did not pass",
-            ],
-            "summary": "ReleaseGate blocked the sprint",
-        }
+    blocking_issues = []
+    if backend_result.get("status") != "PASS":
+        blocking_issues.append("Codex execution failed")
+        if backend_result.get("disallowed_files"):
+            blocking_issues.append(
+                f"Scope violation: {', '.join(backend_result['disallowed_files'])}"
+            )
+
+    if qa_result.get("status") != "PASS":
+        blocking_issues.append("Backend tests failed")
+
+    status = "PASS" if not blocking_issues else "FAIL"
+    release_result = {
+        "status": status,
+        "release_decision": "APPROVED" if status == "PASS" else "BLOCKED",
+        "checks_considered": [
+            "BackendBuilder",
+            "QARunner",
+        ],
+        "blocking_issues": blocking_issues,
+        "summary": (
+            "ReleaseGate approved the sprint after Codex execution and passing tests"
+            if status == "PASS"
+            else "ReleaseGate blocked the sprint due to Codex or test failures"
+        ),
+    }
 
     print("ReleaseGate completed decision")
     return release_result

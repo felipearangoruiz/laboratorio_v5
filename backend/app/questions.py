@@ -1,3 +1,5 @@
+"""Banco fijo de preguntas del instrumento de entrevista MVP."""
+
 QUESTIONS: list[dict] = [
     {
         "id": "q01",
@@ -9,7 +11,7 @@ QUESTIONS: list[dict] = [
     {
         "id": "q02",
         "lente": "actores",
-        "texto": "¿Qué tan accesible es la dirección para resolver problemas operativos del día a día?",
+        "texto": "¿Qué tan accesible es la dirección para resolver problemas operativos del día a día? (1=Nada accesible, 5=Muy accesible)",
         "tipo": "escala_5",
         "opciones": [],
     },
@@ -30,7 +32,7 @@ QUESTIONS: list[dict] = [
     {
         "id": "q05",
         "lente": "procesos",
-        "texto": "¿Con qué frecuencia tienes que esperar a otra persona o área para poder avanzar en tu trabajo?",
+        "texto": "¿Con qué frecuencia tienes que esperar a otra persona o área para poder avanzar en tu trabajo? (1=Casi nunca, 5=Casi siempre)",
         "tipo": "escala_5",
         "opciones": [],
     },
@@ -58,7 +60,7 @@ QUESTIONS: list[dict] = [
     {
         "id": "q09",
         "lente": "reglas",
-        "texto": "¿Qué tan claras son las reglas sobre quién puede tomar qué decisiones?",
+        "texto": "¿Qué tan claras son las reglas sobre quién puede tomar qué decisiones? (1=Muy confusas, 5=Muy claras)",
         "tipo": "escala_5",
         "opciones": [],
     },
@@ -79,7 +81,7 @@ QUESTIONS: list[dict] = [
     {
         "id": "q12",
         "lente": "incentivos",
-        "texto": "¿Sientes que tu esfuerzo y contribución se reconocen de forma justa?",
+        "texto": "¿Sientes que tu esfuerzo y contribución se reconocen de forma justa? (1=Para nada, 5=Completamente)",
         "tipo": "escala_5",
         "opciones": [],
     },
@@ -105,3 +107,5 @@ QUESTIONS: list[dict] = [
         "opciones": [],
     },
 ]
+
+__all__ = ["QUESTIONS"]
