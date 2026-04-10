@@ -206,6 +206,11 @@ def run_debugger(
 
     has_frontend_failure = frontend_result.get("status") == "FAIL"
     has_debug_context = bool(debug_context.strip())
+    debug_context_lower = debug_context.lower()
+    has_admin_404_routes = (
+        "404" in debug_context_lower
+        and "/admin/" in debug_context_lower
+    )
     has_frontend_problem = has_frontend_failure or has_debug_context
 
     if (
@@ -222,6 +227,29 @@ def run_debugger(
         }
     else:
         if has_frontend_problem:
+            if has_admin_404_routes:
+                debugger_result = {
+                    "status": "FIX_PROPOSED",
+                    "issues_detected": [
+                        "Frontend navigation points to non-existent /admin/* routes"
+                    ],
+                    "proposed_fixes": [
+                        "Inspect Next.js app router structure under frontend/app",
+                        "Check whether (admin) is a route group instead of a real /admin segment",
+                        "Verify redirect targets after login",
+                        "Align actual page paths with navigation targets"
+                    ],
+                    "files_to_review": [
+                        "frontend/app",
+                        "frontend/app/login",
+                        "frontend/middleware.ts",
+                        "frontend/lib/session.ts"
+                    ],
+                    "summary": "Debugger identified a likely route mismatch between navigation targets and Next.js app router structure",
+                }
+                print("Debugger completed review")
+                return debugger_result
+
             debugger_result = {
                 "status": "FIX_PROPOSED",
                 "issues_detected": [
