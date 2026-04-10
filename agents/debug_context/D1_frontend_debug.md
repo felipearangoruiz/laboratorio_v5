@@ -2,17 +2,26 @@
 
 ## Problema observado
 
-El frontend actual está roto y no está funcionando correctamente.
+El backend está funcionando, pero el frontend navega a rutas que terminan en 404.
 
-## Síntomas observados
+## Hallazgos confirmados
 
-* El frontend no responde como se espera.
-* Puede haber pantalla en blanco o render incompleto.
-* El backend puede estar bien mientras el frontend sigue roto.
-* Los tests pueden pasar sin que el flujo real de usuario funcione.
+* El login sí funciona.
+* El backend responde `200 OK` en `/auth/login`.
+* El frontend muestra `404` al navegar a:
+  * `/admin/organizacion`
+  * `/admin/grupos`
+  * `/admin/miembros`
+
+## Hipótesis principal
+
+Las rutas del frontend no coinciden con la estructura real del App Router.
+
+## Posible causa
+
+Se está usando un route group `(admin)` en `app/`, pero el código navega a rutas `/admin/...` como si existiera un segmento real `admin` en la URL.
 
 ## Objetivo del debugging
 
-* Identificar por qué el frontend está roto.
-* Producir una lectura más realista del estado del flujo frontend.
-* Preparar al sistema para diagnóstico y corrección más adelante.
+* Identificar el desajuste exacto entre targets de navegación y rutas reales del App Router.
+* Proponer una corrección concreta en navegación/redirects sin cambiar aún código de producto.
