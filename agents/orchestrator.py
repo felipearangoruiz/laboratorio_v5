@@ -29,6 +29,23 @@ def load_document(doc_path: str) -> str:
         return source_file.read()
 
 
+def load_debug_context(sprint: dict) -> str:
+    """
+    Carga contexto de debugging si existe un archivo con el mismo id del sprint
+    dentro de agents/debug_context/.
+    Ejemplo:
+    sprint id D1 -> agents/debug_context/D1_frontend_debug.md
+    Si no existe, retorna cadena vacía.
+    """
+    _ = sprint
+    debug_context_path = BASE_DIR / "debug_context" / "D1_frontend_debug.md"
+    if not debug_context_path.exists():
+        return ""
+
+    with debug_context_path.open("r", encoding="utf-8") as debug_context_file:
+        return debug_context_file.read()
+
+
 def run_sprint_architect(doc: str, sprint: dict) -> dict:
     """
     Simula la ejecución del agente SprintArchitect.
@@ -165,7 +182,17 @@ def run_guardrails(doc: str, sprint: dict, plan: dict, backend_result: dict, tes
     return guardrails_result
 
 
-def run_debugger(doc: str, sprint: dict, plan: dict, backend_result: dict, test_result: dict, qa_result: dict, guardrails_result: dict) -> dict:
+def run_debugger(
+    doc: str,
+    sprint: dict,
+    plan: dict,
+    backend_result: dict,
+    test_result: dict,
+    qa_result: dict,
+    guardrails_result: dict,
+    frontend_result: dict,
+    debug_context: str,
+) -> dict:
     """
     Simula la ejecución del agente Debugger.
     Por ahora no modifica archivos.
@@ -177,7 +204,13 @@ def run_debugger(doc: str, sprint: dict, plan: dict, backend_result: dict, test_
     _ = backend_result
     _ = test_result
 
-    if qa_result.get("status") == "PASS" and guardrails_result.get("status") == "PASS":
+    has_frontend_problem = frontend_result.get("status") == "FAIL" or bool(debug_context.strip())
+
+    if (
+        qa_result.get("status") == "PASS"
+        and guardrails_result.get("status") == "PASS"
+        and not has_frontend_problem
+    ):
         debugger_result = {
             "status": "NO_ACTION",
             "issues_detected": [],
@@ -186,6 +219,25 @@ def run_debugger(doc: str, sprint: dict, plan: dict, backend_result: dict, test_
             "summary": "Debugger found no issues requiring fixes",
         }
     else:
+        if has_frontend_problem:
+            debugger_result = {
+                "status": "FIX_PROPOSED",
+                "issues_detected": [
+                    "Frontend issue reported in debug context"
+                ],
+                "proposed_fixes": [
+                    "Inspect frontend rendering path",
+                    "Inspect auth flow integration",
+                    "Inspect blank screen/root render issue",
+                ],
+                "files_to_review": [
+                    "frontend"
+                ],
+                "summary": "Debugger proposed investigation steps for reported frontend issue",
+            }
+            print("Debugger completed review")
+            return debugger_result
+
         issues_detected = []
         if qa_result.get("status") != "PASS":
             issues_detected.extend(qa_result.get("failed_checks", []))
@@ -219,6 +271,7 @@ def run_frontend_integration_tester(
     qa_result: dict,
     guardrails_result: dict,
     debugger_result: dict,
+    debug_context: str,
 ) -> dict:
     """
     Simula la validación del flujo de usuario completo (frontend + backend).
@@ -231,17 +284,32 @@ def run_frontend_integration_tester(
     _ = guardrails_result
     _ = debugger_result
 
-    frontend_result = {
-        "status": "PASS",
-        "checked_flows": [
-            f"Validate frontend flow for sprint: {sprint.get('goal', '')}"
-        ],
-        "failed_flows": [],
-        "observations": [
-            "Frontend integration simulated (no real browser execution)"
-        ],
-        "summary": "FrontendIntegrationTester found no blocking issues"
-    }
+    if debug_context.strip():
+        frontend_result = {
+            "status": "FAIL",
+            "checked_flows": [
+                f"Validate frontend flow for sprint: {sprint.get('goal', '')}"
+            ],
+            "failed_flows": [
+                "Broken frontend flow reported in debug context"
+            ],
+            "observations": [
+                "Debug context loaded from agents/debug_context/D1_frontend_debug.md"
+            ],
+            "summary": "FrontendIntegrationTester detected a reported frontend issue from debug context",
+        }
+    else:
+        frontend_result = {
+            "status": "PASS",
+            "checked_flows": [
+                f"Validate frontend flow for sprint: {sprint.get('goal', '')}"
+            ],
+            "failed_flows": [],
+            "observations": [
+                "Frontend integration simulated (no real browser execution)"
+            ],
+            "summary": "FrontendIntegrationTester found no blocking issues"
+        }
 
     print("FrontendIntegrationTester completed validation")
     return frontend_result
@@ -268,7 +336,22 @@ def run_release_gate(
     _ = backend_result
     _ = test_result
 
-    if (
+    if frontend_result.get("status") == "FAIL":
+        release_result = {
+            "status": "FAIL",
+            "release_decision": "BLOCKED",
+            "checks_considered": [
+                "QARunner",
+                "Guardrails",
+                "Debugger",
+                "FrontendIntegrationTester",
+            ],
+            "blocking_issues": [
+                "FrontendIntegrationTester reported failed frontend flows",
+            ],
+            "summary": "ReleaseGate blocked the sprint due to frontend integration failures",
+        }
+    elif (
         qa_result.get("status") == "PASS"
         and guardrails_result.get("status") == "PASS"
         and debugger_result.get("status") == "NO_ACTION"
@@ -354,6 +437,7 @@ def main():
     print(f"orchestrator ready for sprint: {args.sprint}")
 
     doc = load_document(config["docs_path"])
+    debug_context = load_debug_context(sprint)
     plan = run_sprint_architect(doc, sprint)
     print(plan)
 
@@ -369,9 +453,6 @@ def main():
     guardrails_result = run_guardrails(doc, sprint, plan, backend_result, test_result, qa_result)
     print(guardrails_result)
 
-    debugger_result = run_debugger(doc, sprint, plan, backend_result, test_result, qa_result, guardrails_result)
-    print(debugger_result)
-
     frontend_result = run_frontend_integration_tester(
         doc,
         sprint,
@@ -380,9 +461,23 @@ def main():
         test_result,
         qa_result,
         guardrails_result,
-        debugger_result,
+        {},
+        debug_context,
     )
     print(frontend_result)
+
+    debugger_result = run_debugger(
+        doc,
+        sprint,
+        plan,
+        backend_result,
+        test_result,
+        qa_result,
+        guardrails_result,
+        frontend_result,
+        debug_context,
+    )
+    print(debugger_result)
 
     release_result = run_release_gate(
         doc,
