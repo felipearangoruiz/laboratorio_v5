@@ -9,6 +9,7 @@ from sqlmodel import Session, select
 from app.core.dependencies import get_current_user
 from app.db import get_session
 from app.models.group import Group
+from app.models.job import JobStatus
 from app.models.member import Member
 from app.models.organization import (
     Organization,
@@ -16,6 +17,7 @@ from app.models.organization import (
     OrganizationRead,
     OrganizationUpdate,
 )
+from app.models.processing import ProcessingResult
 from app.models.user import User, UserRole
 
 router = APIRouter()
@@ -26,6 +28,43 @@ class OrgStats(BaseModel):
     total_groups: int
     completed_interviews: int
     pending_interviews: int
+
+
+class DashboardPendingInterview(BaseModel):
+    member_id: UUID
+    member_name: str
+    role_label: str
+    group_id: UUID | None = None
+    token_status: str
+
+
+class DashboardLatestResult(BaseModel):
+    id: UUID
+    type: str
+    created_at: str
+
+
+class DashboardLatestJob(BaseModel):
+    id: UUID
+    status: str
+    error: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class OrganizationDashboard(BaseModel):
+    organization: OrganizationRead
+    total_members: int
+    total_groups: int
+    completed_interviews: int
+    in_progress_interviews: int
+    pending_interviews: int
+    completion_pct: int
+    pending_actions: list[str]
+    pending_interviews_list: list[DashboardPendingInterview]
+    can_generate_diagnosis: bool
+    latest_result: DashboardLatestResult | None = None
+    latest_job: DashboardLatestJob | None = None
 
 
 @router.post("", response_model=OrganizationRead, status_code=status.HTTP_201_CREATED)
@@ -215,4 +254,136 @@ def get_organization_stats(
         total_groups=int(total_groups),
         completed_interviews=int(completed_interviews),
         pending_interviews=int(pending_interviews),
+    )
+
+
+@router.get("/{organization_id}/dashboard", response_model=OrganizationDashboard)
+def get_organization_dashboard(
+    organization_id: UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Session = Depends(get_session),
+) -> OrganizationDashboard:
+    organization = session.get(Organization, organization_id)
+    if not organization:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found",
+        )
+
+    if (
+        current_user.role != UserRole.SUPERADMIN
+        and current_user.organization_id != organization_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+
+    total_members = int(
+        session.exec(select(func.count(Member.id)).where(Member.organization_id == organization_id)).one()
+    )
+    total_groups = int(
+        session.exec(select(func.count(Group.id)).where(Group.organization_id == organization_id)).one()
+    )
+    completed_interviews = int(
+        session.exec(
+            select(func.count(Member.id)).where(
+                Member.organization_id == organization_id,
+                Member.token_status == "completed",
+            )
+        ).one()
+    )
+    pending_interviews = int(
+        session.exec(
+            select(func.count(Member.id)).where(
+                Member.organization_id == organization_id,
+                Member.token_status == "pending",
+            )
+        ).one()
+    )
+    in_progress_interviews = int(
+        session.exec(
+            select(func.count(Member.id)).where(
+                Member.organization_id == organization_id,
+                Member.token_status == "in_progress",
+            )
+        ).one()
+    )
+
+    pending_members = session.exec(
+        select(Member)
+        .where(
+            Member.organization_id == organization_id,
+            Member.token_status != "completed",
+        )
+        .order_by(Member.created_at.desc())
+        .limit(5)
+    ).all()
+
+    latest_result = session.exec(
+        select(ProcessingResult)
+        .where(ProcessingResult.organization_id == organization_id)
+        .order_by(ProcessingResult.created_at.desc())
+    ).first()
+    latest_job = session.exec(
+        select(JobStatus)
+        .where(JobStatus.organization_id == organization_id)
+        .order_by(JobStatus.created_at.desc())
+    ).first()
+
+    pending_actions: list[str] = []
+    if total_groups == 0:
+        pending_actions.append("Crea la estructura base de la organización para ordenar el levantamiento.")
+    if total_members == 0:
+        pending_actions.append("Agrega miembros para poder iniciar entrevistas.")
+    if total_members > 0 and completed_interviews == 0:
+        pending_actions.append("Comparte y completa al menos una entrevista para empezar a generar señal.")
+    if total_members > 0 and completed_interviews < total_members:
+        pending_actions.append("Aún faltan entrevistas por completar para mejorar la lectura del caso.")
+    if latest_result is None:
+        pending_actions.append("Todavía no hay resultados generados para esta organización.")
+
+    completion_pct = round((completed_interviews / total_members) * 100) if total_members else 0
+    can_generate_diagnosis = completed_interviews > 0
+
+    return OrganizationDashboard(
+        organization=OrganizationRead.model_validate(organization),
+        total_members=total_members,
+        total_groups=total_groups,
+        completed_interviews=completed_interviews,
+        in_progress_interviews=in_progress_interviews,
+        pending_interviews=pending_interviews,
+        completion_pct=completion_pct,
+        pending_actions=pending_actions,
+        pending_interviews_list=[
+            DashboardPendingInterview(
+                member_id=member.id,
+                member_name=member.name,
+                role_label=member.role_label,
+                group_id=member.group_id,
+                token_status=member.token_status.value,
+            )
+            for member in pending_members
+        ],
+        can_generate_diagnosis=can_generate_diagnosis,
+        latest_result=(
+            DashboardLatestResult(
+                id=latest_result.id,
+                type=latest_result.type.value,
+                created_at=latest_result.created_at.isoformat(),
+            )
+            if latest_result
+            else None
+        ),
+        latest_job=(
+            DashboardLatestJob(
+                id=latest_job.id,
+                status=latest_job.status.value,
+                error=latest_job.error,
+                created_at=latest_job.created_at.isoformat(),
+                updated_at=latest_job.updated_at.isoformat(),
+            )
+            if latest_job
+            else None
+        ),
     )

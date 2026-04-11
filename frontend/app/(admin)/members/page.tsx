@@ -73,6 +73,22 @@ function getTokenStatusBadgeClass(status: Member["token_status"]): string {
   return "bg-gray-100 text-gray-700";
 }
 
+function formatTokenStatus(status: Member["token_status"]): string {
+  if (status === "in_progress") {
+    return "En progreso";
+  }
+
+  if (status === "completed") {
+    return "Completada";
+  }
+
+  if (status === "expired") {
+    return "Expirada";
+  }
+
+  return "Pendiente";
+}
+
 export default function MembersPage() {
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
@@ -219,27 +235,31 @@ export default function MembersPage() {
   }
 
   return (
-    <section className="p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Miembros</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Gestiona los miembros de tu organización y su asignación a grupos.
+    <section className="space-y-6 p-6 md:p-8">
+      <header className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+          Personas
+        </p>
+        <h1 className="text-3xl font-semibold text-slate-900">Personas entrevistables</h1>
+        <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
+          Carga las personas que participarán en el levantamiento, asígnalas a su grupo y controla
+          el estado de su acceso a entrevista.
         </p>
       </header>
 
-      <div className="mb-4">
+      <div>
         <button
           type="button"
           onClick={openCreateForm}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
-          Nuevo miembro
+          Agregar persona
         </button>
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">
             {editingMemberId ? "Editar miembro" : "Crear miembro"}
           </h2>
 
@@ -331,34 +351,36 @@ export default function MembersPage() {
         </div>
       )}
 
-      {loading ? <p className="text-sm text-gray-600">Cargando...</p> : null}
-      {!loading && generalError ? <p className="mb-4 text-sm text-red-600">{generalError}</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Cargando personas...</p> : null}
+      {!loading && generalError ? <p className="text-sm text-red-600">{generalError}</p> : null}
 
       {!loading && !generalError && members.length === 0 ? (
-        <p className="text-sm text-gray-600">No hay miembros creados aún.</p>
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+          Aún no hay personas cargadas. Agrega miembros para poder enviar o abrir entrevistas.
+        </div>
       ) : null}
 
       {!loading && !generalError && members.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
+        <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Nombre</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Rol</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Grupo</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Estado del token</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Token</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Abrir</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Fecha de creación</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Acciones</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Nombre</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Rol</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Grupo</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Estado</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Token</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Acceso</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Creado</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {members.map((member) => (
                 <tr key={member.id}>
-                  <td className="px-4 py-3 text-gray-900">{member.name}</td>
-                  <td className="px-4 py-3 text-gray-700">{member.role_label || "—"}</td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="px-4 py-3 text-slate-900">{member.name}</td>
+                  <td className="px-4 py-3 text-slate-700">{member.role_label || "—"}</td>
+                  <td className="px-4 py-3 text-slate-700">
                     {member.group_id ? groupsById.get(member.group_id) || "—" : "—"}
                   </td>
                   <td className="px-4 py-3">
@@ -367,19 +389,19 @@ export default function MembersPage() {
                         member.token_status
                       )}`}
                     >
-                      {member.token_status}
+                      {formatTokenStatus(member.token_status)}
                     </span>
                   </td>
-                  <td className="px-4 py-3 font-mono text-xs text-gray-700">{member.interview_token}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-slate-700">{member.interview_token}</td>
                   <td className="px-4 py-3">
                     <Link
                       href={`/entrevista/${member.interview_token}`}
-                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                      className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
                     >
                       Abrir entrevista
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="px-4 py-3 text-slate-700">
                     {new Date(member.created_at).toLocaleDateString("es-ES")}
                   </td>
                   <td className="px-4 py-3">

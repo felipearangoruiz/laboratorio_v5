@@ -10,3 +10,4 @@ data/uploads/
 *.egg-info/
 .pytest_cache/
 coverage/
+Laboratorio_V4/

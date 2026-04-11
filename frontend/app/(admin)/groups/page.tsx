@@ -201,27 +201,31 @@ export default function GroupsPage() {
   }
 
   return (
-    <section className="p-6">
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Grupos</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Administra la estructura organizacional creando y editando grupos y sus jerarquías.
+    <section className="space-y-6 p-6 md:p-8">
+      <header className="space-y-2">
+        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+          Estructura
+        </p>
+        <h1 className="text-3xl font-semibold text-slate-900">Estructura de la organización</h1>
+        <p className="max-w-3xl text-sm leading-6 text-slate-600 md:text-base">
+          Define los grupos que ordenan el caso. Esta estructura sirve para agrupar personas,
+          interpretar entrevistas y darle contexto al diagnóstico.
         </p>
       </header>
 
-      <div className="mb-4">
+      <div>
         <button
           type="button"
           onClick={openCreateForm}
-          className="rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800"
+          className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
         >
-          Nuevo grupo
+          Crear grupo
         </button>
       </div>
 
       {showForm && (
-        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-slate-900">
             {editingGroupId ? "Editar grupo" : "Crear grupo"}
           </h2>
 
@@ -353,37 +357,40 @@ export default function GroupsPage() {
         </div>
       )}
 
-      {loading ? <p className="text-sm text-gray-600">Cargando...</p> : null}
-      {!loading && generalError ? <p className="mb-4 text-sm text-red-600">{generalError}</p> : null}
+      {loading ? <p className="text-sm text-slate-600">Cargando estructura...</p> : null}
+      {!loading && generalError ? <p className="text-sm text-red-600">{generalError}</p> : null}
 
       {!loading && !generalError && groups.length === 0 ? (
-        <p className="text-sm text-gray-600">No hay grupos creados aún.</p>
+        <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+          Aún no hay grupos creados. Empieza definiendo la estructura mínima para organizar el
+          levantamiento.
+        </div>
       ) : null}
 
       {!loading && !generalError && groups.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200 text-sm">
-            <thead className="bg-gray-50">
+        <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
               <tr>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Nombre</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Descripción</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Nivel jerárquico</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Tipo</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Grupo padre</th>
-                <th className="px-4 py-3 text-left font-medium text-gray-700">Acciones</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Nombre</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Descripción</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Nivel jerárquico</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Tipo</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Grupo padre</th>
+                <th className="px-4 py-3 text-left font-medium text-slate-700">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
+            <tbody className="divide-y divide-slate-100 bg-white">
               {groups.map((group) => {
                 const parentName = group.parent_group_id ? groupsById.get(group.parent_group_id) || "—" : "—";
 
                 return (
                   <tr key={group.id}>
-                    <td className="px-4 py-3 text-gray-900">{group.name}</td>
-                    <td className="px-4 py-3 text-gray-700">{group.description || "—"}</td>
-                    <td className="px-4 py-3 text-gray-700">{group.nivel_jerarquico ?? "—"}</td>
-                    <td className="px-4 py-3 text-gray-700">{group.tipo_nivel || "—"}</td>
-                    <td className="px-4 py-3 text-gray-700">{parentName}</td>
+                    <td className="px-4 py-3 text-slate-900">{group.name}</td>
+                    <td className="px-4 py-3 text-slate-700">{group.description || "—"}</td>
+                    <td className="px-4 py-3 text-slate-700">{group.nivel_jerarquico ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-700">{group.tipo_nivel || "—"}</td>
+                    <td className="px-4 py-3 text-slate-700">{parentName}</td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2">
                         <button

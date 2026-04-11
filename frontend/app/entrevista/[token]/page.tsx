@@ -1,7 +1,7 @@
 "use client";
 
-import type { CSSProperties, FormEvent } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
 type QuestionType = "abierta" | "escala_5";
@@ -14,7 +14,16 @@ type InterviewQuestion = {
 };
 
 type TokenStatus = "pending" | "in_progress" | "completed" | "expired";
-type ViewState = "loading" | "ready" | "invalid" | "expired" | "completed" | "success" | "error";
+type ViewState =
+  | "loading"
+  | "intro"
+  | "ready"
+  | "review"
+  | "invalid"
+  | "expired"
+  | "completed"
+  | "success"
+  | "error";
 
 type PublicInterviewResponse = {
   member_id: string;
@@ -144,6 +153,11 @@ function normalizeAnswers(data: Record<string, unknown>) {
   return nextAnswers;
 }
 
+function getFirstIncompleteStep(answers: Record<string, string>) {
+  const index = QUESTIONS.findIndex((question) => !answers[question.id]?.trim());
+  return index === -1 ? QUESTIONS.length - 1 : index;
+}
+
 function isResponseComplete(answers: Record<string, string>) {
   return QUESTIONS.every((question) => answers[question.id]?.trim());
 }
@@ -155,8 +169,12 @@ export default function PublicInterviewPage() {
   const [viewState, setViewState] = useState<ViewState>("loading");
   const [interview, setInterview] = useState<PublicInterviewResponse | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(() => normalizeAnswers({}));
+  const [step, setStep] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   useEffect(() => {
     if (!token) {
@@ -198,8 +216,11 @@ export default function PublicInterviewPage() {
         }
 
         const payload = (await response.json()) as PublicInterviewResponse;
+        const normalizedAnswers = normalizeAnswers(payload.data);
         setInterview(payload);
-        setAnswers(normalizeAnswers(payload.data));
+        setAnswers(normalizedAnswers);
+        setStep(getFirstIncompleteStep(normalizedAnswers));
+        hasLoadedRef.current = true;
 
         if (payload.token_status === "expired") {
           setViewState("expired");
@@ -211,7 +232,7 @@ export default function PublicInterviewPage() {
           return;
         }
 
-        setViewState("ready");
+        setViewState("intro");
       } catch (loadError) {
         if (cancelled) {
           return;
@@ -229,18 +250,70 @@ export default function PublicInterviewPage() {
     };
   }, [token]);
 
+  useEffect(() => {
+    if (!token || !hasLoadedRef.current) {
+      return;
+    }
+
+    if (viewState !== "ready" && viewState !== "review") {
+      return;
+    }
+
+    const timeout = window.setTimeout(async () => {
+      try {
+        setDraftSaving(true);
+        const response = await fetch(`${getApiBaseUrl()}/entrevista/${encodeURIComponent(token)}/draft`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ data: answers }),
+        });
+
+        if (!response.ok) {
+          throw new Error("No se pudo guardar el avance.");
+        }
+
+        setDraftSavedAt(new Date().toISOString());
+      } catch (draftError) {
+        setError(getErrorMessage(draftError));
+      } finally {
+        setDraftSaving(false);
+      }
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [answers, token, viewState]);
+
   const completedCount = useMemo(
     () => QUESTIONS.filter((question) => answers[question.id]?.trim()).length,
-    [answers],
+    [answers]
   );
 
   const canSubmit = isResponseComplete(answers) && !submitting;
+  const currentQuestion = QUESTIONS[step];
+  const progress = Math.round((completedCount / QUESTIONS.length) * 100);
 
   const handleTextChange = (questionId: string, value: string) => {
     setAnswers((current) => ({
       ...current,
       [questionId]: value,
     }));
+  };
+
+  const handleNext = () => {
+    if (step >= QUESTIONS.length - 1) {
+      setViewState("review");
+      return;
+    }
+
+    setStep((current) => Math.min(current + 1, QUESTIONS.length - 1));
+  };
+
+  const handlePrevious = () => {
+    setStep((current) => Math.max(current - 1, 0));
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -273,8 +346,6 @@ export default function PublicInterviewPage() {
       }
 
       if (response.status === 409) {
-        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-        setError(payload?.detail ?? "Esta entrevista ya fue completada.");
         setViewState("completed");
         return;
       }
@@ -295,247 +366,249 @@ export default function PublicInterviewPage() {
 
   if (viewState === "loading") {
     return (
-      <main style={styles.main}>
-        <section style={styles.card}>
-          <h1 style={styles.title}>Cargando entrevista...</h1>
-          <p style={styles.text}>Estamos validando tu enlace.</p>
-        </section>
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6 text-white">
+        <p className="text-sm text-slate-300">Cargando entrevista...</p>
       </main>
     );
   }
 
   if (viewState === "invalid") {
     return (
-      <main style={styles.main}>
-        <section style={styles.card}>
-          <h1 style={styles.title}>Enlace inválido</h1>
-          <p style={styles.text}>Este enlace no es válido o ya no está disponible.</p>
-        </section>
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
+        <div className="max-w-xl rounded-3xl bg-white p-8 text-slate-900 shadow-xl">
+          <h1 className="text-2xl font-semibold">Este enlace no es válido</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Verifica que el enlace sea correcto o vuelve a pedir acceso a tu organización.
+          </p>
+        </div>
       </main>
     );
   }
 
   if (viewState === "expired") {
     return (
-      <main style={styles.main}>
-        <section style={styles.card}>
-          <h1 style={styles.title}>Enlace expirado</h1>
-          <p style={styles.text}>Este enlace expiró. Contacta a tu organización para recibir una nueva invitación.</p>
-        </section>
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
+        <div className="max-w-xl rounded-3xl bg-white p-8 text-slate-900 shadow-xl">
+          <h1 className="text-2xl font-semibold">Este enlace expiró</h1>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            Contacta a tu organización para recibir un nuevo acceso a la entrevista.
+          </p>
+        </div>
       </main>
     );
   }
 
-  if (viewState === "completed") {
+  if (viewState === "completed" || viewState === "success") {
     return (
-      <main style={styles.main}>
-        <section style={styles.card}>
-          <h1 style={styles.title}>Entrevista completada</h1>
-          <p style={styles.text}>Ya registramos tus respuestas. Gracias por compartir tu perspectiva.</p>
-          {error ? (
-            <p role="alert" style={styles.error}>
-              {error}
-            </p>
-          ) : null}
-        </section>
-      </main>
-    );
-  }
-
-  if (viewState === "success") {
-    return (
-      <main style={styles.main}>
-        <section style={styles.card}>
-          <h1 style={styles.title}>Respuestas enviadas</h1>
-          <p style={styles.text}>Tu entrevista fue enviada exitosamente. Gracias por tu tiempo.</p>
-          {interview?.submitted_at ? (
-            <p style={styles.meta}>Enviada el {new Date(interview.submitted_at).toLocaleString("es-CO")}.</p>
-          ) : null}
-        </section>
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
+        <div className="max-w-2xl rounded-[2rem] bg-white p-8 text-slate-900 shadow-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-600">
+            Entrevista registrada
+          </p>
+          <h1 className="mt-3 text-3xl font-semibold">Tu aporte quedó guardado</h1>
+          <p className="mt-4 text-sm leading-7 text-slate-600 md:text-base">
+            Gracias por completar la entrevista. Tu respuesta ya fue registrada y no necesitas hacer
+            ninguna acción adicional.
+          </p>
+        </div>
       </main>
     );
   }
 
   if (viewState === "error") {
     return (
-      <main style={styles.main}>
-        <section style={styles.card}>
-          <h1 style={styles.title}>No se pudo cargar la entrevista</h1>
-          <p style={styles.text}>{error ?? "Intenta nuevamente en unos minutos."}</p>
-        </section>
+      <main className="flex min-h-screen items-center justify-center bg-slate-950 p-6">
+        <div className="max-w-2xl rounded-[2rem] bg-white p-8 text-slate-900 shadow-2xl">
+          <h1 className="text-2xl font-semibold">Hubo un problema</h1>
+          <p className="mt-3 text-sm leading-6 text-red-600">{error ?? "No se pudo continuar."}</p>
+        </div>
       </main>
     );
   }
 
   return (
-    <main style={styles.main}>
-      <section style={styles.card}>
-        <header style={styles.header}>
-          <div>
-            <p style={styles.eyebrow}>Entrevista organizacional</p>
-            <h1 style={styles.title}>{interview?.name ?? "Entrevista"}</h1>
-            <p style={styles.text}>{interview?.role_label ?? "Participante"}</p>
+    <main className="min-h-screen bg-slate-950 px-4 py-8 text-slate-900 md:px-6">
+      <div className="mx-auto max-w-4xl">
+        <div className="overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+          <div className="bg-slate-950 px-6 py-8 text-white md:px-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+              Entrevista organizacional
+            </p>
+            <h1 className="mt-3 text-3xl font-semibold md:text-4xl">
+              {viewState === "intro" ? "Tu lectura del funcionamiento real" : "Avance de entrevista"}
+            </h1>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-300 md:text-base">
+              Esta entrevista busca entender cómo funciona realmente la organización. Tus respuestas
+              se guardan a medida que avanzas y podrás retomarlas con este mismo enlace.
+            </p>
           </div>
-          <p style={styles.progress}>
-            {completedCount} de {QUESTIONS.length} respondidas
-          </p>
-        </header>
 
-        <p style={styles.text}>
-          Tus respuestas se usarán de forma agregada. Completa las 15 preguntas antes de enviar la entrevista.
-        </p>
+          <div className="space-y-6 px-6 py-8 md:px-8">
+            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
+              <span className="rounded-full bg-slate-100 px-3 py-1">
+                Rol: {interview?.role_label || "Sin rol definido"}
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1">
+                Progreso: {completedCount}/{QUESTIONS.length}
+              </span>
+              <span className="rounded-full bg-slate-100 px-3 py-1">
+                {draftSaving
+                  ? "Guardando avance..."
+                  : draftSavedAt
+                    ? `Guardado ${new Intl.DateTimeFormat("es-CO", {
+                        timeStyle: "short",
+                      }).format(new Date(draftSavedAt))}`
+                    : "Aún no hay avance guardado"}
+              </span>
+            </div>
 
-        {error ? (
-          <p role="alert" style={styles.error}>
-            {error}
-          </p>
-        ) : null}
+            <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-slate-900" style={{ width: `${progress}%` }} />
+            </div>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          {QUESTIONS.map((question, index) => (
-            <fieldset key={question.id} style={styles.fieldset}>
-              <legend style={styles.legend}>
-                {index + 1}. {question.texto}
-              </legend>
-              <p style={styles.meta}>Lente: {question.lente}</p>
+            {viewState === "intro" ? (
+              <section className="space-y-5">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                  <h2 className="text-xl font-semibold text-slate-900">Antes de empezar</h2>
+                  <div className="mt-4 grid gap-3 text-sm leading-6 text-slate-700">
+                    <p>1. La entrevista toma entre 10 y 15 minutos.</p>
+                    <p>2. Las respuestas se guardan automáticamente mientras avanzas.</p>
+                    <p>3. Al final podrás revisar todo antes de enviar definitivamente.</p>
+                  </div>
+                </div>
 
-              {question.tipo === "escala_5" ? (
-                <div style={styles.scaleRow}>
-                  {SCALE_OPTIONS.map((option) => (
-                    <label key={option} style={styles.scaleOption}>
-                      <input
-                        type="radio"
-                        name={question.id}
-                        value={option}
-                        checked={answers[question.id] === String(option)}
-                        onChange={(event) => handleTextChange(question.id, event.target.value)}
-                      />
-                      <span>{option}</span>
-                    </label>
+                <button
+                  type="button"
+                  onClick={() => setViewState("ready")}
+                  className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Empezar entrevista
+                </button>
+              </section>
+            ) : null}
+
+            {viewState === "ready" && currentQuestion ? (
+              <section className="space-y-6">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+                    Pregunta {step + 1} de {QUESTIONS.length}
+                  </p>
+                  <p className="mt-2 text-sm font-medium uppercase tracking-wide text-slate-500">
+                    Lente: {currentQuestion.lente}
+                  </p>
+                  <h2 className="mt-3 text-2xl font-semibold text-slate-900">
+                    {currentQuestion.texto}
+                  </h2>
+                </div>
+
+                {currentQuestion.tipo === "abierta" ? (
+                  <textarea
+                    value={answers[currentQuestion.id] ?? ""}
+                    onChange={(event) => handleTextChange(currentQuestion.id, event.target.value)}
+                    className="min-h-[220px] w-full rounded-3xl border border-slate-300 px-4 py-4 text-sm leading-6 text-slate-800 outline-none transition focus:border-slate-500"
+                    placeholder="Escribe tu respuesta con el mayor detalle posible."
+                  />
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-5">
+                    {SCALE_OPTIONS.map((option) => {
+                      const selected = answers[currentQuestion.id] === String(option);
+
+                      return (
+                        <button
+                          key={option}
+                          type="button"
+                          onClick={() => handleTextChange(currentQuestion.id, String(option))}
+                          className={`rounded-3xl border px-4 py-5 text-left transition ${
+                            selected
+                              ? "border-slate-900 bg-slate-900 text-white"
+                              : "border-slate-300 bg-white text-slate-800 hover:border-slate-500"
+                          }`}
+                        >
+                          <div className="text-2xl font-semibold">{option}</div>
+                          <div className="mt-2 text-xs uppercase tracking-wide opacity-80">
+                            {option === 1 ? "Muy bajo" : option === 5 ? "Muy alto" : "Intermedio"}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={handlePrevious}
+                    disabled={step === 0}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Anterior
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleNext}
+                    className="rounded-xl bg-slate-900 px-5 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                  >
+                    {step === QUESTIONS.length - 1 ? "Revisar antes de enviar" : "Siguiente"}
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
+            {viewState === "review" ? (
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <section className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
+                  <h2 className="text-2xl font-semibold text-slate-900">Revisa antes de enviar</h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    Ya respondiste {completedCount} de {QUESTIONS.length} preguntas. El envío final
+                    es irreversible.
+                  </p>
+                </section>
+
+                <div className="grid gap-4">
+                  {QUESTIONS.map((question, index) => (
+                    <article key={question.id} className="rounded-3xl border border-slate-200 bg-white p-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
+                        Pregunta {index + 1}
+                      </p>
+                      <h3 className="mt-2 font-semibold text-slate-900">{question.texto}</h3>
+                      <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">
+                        {answers[question.id]?.trim() || "Sin respuesta"}
+                      </p>
+                    </article>
                   ))}
                 </div>
-              ) : (
-                <textarea
-                  name={question.id}
-                  value={answers[question.id] ?? ""}
-                  onChange={(event) => handleTextChange(question.id, event.target.value)}
-                  rows={5}
-                  style={styles.textarea}
-                />
-              )}
-            </fieldset>
-          ))}
 
-          <button type="submit" disabled={!canSubmit} style={styles.button}>
-            {submitting ? "Enviando..." : "Enviar respuestas"}
-          </button>
-        </form>
-      </section>
+                {error ? (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
+                  </div>
+                ) : null}
+
+                <div className="flex flex-col gap-3 sm:flex-row sm:justify-between">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStep(QUESTIONS.length - 1);
+                      setViewState("ready");
+                    }}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    Volver a editar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!canSubmit}
+                    className="rounded-xl bg-emerald-700 px-5 py-2 text-sm font-medium text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:bg-emerald-300"
+                  >
+                    {submitting ? "Enviando..." : "Enviar respuestas"}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+          </div>
+        </div>
+      </div>
     </main>
   );
 }
-
-const styles: Record<string, CSSProperties> = {
-  main: {
-    background: "#f5f7fb",
-    minHeight: "100vh",
-    padding: "32px 16px",
-  },
-  card: {
-    background: "#ffffff",
-    border: "1px solid #d8dee8",
-    borderRadius: 16,
-    margin: "0 auto",
-    maxWidth: 860,
-    padding: 24,
-  },
-  header: {
-    alignItems: "flex-start",
-    display: "flex",
-    gap: 16,
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  eyebrow: {
-    color: "#5b6472",
-    fontSize: 14,
-    margin: "0 0 6px",
-    textTransform: "uppercase",
-  },
-  title: {
-    color: "#172033",
-    fontSize: 30,
-    lineHeight: 1.1,
-    margin: "0 0 8px",
-  },
-  text: {
-    color: "#3f4a5a",
-    lineHeight: 1.5,
-    margin: 0,
-  },
-  meta: {
-    color: "#667085",
-    fontSize: 14,
-    margin: "6px 0 0",
-  },
-  progress: {
-    color: "#172033",
-    fontSize: 14,
-    fontWeight: 600,
-    margin: 0,
-    whiteSpace: "nowrap",
-  },
-  form: {
-    display: "grid",
-    gap: 16,
-    marginTop: 24,
-  },
-  fieldset: {
-    border: "1px solid #d8dee8",
-    borderRadius: 12,
-    margin: 0,
-    padding: 16,
-  },
-  legend: {
-    color: "#172033",
-    fontSize: 16,
-    fontWeight: 600,
-    padding: "0 8px",
-  },
-  scaleRow: {
-    display: "flex",
-    flexWrap: "wrap",
-    gap: 12,
-    marginTop: 12,
-  },
-  scaleOption: {
-    alignItems: "center",
-    display: "inline-flex",
-    gap: 6,
-  },
-  textarea: {
-    border: "1px solid #c7d0dd",
-    borderRadius: 10,
-    boxSizing: "border-box",
-    font: "inherit",
-    marginTop: 12,
-    minHeight: 120,
-    padding: 12,
-    resize: "vertical",
-    width: "100%",
-  },
-  button: {
-    background: "#172033",
-    border: "none",
-    borderRadius: 10,
-    color: "#ffffff",
-    cursor: "pointer",
-    fontSize: 16,
-    fontWeight: 600,
-    padding: "14px 18px",
-  },
-  error: {
-    color: "#b42318",
-    margin: "16px 0 0",
-  },
-};

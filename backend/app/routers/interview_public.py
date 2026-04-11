@@ -109,3 +109,39 @@ def submit_public_interview(
     session.refresh(interview)
 
     return _build_public_interview_response(member, interview)
+
+
+@router.post("/entrevista/{token}/draft", response_model=PublicInterviewResponse)
+def save_public_interview_draft(
+    token: str,
+    payload: PublicInterviewSubmit,
+    session: Session = Depends(get_session),
+) -> PublicInterviewResponse:
+    member = _get_member_by_token(session, token)
+    if member.token_status == MemberTokenStatus.COMPLETED:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Interview already submitted")
+
+    interview = _get_interview(session, member.id)
+
+    if interview:
+        interview.data = payload.data
+    else:
+        interview = Interview(
+            member_id=member.id,
+            organization_id=member.organization_id,
+            group_id=member.group_id,
+            data=payload.data,
+            submitted_at=None,
+            schema_version=1,
+        )
+
+    if member.token_status == MemberTokenStatus.PENDING:
+        member.token_status = MemberTokenStatus.IN_PROGRESS
+
+    session.add(interview)
+    session.add(member)
+    session.commit()
+    session.refresh(member)
+    session.refresh(interview)
+
+    return _build_public_interview_response(member, interview)

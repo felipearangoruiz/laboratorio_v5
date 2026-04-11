@@ -8,6 +8,7 @@ from app.routers.groups import router as groups_router
 from app.routers.interviews import router as interviews_router
 from app.routers.interview_public import router as interview_public_router
 from app.routers.members import router as members_router
+from app.routers.results import router as results_router
 
 app = FastAPI(title="Laboratorio API", version="0.1.0")
 
@@ -36,3 +37,4 @@ app.include_router(groups_router, tags=["groups"])
 app.include_router(interviews_router, tags=["interviews"])
 app.include_router(interview_public_router, tags=["interview-public"])
 app.include_router(members_router, tags=["members"])
+app.include_router(results_router, tags=["results"])
