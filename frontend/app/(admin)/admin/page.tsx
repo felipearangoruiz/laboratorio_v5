@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 
 import { getSessionPayload } from "@/lib/session";
 import { serverFetch } from "@/lib/serverFetch";
+import type { OrganizationStrategicContext } from "@/lib/types";
+import StrategicContextForm from "./StrategicContextForm";
 
 type DashboardPendingInterview = {
   member_id: string;
@@ -24,6 +26,10 @@ type DashboardResponse = {
     name: string;
     description: string;
     sector: string;
+    strategic_objectives: string;
+    strategic_concerns: string;
+    key_questions: string;
+    additional_context: string;
   };
   total_members: number;
   total_groups: number;
@@ -34,6 +40,7 @@ type DashboardResponse = {
   pending_actions: string[];
   pending_interviews_list: DashboardPendingInterview[];
   can_generate_diagnosis: boolean;
+  strategic_context: OrganizationStrategicContext;
   latest_result: DashboardLatestResult | null;
   latest_job: {
     id: string;
@@ -262,6 +269,11 @@ export default async function AdminPage() {
             )}
           </section>
         </div>
+
+        <StrategicContextForm
+          organizationId={session.organization_id}
+          initialValue={dashboard.strategic_context}
+        />
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6">
           <div className="flex items-center justify-between gap-4">

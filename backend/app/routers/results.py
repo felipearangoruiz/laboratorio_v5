@@ -73,10 +73,21 @@ def _count_mentions(texts: list[str], keywords: list[str]) -> int:
     return total
 
 
+def _build_strategic_context(organization: Organization) -> dict[str, str]:
+    return {
+        "objetivos": organization.strategic_objectives.strip(),
+        "preocupaciones": organization.strategic_concerns.strip(),
+        "preguntas_clave": organization.key_questions.strip(),
+        "contexto_adicional": organization.additional_context.strip(),
+    }
+
+
 def _build_processing_result(organization: Organization, interviews: list[Interview]) -> dict[str, Any]:
     texts = _extract_strings(interviews)
     total_interviews = len(interviews)
     total_answers = sum(len(interview.data or {}) for interview in interviews)
+    strategic_context = _build_strategic_context(organization)
+    has_strategic_context = any(strategic_context.values())
 
     decision_mentions = _count_mentions(
         texts,
@@ -123,19 +134,37 @@ def _build_processing_result(organization: Organization, interviews: list[Interv
         "Revisar procesos con mayor mención de espera, bloqueo o dependencia de aprobación.",
         "Contrastar reglas formales con prácticas recurrentes reportadas por los entrevistados.",
     ]
+    if has_strategic_context:
+        recomendaciones.insert(
+            0,
+            "Usar el contexto estratégico declarado por el admin para priorizar cuáles hallazgos requieren validación inmediata.",
+        )
+
+    resumen_contexto = ""
+    if strategic_context["objetivos"]:
+        resumen_contexto += f" Objetivo declarado: {strategic_context['objetivos']}."
+    if strategic_context["preocupaciones"]:
+        resumen_contexto += f" Preocupaciones centrales: {strategic_context['preocupaciones']}."
 
     return {
         "resumen_ejecutivo": (
             f"Diagnóstico básico para {organization.name}. La organización cuenta con {total_interviews} entrevistas "
             "procesadas y una lectura inicial centrada en gobernanza, fricción operativa y reglas reales de trabajo."
+            f"{resumen_contexto}"
         ),
         "lectura_general": (
             "Este resultado es una primera consolidación estructurada del material capturado. "
-            "No reemplaza una lectura cualitativa profunda, pero sí permite detectar patrones repetidos y orientar el siguiente ciclo del caso."
+            "No reemplaza una lectura cualitativa profunda, pero sí permite detectar patrones repetidos y orientar el siguiente ciclo del caso. "
+            + (
+                "La lectura incorpora el contexto estratégico del admin para interpretar mejor la evidencia disponible."
+                if has_strategic_context
+                else "Todavía conviene complementar el caso con contexto estratégico del admin para orientar mejor la lectura."
+            )
         ),
         "hallazgos_clave": hallazgos,
         "riesgos_principales": riesgos,
         "recomendaciones": recomendaciones,
+        "contexto_estrategico": strategic_context,
         "cobertura": {
             "entrevistas_procesadas": total_interviews,
             "respuestas_consolidadas": total_answers,
@@ -147,6 +176,12 @@ def _build_processing_result(organization: Organization, interviews: list[Interv
             "claridad_reglas": rule_score,
             "incentivos": incentive_score,
             "salud_global": global_score,
+        },
+        "metadata": {
+            "usa_contexto_estrategico": has_strategic_context,
+            "campos_contexto_completos": [
+                key for key, value in strategic_context.items() if value
+            ],
         },
     }
 

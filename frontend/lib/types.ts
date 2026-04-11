@@ -11,3 +11,11 @@ export interface ApiUser {
   role: string;
   organization_id: string | null;
 }
+
+export interface OrganizationStrategicContext {
+  strategic_objectives: string;
+  strategic_concerns: string;
+  key_questions: string;
+  additional_context: string;
+  is_complete: boolean;
+}

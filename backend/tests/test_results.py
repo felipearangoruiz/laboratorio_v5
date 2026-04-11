@@ -164,3 +164,119 @@ def test_trigger_resultado_crea_job_y_processing_result() -> None:
         assert latest_job.status_code == 200
         job_body = latest_job.json()
         assert job_body["status"] == "completed"
+        assert result_body["result"]["metadata"]["usa_contexto_estrategico"] is False
+
+
+def test_update_organization_guarda_contexto_estrategico() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        admin, organization = _seed_base(session)
+
+        def override_get_session() -> Generator[Session, None, None]:
+            yield session
+
+        app.dependency_overrides[get_session] = override_get_session
+        with TestClient(app) as client:
+            response = client.patch(
+                f"/organizations/{organization.id}",
+                headers=auth_headers(admin),
+                json={
+                    "strategic_objectives": "Entender por qué la coordinación se está ralentizando.",
+                    "strategic_concerns": "Que las aprobaciones estén concentradas en pocas personas.",
+                    "key_questions": "Dónde se bloquean las decisiones críticas y qué reglas reales operan.",
+                    "additional_context": "Caso sensible por expansión reciente y cambios de liderazgo.",
+                },
+            )
+
+            dashboard = client.get(
+                f"/organizations/{organization.id}/dashboard",
+                headers=auth_headers(admin),
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["strategic_objectives"] == "Entender por qué la coordinación se está ralentizando."
+        assert body["strategic_concerns"] == "Que las aprobaciones estén concentradas en pocas personas."
+        assert body["key_questions"] == "Dónde se bloquean las decisiones críticas y qué reglas reales operan."
+        assert body["additional_context"] == "Caso sensible por expansión reciente y cambios de liderazgo."
+
+        assert dashboard.status_code == 200
+        dashboard_body = dashboard.json()
+        assert dashboard_body["strategic_context"]["is_complete"] is True
+
+
+def test_trigger_resultado_incorpora_contexto_estrategico() -> None:
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    SQLModel.metadata.create_all(engine)
+
+    with Session(engine) as session:
+        admin, organization = _seed_base(session)
+        organization.strategic_objectives = "Reducir fricción entre áreas para acelerar decisiones."
+        organization.strategic_concerns = "Dependencia de aprobaciones y reglas no explícitas."
+        organization.key_questions = "Qué patrones de bloqueo aparecen con más frecuencia."
+        session.add(organization)
+        session.commit()
+
+        member = Member(
+            organization_id=organization.id,
+            name="Miembro 1",
+            role_label="Analista",
+            interview_token="token-1",
+            token_status=MemberTokenStatus.COMPLETED,
+        )
+        session.add(member)
+        session.commit()
+        session.refresh(member)
+
+        interview = Interview(
+            member_id=member.id,
+            organization_id=organization.id,
+            group_id=None,
+            data={
+                "q01": "Las decisiones importantes se aprueban por una sola persona.",
+                "q04": "Hay demoras y bloqueos frecuentes entre áreas.",
+            },
+            submitted_at=datetime.now(timezone.utc),
+            schema_version=1,
+        )
+        session.add(interview)
+        session.commit()
+
+        def override_get_session() -> Generator[Session, None, None]:
+            yield session
+
+        app.dependency_overrides[get_session] = override_get_session
+        with TestClient(app) as client:
+            response = client.post(
+                f"/organizations/{organization.id}/results/trigger",
+                headers=auth_headers(admin),
+            )
+
+            latest_result = client.get(
+                f"/organizations/{organization.id}/results/latest",
+                headers=auth_headers(admin),
+            )
+
+        app.dependency_overrides.clear()
+
+        assert response.status_code == 201, response.text
+        assert latest_result.status_code == 200
+
+        result_body = latest_result.json()["result"]
+        assert result_body["contexto_estrategico"]["objetivos"] == (
+            "Reducir fricción entre áreas para acelerar decisiones."
+        )
+        assert result_body["metadata"]["usa_contexto_estrategico"] is True
+        assert "Objetivo declarado" in result_body["resumen_ejecutivo"]

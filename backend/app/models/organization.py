@@ -18,6 +18,10 @@ class Organization(SQLModel, table=True):
     name: str = Field(nullable=False, max_length=255)
     description: str = Field(default="", nullable=False)
     sector: str = Field(default="", nullable=False, max_length=255)
+    strategic_objectives: str = Field(default="", nullable=False)
+    strategic_concerns: str = Field(default="", nullable=False)
+    key_questions: str = Field(default="", nullable=False)
+    additional_context: str = Field(default="", nullable=False)
     admin_id: UUID | None = Field(
         default=None,
         sa_column=Column(
@@ -36,6 +40,10 @@ class OrganizationCreate(SQLModel):
     name: str
     description: str = ""
     sector: str = ""
+    strategic_objectives: str = ""
+    strategic_concerns: str = ""
+    key_questions: str = ""
+    additional_context: str = ""
     admin_id: UUID | None = None
 
 
@@ -43,6 +51,10 @@ class OrganizationUpdate(SQLModel):
     name: str | None = None
     description: str | None = None
     sector: str | None = None
+    strategic_objectives: str | None = None
+    strategic_concerns: str | None = None
+    key_questions: str | None = None
+    additional_context: str | None = None
     admin_id: UUID | None = None
 
 
@@ -51,5 +63,9 @@ class OrganizationRead(SQLModel):
     name: str
     description: str
     sector: str
+    strategic_objectives: str
+    strategic_concerns: str
+    key_questions: str
+    additional_context: str
     admin_id: UUID | None
     created_at: datetime

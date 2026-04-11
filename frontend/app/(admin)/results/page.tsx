@@ -23,6 +23,9 @@ type LatestJob = {
 
 type DashboardInfo = {
   can_generate_diagnosis: boolean;
+  strategic_context: {
+    is_complete: boolean;
+  };
 };
 
 function formatResultType(type: string) {
@@ -79,6 +82,7 @@ export default async function ResultsPage() {
       `/organizations/${session.organization_id}/dashboard`
     );
     const canGenerate = dashboard.can_generate_diagnosis;
+    const hasStrategicContext = dashboard.strategic_context.is_complete;
 
     return (
       <main className="space-y-6 p-6 md:p-8">
@@ -100,7 +104,9 @@ export default async function ResultsPage() {
               <h2 className="text-xl font-semibold text-slate-900">Procesamiento</h2>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
                 El diagnóstico básico se genera a partir de las entrevistas completadas y queda
-                guardado como resultado reutilizable.
+                guardado como resultado reutilizable. {hasStrategicContext
+                  ? "También incorpora el contexto estratégico cargado por el admin."
+                  : "Todavía puede enriquecerse si el admin carga el contexto estratégico del caso."}
               </p>
             </div>
 
@@ -201,10 +207,26 @@ export default async function ResultsPage() {
                 </article>
                 <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Contexto estratégico
+                  </p>
+                  <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">
+                    {stringifyValue(results[0].result?.contexto_estrategico)}
+                  </pre>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Scores
                   </p>
                   <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">
                     {stringifyValue(results[0].result?.scores)}
+                  </pre>
+                </article>
+                <article className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Metadata
+                  </p>
+                  <pre className="mt-2 whitespace-pre-wrap font-sans text-sm leading-6 text-slate-700">
+                    {stringifyValue(results[0].result?.metadata)}
                   </pre>
                 </article>
               </div>

@@ -52,6 +52,14 @@ class DashboardLatestJob(BaseModel):
     updated_at: str
 
 
+class DashboardStrategicContext(BaseModel):
+    strategic_objectives: str
+    strategic_concerns: str
+    key_questions: str
+    additional_context: str
+    is_complete: bool
+
+
 class OrganizationDashboard(BaseModel):
     organization: OrganizationRead
     total_members: int
@@ -63,6 +71,7 @@ class OrganizationDashboard(BaseModel):
     pending_actions: list[str]
     pending_interviews_list: list[DashboardPendingInterview]
     can_generate_diagnosis: bool
+    strategic_context: DashboardStrategicContext
     latest_result: DashboardLatestResult | None = None
     latest_job: DashboardLatestJob | None = None
 
@@ -340,6 +349,17 @@ def get_organization_dashboard(
         pending_actions.append("Comparte y completa al menos una entrevista para empezar a generar señal.")
     if total_members > 0 and completed_interviews < total_members:
         pending_actions.append("Aún faltan entrevistas por completar para mejorar la lectura del caso.")
+    if not any(
+        [
+            organization.strategic_objectives.strip(),
+            organization.strategic_concerns.strip(),
+            organization.key_questions.strip(),
+            organization.additional_context.strip(),
+        ]
+    ):
+        pending_actions.append(
+            "Captura el contexto estratégico del caso para orientar mejor el diagnóstico."
+        )
     if latest_result is None:
         pending_actions.append("Todavía no hay resultados generados para esta organización.")
 
@@ -366,6 +386,20 @@ def get_organization_dashboard(
             for member in pending_members
         ],
         can_generate_diagnosis=can_generate_diagnosis,
+        strategic_context=DashboardStrategicContext(
+            strategic_objectives=organization.strategic_objectives,
+            strategic_concerns=organization.strategic_concerns,
+            key_questions=organization.key_questions,
+            additional_context=organization.additional_context,
+            is_complete=any(
+                [
+                    organization.strategic_objectives.strip(),
+                    organization.strategic_concerns.strip(),
+                    organization.key_questions.strip(),
+                    organization.additional_context.strip(),
+                ]
+            ),
+        ),
         latest_result=(
             DashboardLatestResult(
                 id=latest_result.id,
