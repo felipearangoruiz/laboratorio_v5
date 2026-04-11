@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/apiFetch";
 
@@ -166,7 +167,7 @@ export default function MembersPage() {
     const payload = {
       organization_id: session.organization_id,
       name: formValues.name.trim(),
-      role_label: formValues.role_label.trim() || null,
+      role_label: formValues.role_label.trim(),
       group_id: formValues.group_id || null,
     };
 
@@ -347,6 +348,7 @@ export default function MembersPage() {
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Grupo</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Estado del token</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Token</th>
+                <th className="px-4 py-3 text-left font-medium text-gray-700">Abrir</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Fecha de creación</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-700">Acciones</th>
               </tr>
@@ -369,6 +371,14 @@ export default function MembersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-gray-700">{member.interview_token}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/entrevista/${member.interview_token}`}
+                      className="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Abrir entrevista
+                    </Link>
+                  </td>
                   <td className="px-4 py-3 text-gray-700">
                     {new Date(member.created_at).toLocaleDateString("es-ES")}
                   </td>

@@ -149,7 +149,8 @@ export default function GroupsPage() {
     const payload = {
       organization_id: session.organization_id,
       name: formValues.name.trim(),
-      description: formValues.description.trim() || null,
+      description: formValues.description.trim(),
+      tarea_general: "",
       nivel_jerarquico: formValues.nivel_jerarquico.trim()
         ? Number(formValues.nivel_jerarquico)
         : null,
