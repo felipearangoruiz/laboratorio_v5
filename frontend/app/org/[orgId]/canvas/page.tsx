@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
 import ReactFlow, {
   Background,
   Controls,
@@ -111,10 +110,8 @@ function treeToFlow(
 
 export default function CanvasPage() {
   const { user, loading: authLoading } = useAuth();
-  const params = useParams();
-  const urlOrgId = params.orgId as string;
-  // Use the user's real org UUID — never trust the URL param for API calls
-  const orgId = user?.organization_id || urlOrgId;
+  // ALWAYS use the user's real org UUID — never trust the URL param
+  const orgId = user?.organization_id ?? "";
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
