@@ -24,6 +24,7 @@ import {
   updatePositions,
   getCollectionStatus,
 } from "@/lib/api";
+import { useAuth } from "@/hooks/useAuth";
 import OrgNode from "./OrgNode";
 import SidePanel from "./SidePanel";
 import CollectionPanel from "./CollectionPanel";
@@ -106,6 +107,7 @@ function treeToFlow(
 }
 
 export default function CanvasPage() {
+  const { user, loading: authLoading } = useAuth();
   const params = useParams();
   const orgId = params.orgId as string;
 
@@ -285,7 +287,7 @@ export default function CanvasPage() {
     loadGroups();
   }
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
         <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />

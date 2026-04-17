@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login, ApiError } from "@/lib/api";
+import { login, getMe, ApiError } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,7 +19,13 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      router.push("/onboarding");
+      // Route based on user state: org → canvas, no org → onboarding
+      const user = await getMe();
+      if (user.organization_id) {
+        router.push(`/org/${user.organization_id}/canvas`);
+      } else {
+        router.push("/onboarding");
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
