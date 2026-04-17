@@ -4,12 +4,43 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
+from pydantic import BaseModel, EmailStr
+
 from app.core.dependencies import get_current_user
-from app.core.security import create_access_token, verify_password, verify_token
+from app.core.security import create_access_token, hash_password, verify_password, verify_token
 from app.db import get_session
-from app.models.user import User, UserRead
+from app.models.user import User, UserRead, UserRole
 
 router = APIRouter()
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+
+
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+def register(
+    body: RegisterRequest,
+    session: Session = Depends(get_session),
+) -> dict:
+    existing = session.exec(select(User).where(User.email == body.email)).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Email already registered",
+        )
+
+    user = User(
+        email=body.email,
+        hashed_password=hash_password(body.password),
+        role=UserRole.ADMIN,
+    )
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return {"id": str(user.id), "email": user.email}
 
 
 @router.post("/login")

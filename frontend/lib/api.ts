@@ -113,7 +113,32 @@ export async function getAssessmentScore(assessmentId: string) {
   );
 }
 
-// ── Public Interview (existing endpoints) ────────────
+// ── Free Member Interview (public, no auth) ─────────
+export async function getFreeInterview(token: string) {
+  return request<{
+    name: string;
+    role: string;
+    token: string;
+    assessment_id: string;
+    submitted: boolean;
+    responses: Record<string, number> | null;
+  }>(`/api/quick-assessment/interview/${token}`);
+}
+
+export async function submitFreeInterview(
+  token: string,
+  responses: Record<string, number>
+) {
+  return request<{ status: string }>(
+    `/api/quick-assessment/interview/${token}/submit`,
+    {
+      method: "POST",
+      body: JSON.stringify({ token, responses }),
+    }
+  );
+}
+
+// ── Public Interview (existing premium endpoints) ────
 export async function getPublicInterview(token: string) {
   return request<import("./types").PublicInterview>(`/entrevista/${token}`);
 }

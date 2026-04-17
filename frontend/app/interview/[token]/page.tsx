@@ -1,15 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import {
-  getPublicInterview,
-  submitInterview,
-  saveDraft,
-  ApiError,
-} from "@/lib/api";
+import { getFreeInterview, submitFreeInterview, ApiError } from "@/lib/api";
 import { FREE_DIMENSIONS } from "@/lib/types";
-import type { PublicInterview } from "@/lib/types";
 import { CheckCircle } from "lucide-react";
 
 const LIKERT_OPTIONS = [
@@ -24,7 +18,7 @@ export default function InterviewPage() {
   const params = useParams();
   const token = params.token as string;
 
-  const [interview, setInterview] = useState<PublicInterview | null>(null);
+  const [memberName, setMemberName] = useState("");
   const [responses, setResponses] = useState<Record<string, number>>({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -34,16 +28,12 @@ export default function InterviewPage() {
   useEffect(() => {
     async function load() {
       try {
-        const data = await getPublicInterview(token);
-        setInterview(data);
-        if (data.data) {
-          const numericData: Record<string, number> = {};
-          for (const [k, v] of Object.entries(data.data)) {
-            if (typeof v === "number") numericData[k] = v;
-          }
-          setResponses(numericData);
+        const data = await getFreeInterview(token);
+        setMemberName(data.name);
+        if (data.responses) {
+          setResponses(data.responses);
         }
-        if (data.token_status === "COMPLETED") {
+        if (data.submitted) {
           setSubmitted(true);
         }
       } catch (err) {
@@ -59,21 +49,8 @@ export default function InterviewPage() {
     load();
   }, [token]);
 
-  const autoSave = useCallback(
-    async (data: Record<string, number>) => {
-      try {
-        await saveDraft(token, data);
-      } catch {
-        // silent fail on auto-save
-      }
-    },
-    [token]
-  );
-
   function setResponse(questionId: string, value: number) {
-    const updated = { ...responses, [questionId]: value };
-    setResponses(updated);
-    autoSave(updated);
+    setResponses((prev) => ({ ...prev, [questionId]: value }));
   }
 
   const allQuestions = FREE_DIMENSIONS.flatMap((d) => d.questions);
@@ -81,8 +58,9 @@ export default function InterviewPage() {
 
   async function handleSubmit() {
     setSubmitting(true);
+    setError("");
     try {
-      await submitInterview(token, responses);
+      await submitFreeInterview(token, responses);
       setSubmitted(true);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -103,7 +81,7 @@ export default function InterviewPage() {
     );
   }
 
-  if (error && !interview) {
+  if (error && !memberName) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="text-center max-w-sm">
@@ -141,12 +119,10 @@ export default function InterviewPage() {
           <h1 className="text-xl font-bold text-gray-900">
             Encuesta organizacional
           </h1>
-          {interview && (
-            <p className="mt-1 text-sm text-gray-500">
-              Hola {interview.name}. Esta encuesta es anónima y toma menos de 5
-              minutos.
-            </p>
-          )}
+          <p className="mt-1 text-sm text-gray-500">
+            Hola {memberName}. Esta encuesta es anónima y toma menos de 5
+            minutos.
+          </p>
         </div>
 
         {error && (
@@ -212,10 +188,6 @@ export default function InterviewPage() {
               {allQuestions.length})
             </p>
           )}
-          <p className="mt-3 text-xs text-gray-400 text-center">
-            Tus respuestas se guardan automáticamente. Puedes cerrar y volver
-            después.
-          </p>
         </div>
       </div>
     </div>
