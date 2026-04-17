@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy import Column, DateTime, Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
@@ -33,8 +33,11 @@ class Group(SQLModel, table=True):
     name: str = Field(nullable=False, max_length=255)
     description: str = Field(default="", nullable=False)
     tarea_general: str = Field(default="", nullable=False)
+    area: str = Field(default="", sa_column=Column(String(255), nullable=False, server_default=""))
     nivel_jerarquico: int | None = Field(default=None)
     tipo_nivel: str | None = Field(default=None, max_length=255)
+    position_x: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default="0"))
+    position_y: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default="0"))
     is_default: bool = Field(default=False, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -49,7 +52,10 @@ class GroupRead(SQLModel):
     name: str
     description: str
     tarea_general: str
+    area: str
     nivel_jerarquico: int | None
     tipo_nivel: str | None
+    position_x: float
+    position_y: float
     is_default: bool
     created_at: datetime

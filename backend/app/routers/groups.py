@@ -21,18 +21,24 @@ class GroupCreate(BaseModel):
     name: str
     description: str = ""
     tarea_general: str = ""
+    area: str = ""
     nivel_jerarquico: int | None = None
     tipo_nivel: str | None = None
     parent_group_id: UUID | None = None
+    position_x: float = 0.0
+    position_y: float = 0.0
 
 
 class GroupUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     tarea_general: str | None = None
+    area: str | None = None
     nivel_jerarquico: int | None = None
     tipo_nivel: str | None = None
     parent_group_id: UUID | None = None
+    position_x: float | None = None
+    position_y: float | None = None
 
 
 class GroupTreeNode(BaseModel):
@@ -42,11 +48,24 @@ class GroupTreeNode(BaseModel):
     name: str
     description: str
     tarea_general: str
+    area: str
     nivel_jerarquico: int | None
     tipo_nivel: str | None
+    position_x: float
+    position_y: float
     is_default: bool
     member_count: int
     children: list["GroupTreeNode"]
+
+
+class PositionUpdate(BaseModel):
+    id: UUID
+    position_x: float
+    position_y: float
+
+
+class BulkPositionUpdate(BaseModel):
+    positions: list[PositionUpdate]
 
 
 def _can_access_org(user: User, organization_id: UUID) -> bool:
@@ -120,9 +139,12 @@ def create_group(
         name=payload.name,
         description=payload.description,
         tarea_general=payload.tarea_general,
+        area=payload.area,
         nivel_jerarquico=payload.nivel_jerarquico,
         tipo_nivel=payload.tipo_nivel,
         parent_group_id=payload.parent_group_id,
+        position_x=payload.position_x,
+        position_y=payload.position_y,
     )
     session.add(group)
     session.commit()
@@ -258,8 +280,11 @@ def get_organization_groups_tree(
                     "name": group.name,
                     "description": group.description,
                     "tarea_general": group.tarea_general,
+                    "area": group.area,
                     "nivel_jerarquico": group.nivel_jerarquico,
                     "tipo_nivel": group.tipo_nivel,
+                    "position_x": group.position_x,
+                    "position_y": group.position_y,
                     "is_default": group.is_default,
                     "member_count": member_counts.get(group.id, 0),
                     "children": build(group.id),
@@ -268,3 +293,27 @@ def get_organization_groups_tree(
         return nodes
 
     return build(None)
+
+
+@router.patch("/organizations/{org_id}/groups/positions")
+def update_positions(
+    org_id: UUID,
+    payload: BulkPositionUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Session = Depends(get_session),
+) -> dict:
+    """Bulk update node positions after drag on canvas."""
+    if not _can_access_org(current_user, org_id):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
+
+    updated = 0
+    for pos in payload.positions:
+        group = session.get(Group, pos.id)
+        if group and group.organization_id == org_id:
+            group.position_x = pos.position_x
+            group.position_y = pos.position_y
+            session.add(group)
+            updated += 1
+
+    session.commit()
+    return {"updated": updated}

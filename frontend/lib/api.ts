@@ -170,6 +170,80 @@ export async function saveDraft(token: string, data: Record<string, any>) {
   });
 }
 
+// ── Canvas / Groups ──────────────────────────────────
+export async function getOrgGroups(orgId: string) {
+  return request<any[]>(`/organizations/${orgId}/groups/tree`);
+}
+
+export async function createGroup(data: {
+  organization_id: string;
+  name: string;
+  description?: string;
+  area?: string;
+  nivel_jerarquico?: number;
+  parent_group_id?: string | null;
+  position_x?: number;
+  position_y?: number;
+}) {
+  return request<any>("/groups", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateGroup(
+  groupId: string,
+  data: Record<string, any>
+) {
+  return request<any>(`/groups/${groupId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteGroup(groupId: string) {
+  return request<void>(`/groups/${groupId}`, { method: "DELETE" });
+}
+
+export async function updatePositions(
+  orgId: string,
+  positions: { id: string; position_x: number; position_y: number }[]
+) {
+  return request<{ updated: number }>(
+    `/organizations/${orgId}/groups/positions`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ positions }),
+    }
+  );
+}
+
+export async function getTemplates(orgId: string) {
+  return request<{ id: string; name: string; description: string }[]>(
+    `/organizations/${orgId}/canvas/templates`
+  );
+}
+
+export async function applyTemplate(orgId: string, templateId: string) {
+  return request<{ created: number; nodes: any[] }>(
+    `/organizations/${orgId}/canvas/templates/${templateId}`,
+    { method: "POST" }
+  );
+}
+
+export async function importCsv(
+  orgId: string,
+  rows: { name: string; role: string; area: string; boss: string }[]
+) {
+  return request<{ created: number }>(
+    `/organizations/${orgId}/canvas/import-csv`,
+    {
+      method: "POST",
+      body: JSON.stringify({ rows }),
+    }
+  );
+}
+
 // ── Organizations ────────────────────────────────────
 export async function getOrganization(orgId: string) {
   return request<import("./types").Organization>(`/organizations/${orgId}`);

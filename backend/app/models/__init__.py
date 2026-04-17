@@ -2,6 +2,8 @@ from sqlmodel import SQLModel
 
 from .group import Group, GroupRead
 from .interview import Interview, InterviewRead
+from .lateral_relation import LateralRelation, LateralRelationCreate, LateralRelationRead
+from .membership import Membership, MembershipRead
 from .job import JobState, JobStatus, JobStatusRead
 from .member import Member, MemberRead, MemberTokenStatus
 from .organization import (
@@ -38,4 +40,9 @@ __all__ = [
     "JobState",
     "QuickAssessment",
     "QuickAssessmentMember",
+    "LateralRelation",
+    "LateralRelationCreate",
+    "LateralRelationRead",
+    "Membership",
+    "MembershipRead",
 ]
