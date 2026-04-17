@@ -1,10 +1,13 @@
+import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from app.core.dependencies import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password, verify_token
@@ -27,7 +30,8 @@ def register(
     body: RegisterRequest,
     session: Session = Depends(get_session),
 ) -> dict:
-    existing = session.exec(select(User).where(User.email == body.email)).first()
+    email = body.email.strip().lower()
+    existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -45,7 +49,7 @@ def register(
 
     # Create User linked to the Organization
     user = User(
-        email=body.email,
+        email=email,
         hashed_password=hash_password(body.password),
         role=UserRole.ADMIN,
         organization_id=org.id,
@@ -72,8 +76,18 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    user = session.exec(select(User).where(User.email == form_data.username)).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    email = form_data.username.strip().lower()
+    logger.info(f"Login attempt: email={email}")
+    user = session.exec(select(User).where(User.email == email)).first()
+    if not user:
+        logger.warning(f"Login failed: user not found for email={form_data.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_password(form_data.password, user.hashed_password):
+        logger.warning(f"Login failed: wrong password for email={form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
