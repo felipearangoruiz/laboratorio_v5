@@ -8,6 +8,7 @@ from app.routers.groups import router as groups_router
 from app.routers.interviews import router as interviews_router
 from app.routers.interview_public import router as interview_public_router
 from app.routers.members import router as members_router
+from app.routers.canvas import router as canvas_router
 from app.routers.quick_assessment import router as quick_assessment_router
 from app.routers.results import router as results_router
 
@@ -39,4 +40,5 @@ app.include_router(interviews_router, tags=["interviews"])
 app.include_router(interview_public_router, tags=["interview-public"])
 app.include_router(members_router, tags=["members"])
 app.include_router(results_router, tags=["results"])
+app.include_router(canvas_router, tags=["canvas"])
 app.include_router(quick_assessment_router, prefix="/api/quick-assessment", tags=["quick-assessment"])
