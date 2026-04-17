@@ -23,12 +23,15 @@ import {
   deleteGroup,
   updatePositions,
   getCollectionStatus,
+  getLatestDiagnosis,
 } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import OrgNode from "./OrgNode";
 import SidePanel from "./SidePanel";
 import CollectionPanel from "./CollectionPanel";
 import CollectionProgress from "./CollectionProgress";
+import AnalysisLayer from "./AnalysisLayer";
+import DiagnosisPanel from "./DiagnosisPanel";
 import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import LayerSelector from "./LayerSelector";
@@ -122,6 +125,8 @@ export default function CanvasPage() {
   const [activeLayer, setActiveLayer] = useState<string>("estructura");
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, string>>({});
   const [collectionRefreshKey, setCollectionRefreshKey] = useState(0);
+  const [thresholdMet, setThresholdMet] = useState(false);
+  const [diagnosis, setDiagnosis] = useState<any>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rawGroupsRef = useRef<GroupData[]>([]);
 
@@ -147,27 +152,32 @@ export default function CanvasPage() {
     }
   }, [orgId, setNodes, setEdges, activeLayer, nodeStatuses]);
 
-  // Load node interview statuses for collection layer
-  const loadStatuses = useCallback(async () => {
-    if (activeLayer !== "recoleccion") return;
+  // Load collection status + diagnosis
+  const loadMeta = useCallback(async () => {
+    if (!orgId) return;
     try {
-      const status = await getCollectionStatus(orgId);
-      // We need per-node status. For now, use collection status as source.
-      // The node status will be enriched by the backend /collection/status
-      // In a full implementation, we'd have per-node status endpoint
-      // For now, mark nodes based on member presence
+      const [collStatus, diag] = await Promise.allSettled([
+        getCollectionStatus(orgId),
+        getLatestDiagnosis(orgId),
+      ]);
+      if (collStatus.status === "fulfilled") {
+        setThresholdMet(collStatus.value.threshold_met);
+      }
+      if (diag.status === "fulfilled" && diag.value && diag.value.status === "completed") {
+        setDiagnosis(diag.value);
+      }
     } catch {
       // ignore
     }
-  }, [orgId, activeLayer]);
+  }, [orgId]);
 
   useEffect(() => {
     loadGroups();
   }, [loadGroups]);
 
   useEffect(() => {
-    loadStatuses();
-  }, [loadStatuses]);
+    loadMeta();
+  }, [loadMeta]);
 
   // Re-render nodes when layer changes
   useEffect(() => {
@@ -315,6 +325,8 @@ export default function CanvasPage() {
           active={activeLayer}
           onChange={setActiveLayer}
           hasNodes={nodes.length > 0}
+          thresholdMet={thresholdMet}
+          hasDiagnosis={!!diagnosis}
         />
 
         {/* Collection progress bar */}
@@ -383,6 +395,25 @@ export default function CanvasPage() {
               nodeName={selectedNodeData.data.label}
               onClose={() => setSelectedNode(null)}
               onChanged={handleCollectionChanged}
+            />
+          )}
+
+          {/* Analysis layer overlay */}
+          {activeLayer === "analisis" && !diagnosis && (
+            <AnalysisLayer
+              orgId={orgId}
+              onDiagnosisGenerated={() => {
+                loadMeta();
+                setActiveLayer("resultados");
+              }}
+            />
+          )}
+
+          {/* Results panel */}
+          {activeLayer === "resultados" && diagnosis && (
+            <DiagnosisPanel
+              diagnosis={diagnosis}
+              onClose={() => setActiveLayer("estructura")}
             />
           )}
         </div>

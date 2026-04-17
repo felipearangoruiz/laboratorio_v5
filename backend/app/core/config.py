@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change_me"
     DATABASE_URL: str = "postgresql+psycopg://postgres:postgres@postgres:5432/laboratorio"
     OPENAI_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
     BASE_URL: str = "http://localhost:8000"
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]
 
