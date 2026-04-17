@@ -109,7 +109,9 @@ function treeToFlow(
 export default function CanvasPage() {
   const { user, loading: authLoading } = useAuth();
   const params = useParams();
-  const orgId = params.orgId as string;
+  const urlOrgId = params.orgId as string;
+  // Use the user's real org UUID — never trust the URL param for API calls
+  const orgId = user?.organization_id || urlOrgId;
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
@@ -124,6 +126,7 @@ export default function CanvasPage() {
   const rawGroupsRef = useRef<GroupData[]>([]);
 
   const loadGroups = useCallback(async () => {
+    if (!orgId) return;
     try {
       const tree = await getOrgGroups(orgId);
       rawGroupsRef.current = tree || [];
