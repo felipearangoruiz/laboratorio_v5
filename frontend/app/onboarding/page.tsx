@@ -31,8 +31,10 @@ export default function OnboardingPage() {
     type: "",
     size_range: "",
   });
+  // Respuestas del líder (v2 instrument): index numérico para single_select,
+  // string[] para multi_select, string para preguntas abiertas.
   const [leaderResponses, setLeaderResponses] = useState<
-    Record<string, number | string>
+    Record<string, number | string | string[]>
   >({});
   const [members, setMembers] = useState<MemberEntry[]>([
     { name: "", role_label: "", email: "" },

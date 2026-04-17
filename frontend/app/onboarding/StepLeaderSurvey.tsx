@@ -2,16 +2,20 @@
 
 import { FREE_LEADER_QUESTIONS, type V2Question } from "@/lib/types";
 
+type ResponseValue = number | string | string[];
+
 interface Props {
-  responses: Record<string, any>;
-  onChange: (responses: Record<string, any>) => void;
+  responses: Record<string, ResponseValue>;
+  setResponses: React.Dispatch<
+    React.SetStateAction<Record<string, ResponseValue>>
+  >;
   onNext: () => void;
   onBack: () => void;
 }
 
 export default function StepLeaderSurvey({
   responses,
-  onChange,
+  setResponses,
   onNext,
   onBack,
 }: Props) {
@@ -20,15 +24,19 @@ export default function StepLeaderSurvey({
   );
 
   function setResponse(questionId: string, value: any) {
-    onChange({ ...responses, [questionId]: value });
+    setResponses((prev) => ({ ...prev, [questionId]: value }));
   }
 
   function toggleMultiSelect(questionId: string, option: string) {
-    const current: string[] = responses[questionId] || [];
-    const updated = current.includes(option)
-      ? current.filter((o: string) => o !== option)
-      : [...current, option];
-    setResponse(questionId, updated);
+    setResponses((prev) => {
+      const current = Array.isArray(prev[questionId])
+        ? (prev[questionId] as string[])
+        : [];
+      const updated = current.includes(option)
+        ? current.filter((o: string) => o !== option)
+        : [...current, option];
+      return { ...prev, [questionId]: updated };
+    });
   }
 
   function renderQuestion(q: V2Question) {
@@ -58,7 +66,9 @@ export default function StepLeaderSurvey({
     }
 
     if (base.type === "multi_select") {
-      const selected: string[] = responses[q.id] || [];
+      const selected: string[] = Array.isArray(responses[q.id])
+        ? (responses[q.id] as string[])
+        : [];
       return (
         <div key={q.id} className="space-y-2">
           <p className="text-sm text-gray-700 leading-relaxed">{base.text}</p>

@@ -2,13 +2,12 @@
 
 import { useEffect, useState } from "react";
 import type { MemberEntry, OrgInfo } from "./page";
-import { apiFetch, ApiError } from "@/lib/api";
-import type { QuickAssessment, QuickAssessmentMember } from "@/lib/types";
+import { ApiError, createQuickAssessment, inviteMembers } from "@/lib/api";
 import { ArrowLeft, Check, Loader2, AlertCircle } from "lucide-react";
 
 interface Props {
   orgInfo: OrgInfo;
-  leaderResponses: Record<string, number | string>;
+  leaderResponses: Record<string, number | string | string[]>;
   members: MemberEntry[];
   assessmentId: string | null;
   setAssessmentId: (id: string) => void;
@@ -16,7 +15,12 @@ interface Props {
   onBack: () => void;
 }
 
-type SendState = "idle" | "creating-org" | "creating-assessment" | "inviting" | "done" | "error";
+type SendState =
+  | "idle"
+  | "creating-assessment"
+  | "inviting"
+  | "done"
+  | "error";
 
 export default function StepSending({
   orgInfo,
@@ -41,59 +45,25 @@ export default function StepSending({
 
   async function send() {
     try {
-      setState("creating-org");
-
-      // Step 1: Create or use existing organization
-      const token = localStorage.getItem("access_token");
-      let orgId: string;
-
-      if (token) {
-        // Authenticated: create org via existing endpoint
-        const orgRes = await apiFetch<{ id: string }>("/organizations", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            name: orgInfo.name,
-            description: `${orgInfo.type} — ${orgInfo.size_range}`,
-            sector: orgInfo.type,
-          }),
-        });
-        orgId = orgRes.id;
-      } else {
-        // Unauthenticated free flow: use a placeholder org
-        // For MVP, we'll create the assessment with a demo org ID
-        const orgRes = await apiFetch<{ id: string }[]>("/organizations", {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }).catch(() => []);
-        orgId = orgRes[0]?.id ?? "";
-
-        if (!orgId) {
-          throw new Error("No se pudo obtener la organización. Inicia sesión primero.");
-        }
-      }
-
-      // Step 2: Create quick assessment
+      // Step 1: Create anonymous quick assessment (no auth required)
       setState("creating-assessment");
-      const assessment = await apiFetch<QuickAssessment>(
-        "/quick-assessment",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            organization_id: orgId,
-            leader_responses: leaderResponses,
-          }),
-        },
-      );
+      const assessment = await createQuickAssessment({
+        org_name: orgInfo.name,
+        org_type: orgInfo.type,
+        size_range: orgInfo.size_range,
+        leader_responses: leaderResponses,
+      });
       setAssessmentId(assessment.id);
 
-      // Step 3: Invite members
+      // Step 2: Invite members (map role_label -> role for v2 backend)
       setState("inviting");
-      await apiFetch<QuickAssessmentMember[]>(
-        `/quick-assessment/${assessment.id}/invite`,
-        {
-          method: "POST",
-          body: JSON.stringify({ members: validMembers }),
-        },
+      await inviteMembers(
+        assessment.id,
+        validMembers.map((m) => ({
+          name: m.name,
+          role: m.role_label,
+          email: m.email,
+        })),
       );
 
       setState("done");
@@ -111,7 +81,6 @@ export default function StepSending({
   }
 
   const steps = [
-    { key: "creating-org", label: "Creando organización..." },
     { key: "creating-assessment", label: "Guardando tus respuestas..." },
     { key: "inviting", label: "Enviando invitaciones..." },
     { key: "done", label: "¡Listo!" },
