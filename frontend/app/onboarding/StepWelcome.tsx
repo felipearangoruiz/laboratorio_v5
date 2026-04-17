@@ -1,46 +1,65 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, BarChart3, Clock, Users } from "lucide-react";
 
 export default function StepWelcome({ onNext }: { onNext: () => void }) {
   return (
     <div className="text-center">
-      <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
-        <span className="text-2xl">🏢</span>
-      </div>
       <h1 className="text-2xl font-bold text-gray-900">
-        Bienvenido al diagnóstico
+        Conoce cómo está tu organización
       </h1>
-      <p className="mt-3 text-gray-600 leading-relaxed">
-        En los próximos minutos vas a configurar un diagnóstico rápido de tu
-        organización. Necesitarás:
+      <p className="mt-2 text-gray-500">
+        En 10 minutos tendrás un score inicial de tu organización en 4
+        dimensiones clave.
       </p>
-      <ul className="mt-6 space-y-3 text-left max-w-xs mx-auto">
-        <li className="flex items-start gap-3 text-sm text-gray-700">
-          <span className="mt-0.5 w-5 h-5 bg-gray-900 text-white rounded-full flex items-center justify-center text-xs flex-shrink-0">
+
+      <div className="mt-10 space-y-4 text-left">
+        <div className="flex items-start gap-4 rounded-lg border border-gray-200 bg-white p-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-600">
             1
-          </span>
-          Información básica de tu organización
-        </li>
-        <li className="flex items-start gap-3 text-sm text-gray-700">
-          <span className="mt-0.5 w-5 h-5 bg-gray-900 text-white rounded-full flex items-center justify-center text-xs flex-shrink-0">
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900">Tú respondes</p>
+            <p className="text-sm text-gray-500">
+              Una encuesta rápida sobre tu percepción (~5 min)
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-4 rounded-lg border border-gray-200 bg-white p-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-600">
             2
-          </span>
-          Responder una encuesta corta como líder (2 min)
-        </li>
-        <li className="flex items-start gap-3 text-sm text-gray-700">
-          <span className="mt-0.5 w-5 h-5 bg-gray-900 text-white rounded-full flex items-center justify-center text-xs flex-shrink-0">
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900">
+              Tu equipo responde
+            </p>
+            <p className="text-sm text-gray-500">
+              Invitas 3-5 miembros. Reciben un enlace por correo.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-4 rounded-lg border border-gray-200 bg-white p-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-50 text-sm font-semibold text-brand-600">
             3
-          </span>
-          Invitar a 3-5 miembros del equipo
-        </li>
-      </ul>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900">Ves tu score</p>
+            <p className="text-sm text-gray-500">
+              Un radar con 4 dimensiones: Liderazgo, Comunicación, Cultura y
+              Operación.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <button
         onClick={onNext}
-        className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-gray-800"
+        className="mt-8 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
       >
         Comenzar
-        <ArrowRight className="w-4 h-4" />
+        <ArrowRight className="h-4 w-4" />
       </button>
     </div>
   );

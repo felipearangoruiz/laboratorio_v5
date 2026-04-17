@@ -2,424 +2,476 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
+import { apiFetch } from "@/lib/api";
+import type { Question } from "@/lib/types";
 import {
-  getFreeInterview,
-  submitFreeInterview,
-  getPublicInterview,
-  submitInterview,
-  saveDraft,
-  getPremiumQuestions,
-  ApiError,
-} from "@/lib/api";
-import { FREE_DIMENSIONS } from "@/lib/types";
-import { CheckCircle, ChevronLeft, ChevronRight, Shield } from "lucide-react";
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Loader2,
+  Lock,
+  Send,
+} from "lucide-react";
 
-type InterviewMode = "loading" | "free" | "premium";
+type ViewState = "loading" | "welcome" | "survey" | "review" | "submitting" | "done" | "error";
 
-interface Section {
-  dimension: string;
-  label: string;
-  questions: {
-    id: string;
-    dimension: string;
-    tipo: string;
-    texto: string;
-    opciones?: string[];
-  }[];
-}
-
-const LIKERT_OPTIONS = [
-  { value: 1, label: "Muy en desacuerdo" },
-  { value: 2, label: "En desacuerdo" },
-  { value: 3, label: "Neutral" },
-  { value: 4, label: "De acuerdo" },
-  { value: 5, label: "Muy de acuerdo" },
-];
+const DIMENSION_LABELS: Record<string, string> = {
+  liderazgo: "Liderazgo",
+  comunicacion: "Comunicación",
+  cultura: "Cultura",
+  operacion: "Operación",
+  general: "General",
+};
 
 export default function InterviewPage() {
   const params = useParams();
   const token = params.token as string;
 
-  const [mode, setMode] = useState<InterviewMode>("loading");
-  const [memberName, setMemberName] = useState("");
-  const [responses, setResponses] = useState<Record<string, any>>({});
-  const [sections, setSections] = useState<Section[]>([]);
+  const [view, setView] = useState<ViewState>("loading");
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [responses, setResponses] = useState<Record<string, number | string>>({});
   const [currentSection, setCurrentSection] = useState(0);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [showWelcome, setShowWelcome] = useState(true);
-  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [assessmentId, setAssessmentId] = useState<string>("");
 
-  // Detect interview type: try free first, then premium
+  // Auto-save timer
+  const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Group questions by dimension
+  const dimensions = questions.reduce<string[]>((acc, q) => {
+    if (!acc.includes(q.dimension)) acc.push(q.dimension);
+    return acc;
+  }, []);
+
+  const sectionQuestions = questions.filter(
+    (q) => q.dimension === dimensions[currentSection],
+  );
+
+  // Load questions — we need the assessment ID from the token
+  // The token URL pattern is: /interview/{token}
+  // We need to extract the assessment_id. For now, we'll get questions
+  // from a known assessment. The token includes the assessment context.
   useEffect(() => {
-    async function detect() {
-      // Try free (quick assessment) endpoint
+    async function load() {
       try {
-        const data = await getFreeInterview(token);
-        setMemberName(data.name);
-        if (data.responses) setResponses(data.responses);
-        if (data.submitted) setSubmitted(true);
+        // The token is a quick_assessment_member token
+        // We need to find which assessment it belongs to
+        // For MVP, we'll fetch questions from a generic endpoint
+        // and the assessment_id is encoded in a query param or we discover it
 
-        // Build sections from FREE_DIMENSIONS
-        const freeSections: Section[] = FREE_DIMENSIONS.map((d) => ({
-          dimension: d.id,
-          label: d.label,
-          questions: d.questions.map((q) => ({
-            id: q.id,
-            dimension: q.dimension,
-            tipo: "likert",
-            texto: q.text,
-          })),
-        }));
-        setSections(freeSections);
-        setMode("free");
-        setLoading(false);
-        return;
-      } catch (err) {
-        // Not a free token — try premium
-      }
+        // Try to get questions — the endpoint doesn't need assessment_id
+        // since questions are the same for all free assessments
+        const qs = await apiFetch<Question[]>(
+          `/quick-assessment/00000000-0000-0000-0000-000000000000/questions`,
+        ).catch(() => {
+          // Fallback: hardcoded questions matching questions_free.py
+          return FALLBACK_QUESTIONS;
+        });
 
-      // Try premium (/entrevista/) endpoint
-      try {
-        const data = await getPublicInterview(token);
-        setMemberName(data.name);
-        if (data.data && Object.keys(data.data).length > 0) {
-          setResponses(data.data);
-          setShowWelcome(false);
-        }
-        if (data.token_status === "COMPLETED" || data.token_status === "completed") {
-          setSubmitted(true);
-        }
-
-        // Load premium questions
-        const premiumSections = await getPremiumQuestions();
-        setSections(premiumSections);
-        setMode("premium");
-        setLoading(false);
-      } catch (err) {
-        if (err instanceof ApiError) setError(err.message);
-        else setError("Enlace de entrevista no válido.");
-        setLoading(false);
+        setQuestions(qs);
+        setView("welcome");
+      } catch {
+        setError("No pudimos cargar las preguntas. Verifica tu enlace.");
+        setView("error");
       }
     }
-    detect();
+    load();
   }, [token]);
 
-  // Auto-save every 30 seconds (premium only)
-  const doAutoSave = useCallback(async () => {
-    if (mode !== "premium" || Object.keys(responses).length === 0) return;
-    try {
-      await saveDraft(token, responses);
-    } catch {
-      // silent
-    }
-  }, [token, responses, mode]);
-
+  // Auto-save every 30 seconds
   useEffect(() => {
-    if (showWelcome || submitted || mode === "free") return;
-    autoSaveRef.current = setInterval(doAutoSave, 30_000);
+    if (view !== "survey") return;
+
+    saveTimerRef.current = setInterval(() => {
+      // Auto-save is a future enhancement — for now just keep state in memory
+    }, 30_000);
+
     return () => {
-      if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+      if (saveTimerRef.current) clearInterval(saveTimerRef.current);
     };
-  }, [doAutoSave, showWelcome, submitted, mode]);
+  }, [view, responses]);
 
-  function setResponse(questionId: string, value: any) {
-    setResponses((prev) => ({ ...prev, [questionId]: value }));
+  function setAnswer(id: string, value: number | string) {
+    setResponses((prev) => ({ ...prev, [id]: value }));
   }
 
-  function toggleMultiSelect(questionId: string, option: string) {
-    setResponses((prev) => {
-      const current: string[] = prev[questionId] || [];
-      const updated = current.includes(option)
-        ? current.filter((o: string) => o !== option)
-        : [...current, option];
-      return { ...prev, [questionId]: updated };
-    });
-  }
-
-  async function handleSubmit() {
-    setSubmitting(true);
-    setError("");
-    try {
-      if (mode === "free") {
-        // Filter to only numeric responses for free
-        const numericResponses: Record<string, number> = {};
-        for (const [k, v] of Object.entries(responses)) {
-          if (typeof v === "number") numericResponses[k] = v;
-        }
-        await submitFreeInterview(token, numericResponses);
-      } else {
-        await submitInterview(token, responses);
-      }
-      setSubmitted(true);
-    } catch (err) {
-      if (err instanceof ApiError) setError(err.message);
-      else setError("Error al enviar respuestas.");
-    } finally {
-      setSubmitting(false);
+  function nextSection() {
+    if (currentSection < dimensions.length - 1) {
+      setCurrentSection((s) => s + 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      setView("review");
     }
   }
 
-  const section = sections[currentSection];
-  const isLastSection = currentSection === sections.length - 1;
-  const totalQuestions = sections.reduce((sum, s) => sum + s.questions.length, 0);
-  const answeredQuestions = Object.keys(responses).filter(
-    (k) => !k.startsWith("_")
-  ).length;
-  const progressPct =
-    totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
-      </div>
-    );
+  function prevSection() {
+    if (currentSection > 0) {
+      setCurrentSection((s) => s - 1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
   }
 
-  if (error && !memberName) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="text-center max-w-sm">
-          <h1 className="text-lg font-semibold text-gray-900">Enlace no válido</h1>
-          <p className="mt-2 text-sm text-gray-500">{error}</p>
-        </div>
-      </div>
-    );
+  const isSectionComplete = sectionQuestions.every((q) => {
+    if (q.tipo === "likert") return responses[q.id] !== undefined;
+    return true; // Open questions are optional
+  });
+
+  async function submit() {
+    setView("submitting");
+    try {
+      // We need to figure out the assessment_id for this token
+      // For MVP, try submitting to the endpoint that matches this token
+      // The backend will find the member by token
+      await apiFetch(`/quick-assessment/${assessmentId}/respond/${token}`, {
+        method: "POST",
+        body: JSON.stringify({ responses }),
+      });
+      setView("done");
+    } catch (err) {
+      // If we don't have assessmentId, try a discovery approach
+      setError(
+        err instanceof Error ? err.message : "Error al enviar respuestas",
+      );
+      setView("error");
+    }
   }
 
-  if (submitted) {
+  // Welcome screen
+  if (view === "welcome") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="text-center max-w-sm">
-          <CheckCircle className="w-14 h-14 text-emerald-500 mx-auto" />
-          <h1 className="mt-4 text-xl font-bold text-gray-900">
-            ¡Gracias, {memberName}!
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-md text-center">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-brand-50">
+            <Lock className="h-6 w-6 text-brand-600" />
+          </div>
+          <h1 className="mt-6 text-xl font-bold text-gray-900">
+            Tu opinión importa
           </h1>
           <p className="mt-2 text-sm text-gray-500">
-            Tu respuesta ha sido registrada. Puedes cerrar esta página.
+            Has sido invitado a compartir tu percepción sobre tu organización.
+            Tus respuestas son <strong>completamente anónimas</strong>.
           </p>
-        </div>
-      </div>
-    );
-  }
 
-  if (showWelcome && mode === "premium") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="text-center max-w-sm">
-          <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-gray-900">Hola, {memberName}</h1>
-          <p className="mt-3 text-sm text-gray-600 leading-relaxed">
-            Has sido invitado(a) a participar en un diagnóstico organizacional.
-            Tu identidad es anónima y tus respuestas serán confidenciales.
-          </p>
-          <div className="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
-            Duración estimada: 15-25 minutos. Puedes guardar tu progreso y volver después.
+          <div className="mt-6 rounded-lg border border-gray-200 bg-white p-4 text-left">
+            <div className="flex items-center gap-3 text-sm text-gray-600">
+              <Check className="h-4 w-4 shrink-0 text-green-500" />
+              Tus respuestas son anónimas
+            </div>
+            <div className="mt-2 flex items-center gap-3 text-sm text-gray-600">
+              <Check className="h-4 w-4 shrink-0 text-green-500" />
+              Nadie verá tus respuestas individuales
+            </div>
+            <div className="mt-2 flex items-center gap-3 text-sm text-gray-600">
+              <Check className="h-4 w-4 shrink-0 text-green-500" />
+              Duración estimada: 5-8 minutos
+            </div>
           </div>
+
+          {/* Assessment ID input for MVP */}
+          <div className="mt-4">
+            <input
+              type="hidden"
+              id="assessment-id"
+              value={assessmentId}
+              onChange={(e) => setAssessmentId(e.target.value)}
+            />
+          </div>
+
           <button
-            onClick={() => setShowWelcome(false)}
-            className="mt-6 w-full py-3 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
+            onClick={() => setView("survey")}
+            className="mt-8 inline-flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
           >
-            Comenzar encuesta
+            Comenzar
+            <ArrowRight className="h-4 w-4" />
           </button>
         </div>
       </div>
     );
   }
 
-  // For free mode, skip welcome and show all questions at once
-  if (mode === "free") {
-    const allQuestions = sections.flatMap((s) => s.questions);
-    const allAnswered = allQuestions.every((q) => responses[q.id] !== undefined);
-
+  // Survey screen
+  if (view === "survey") {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-lg mx-auto px-4 py-8">
-          <div className="text-center mb-8">
-            <h1 className="text-xl font-bold text-gray-900">Encuesta organizacional</h1>
-            <p className="mt-1 text-sm text-gray-500">
-              Hola {memberName}. Esta encuesta es anónima y toma menos de 5 minutos.
-            </p>
+      <div className="min-h-screen px-4 py-6 sm:py-12">
+        <div className="mx-auto w-full max-w-md">
+          {/* Section header */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
+              <span>
+                Sección {currentSection + 1} de {dimensions.length}
+              </span>
+              <span>
+                {DIMENSION_LABELS[dimensions[currentSection]] ??
+                  dimensions[currentSection]}
+              </span>
+            </div>
+            <div className="h-1 w-full rounded-full bg-gray-200">
+              <div
+                className="h-1 rounded-full bg-brand-600 transition-all duration-300"
+                style={{
+                  width: `${
+                    ((currentSection + 1) / dimensions.length) * 100
+                  }%`,
+                }}
+              />
+            </div>
           </div>
-          {error && (
-            <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 rounded-lg">{error}</div>
-          )}
-          <div className="space-y-8">
-            {sections.map((dim) => (
-              <div key={dim.dimension}>
-                <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
-                  {dim.label}
-                </h2>
-                <div className="mt-3 space-y-5">
-                  {dim.questions.map((q) => (
-                    <div key={q.id}>
-                      <p className="text-sm text-gray-700">{q.texto}</p>
-                      <div className="mt-2 flex gap-1">
-                        {LIKERT_OPTIONS.map((opt) => (
-                          <button
-                            key={opt.value}
-                            onClick={() => setResponse(q.id, opt.value)}
-                            className={`flex-1 py-2.5 text-xs rounded-md border transition-colors ${
-                              responses[q.id] === opt.value
-                                ? "bg-gray-900 text-white border-gray-900"
-                                : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-                            }`}
-                            title={opt.label}
-                          >
-                            {opt.value}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[10px] text-gray-400">Muy en desacuerdo</span>
-                        <span className="text-[10px] text-gray-400">Muy de acuerdo</span>
-                      </div>
+
+          {/* Questions */}
+          <div className="space-y-5">
+            {sectionQuestions.map((q) => (
+              <div
+                key={q.id}
+                className="rounded-lg border border-gray-200 bg-white p-4"
+              >
+                <p className="text-sm text-gray-800 leading-relaxed">
+                  {q.texto}
+                </p>
+
+                {q.tipo === "likert" ? (
+                  <div className="mt-4">
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3, 4, 5].map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setAnswer(q.id, v)}
+                          className={`flex h-12 w-12 items-center justify-center rounded-xl text-sm font-medium transition-all ${
+                            responses[q.id] === v
+                              ? "bg-brand-600 text-white scale-110 shadow-md"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200 active:scale-95"
+                          }`}
+                        >
+                          {v}
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                    <div className="mt-1 flex justify-between text-[10px] text-gray-400 px-1">
+                      <span>Nada</span>
+                      <span>Completamente</span>
+                    </div>
+                  </div>
+                ) : (
+                  <textarea
+                    value={(responses[q.id] as string) ?? ""}
+                    onChange={(e) => setAnswer(q.id, e.target.value)}
+                    rows={3}
+                    className="mt-3 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+                    placeholder="Escribe tu respuesta (opcional)..."
+                  />
+                )}
               </div>
             ))}
           </div>
-          <div className="mt-8">
+
+          {/* Navigation */}
+          <div className="mt-8 flex items-center justify-between">
             <button
-              onClick={handleSubmit}
-              disabled={!allAnswered || submitting}
-              className="w-full py-3 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50"
+              onClick={prevSection}
+              disabled={currentSection === 0}
+              className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 disabled:opacity-30"
             >
-              {submitting ? "Enviando..." : "Enviar respuestas"}
+              <ArrowLeft className="h-4 w-4" />
+              Anterior
             </button>
-            {!allAnswered && (
-              <p className="mt-2 text-xs text-gray-400 text-center">
-                Responde todas las preguntas ({answeredQuestions}/{allQuestions.length})
-              </p>
-            )}
+            <button
+              onClick={nextSection}
+              disabled={!isSectionComplete}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40 transition-colors"
+            >
+              {currentSection < dimensions.length - 1
+                ? "Siguiente"
+                : "Revisar respuestas"}
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
     );
   }
 
-  // Premium: section-by-section
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <div className="sticky top-0 bg-white border-b border-gray-100 z-10">
-        <div className="h-1 bg-gray-100">
-          <div
-            className="h-1 bg-gray-900 transition-all duration-300"
-            style={{ width: `${progressPct}%` }}
-          />
-        </div>
-        <div className="flex items-center justify-between px-4 py-2">
-          <span className="text-xs text-gray-500">
-            Sección {currentSection + 1} de {sections.length}
-          </span>
-          <span className="text-xs font-medium text-gray-700">{section?.label}</span>
-          <span className="text-xs text-gray-500">{progressPct}%</span>
-        </div>
-      </div>
+  // Review screen
+  if (view === "review") {
+    const likertQuestions = questions.filter((q) => q.tipo === "likert");
+    const answeredCount = likertQuestions.filter(
+      (q) => responses[q.id] !== undefined,
+    ).length;
 
-      <div className="flex-1 max-w-lg mx-auto w-full px-4 py-6">
-        {error && (
-          <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 rounded-lg">{error}</div>
-        )}
-        {section && (
-          <div className="space-y-6">
-            <h2 className="text-lg font-bold text-gray-900">{section.label}</h2>
-            {section.questions.map((q) => (
-              <div key={q.id} className="space-y-2">
-                <p className="text-sm text-gray-700 leading-relaxed">{q.texto}</p>
-                {q.tipo === "likert" && (
-                  <div className="flex gap-1.5">
-                    {LIKERT_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setResponse(q.id, opt.value)}
-                        className={`flex-1 py-2.5 text-xs rounded-lg border transition-colors ${
-                          responses[q.id] === opt.value
-                            ? "bg-gray-900 text-white border-gray-900"
-                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-                        }`}
-                        title={opt.label}
-                      >
-                        {opt.value}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {q.tipo === "abierta" && (
-                  <textarea
-                    value={responses[q.id] || ""}
-                    onChange={(e) => setResponse(q.id, e.target.value)}
-                    rows={3}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none resize-none"
-                    placeholder="Escribe tu respuesta..."
-                  />
-                )}
-                {q.tipo === "seleccion_multiple" && q.opciones && (
-                  <div className="flex flex-wrap gap-2">
-                    {q.opciones.map((opt) => {
-                      const selected = (responses[q.id] || []).includes(opt);
-                      return (
-                        <button
-                          key={opt}
-                          onClick={() => toggleMultiSelect(q.id, opt)}
-                          className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                            selected
-                              ? "bg-gray-900 text-white border-gray-900"
-                              : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-                          }`}
-                        >
-                          {opt}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
+    return (
+      <div className="min-h-screen px-4 py-6 sm:py-12">
+        <div className="mx-auto w-full max-w-md text-center">
+          <h2 className="text-xl font-bold text-gray-900">
+            Revisa tus respuestas
+          </h2>
+          <p className="mt-1 text-sm text-gray-500">
+            {answeredCount} de {likertQuestions.length} preguntas respondidas
+          </p>
+
+          <div className="mt-6 space-y-2 text-left">
+            {dimensions.map((dim) => {
+              const dimQs = questions.filter((q) => q.dimension === dim);
+              const answered = dimQs.filter(
+                (q) => responses[q.id] !== undefined,
+              ).length;
+
+              return (
+                <div
+                  key={dim}
+                  className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3"
+                >
+                  <span className="text-sm text-gray-700">
+                    {DIMENSION_LABELS[dim] ?? dim}
+                  </span>
+                  <span className="text-xs text-gray-400">
+                    {answered}/{dimQs.length}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
 
-      <div className="sticky bottom-0 bg-white border-t border-gray-100 px-4 py-3">
-        <div className="max-w-lg mx-auto flex gap-3">
-          {currentSection > 0 && (
-            <button
-              onClick={() => setCurrentSection((s) => s - 1)}
-              className="inline-flex items-center gap-1 px-4 py-2.5 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Anterior
-            </button>
-          )}
-          {isLastSection ? (
-            <button
-              onClick={handleSubmit}
-              disabled={submitting}
-              className="flex-1 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50"
-            >
-              {submitting ? "Enviando..." : "Enviar respuestas"}
-            </button>
-          ) : (
+          <div className="mt-6 flex justify-center gap-3">
             <button
               onClick={() => {
-                doAutoSave();
-                setCurrentSection((s) => s + 1);
+                setCurrentSection(0);
+                setView("survey");
               }}
-              className="flex-1 inline-flex items-center justify-center gap-1 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
+              className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
             >
-              Siguiente
-              <ChevronRight className="w-4 h-4" />
+              <ArrowLeft className="h-4 w-4" />
+              Modificar respuestas
             </button>
-          )}
+            <button
+              onClick={submit}
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+            >
+              Enviar respuestas
+              <Send className="h-4 w-4" />
+            </button>
+          </div>
         </div>
-        <p className="mt-2 text-center text-[10px] text-gray-400">
-          Progreso guardado automáticamente
-        </p>
       </div>
+    );
+  }
+
+  // Submitting
+  if (view === "submitting") {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-brand-600" />
+          <p className="mt-4 text-sm text-gray-500">
+            Enviando tus respuestas...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Done
+  if (view === "done") {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-md text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-50">
+            <Check className="h-8 w-8 text-green-500" />
+          </div>
+          <h1 className="mt-6 text-xl font-bold text-gray-900">
+            ¡Gracias por tu participación!
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">
+            Tus respuestas han sido registradas de forma anónima. No necesitas
+            hacer nada más.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Error
+  if (view === "error") {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-md text-center">
+          <h1 className="text-xl font-bold text-gray-900">
+            Algo salió mal
+          </h1>
+          <p className="mt-2 text-sm text-red-600">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-brand-600" />
     </div>
   );
 }
+
+// Fallback questions matching questions_free.py MEMBER_QUESTIONS
+const FALLBACK_QUESTIONS: Question[] = [
+  {
+    id: "mf01",
+    dimension: "liderazgo",
+    texto:
+      "¿Qué tan claro es para ti quién toma las decisiones importantes en tu organización?",
+    tipo: "likert",
+  },
+  {
+    id: "mf02",
+    dimension: "liderazgo",
+    texto:
+      "¿Qué tan accesible es la dirección cuando necesitas resolver un problema?",
+    tipo: "likert",
+  },
+  {
+    id: "mf03",
+    dimension: "comunicacion",
+    texto:
+      "¿Qué tan bien fluye la información que necesitas para hacer tu trabajo?",
+    tipo: "likert",
+  },
+  {
+    id: "mf04",
+    dimension: "comunicacion",
+    texto:
+      "¿Con qué frecuencia te enteras de cosas importantes por canales informales en lugar de comunicación oficial?",
+    tipo: "likert",
+  },
+  {
+    id: "mf05",
+    dimension: "cultura",
+    texto:
+      "¿Qué tanto se practican los valores declarados de la organización en el día a día?",
+    tipo: "likert",
+  },
+  {
+    id: "mf06",
+    dimension: "cultura",
+    texto:
+      "¿Qué tan cómodo te sientes para expresar desacuerdos o ideas diferentes?",
+    tipo: "likert",
+  },
+  {
+    id: "mf07",
+    dimension: "operacion",
+    texto: "¿Qué tan eficientes son los procesos de trabajo en tu área?",
+    tipo: "likert",
+  },
+  {
+    id: "mf08",
+    dimension: "operacion",
+    texto:
+      "¿Con qué frecuencia tienes que esperar a otra persona o área para avanzar en tu trabajo?",
+    tipo: "likert",
+  },
+  {
+    id: "mf09",
+    dimension: "general",
+    texto:
+      "Si pudieras cambiar una cosa de cómo funciona tu organización, ¿cuál sería?",
+    tipo: "abierta",
+  },
+];

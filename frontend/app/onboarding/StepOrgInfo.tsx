@@ -1,42 +1,42 @@
 "use client";
 
-interface OrgData {
-  org_name: string;
-  org_type: string;
-  size_range: string;
-}
-
-interface Props {
-  data: OrgData;
-  onChange: (data: OrgData) => void;
-  onNext: () => void;
-  onBack: () => void;
-}
+import type { OrgInfo } from "./page";
+import { ArrowLeft, ArrowRight } from "lucide-react";
 
 const ORG_TYPES = [
   { value: "empresa", label: "Empresa" },
-  { value: "ong", label: "ONG / Fundación" },
-  { value: "equipo", label: "Equipo / Área" },
+  { value: "ong", label: "ONG / Sin ánimo de lucro" },
+  { value: "equipo", label: "Equipo de proyecto" },
   { value: "otro", label: "Otro" },
 ];
 
 const SIZE_RANGES = [
-  { value: "1-10", label: "1 a 10 personas" },
-  { value: "11-50", label: "11 a 50 personas" },
-  { value: "51-200", label: "51 a 200 personas" },
+  { value: "1-10", label: "1-10 personas" },
+  { value: "11-50", label: "11-50 personas" },
+  { value: "51-200", label: "51-200 personas" },
   { value: "200+", label: "Más de 200 personas" },
 ];
 
-export default function StepOrgInfo({ data, onChange, onNext, onBack }: Props) {
-  const canContinue = data.org_name.trim().length > 0;
+interface Props {
+  orgInfo: OrgInfo;
+  setOrgInfo: (info: OrgInfo) => void;
+  onNext: () => void;
+  onBack: () => void;
+}
+
+export default function StepOrgInfo({
+  orgInfo,
+  setOrgInfo,
+  onNext,
+  onBack,
+}: Props) {
+  const valid = orgInfo.name.trim() && orgInfo.type && orgInfo.size_range;
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900">
-        Cuéntanos de tu organización
-      </h2>
-      <p className="mt-2 text-sm text-gray-500">
-        Esta información nos ayuda a contextualizar el diagnóstico.
+      <h2 className="text-xl font-bold text-gray-900">Tu organización</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        Datos básicos para contextualizar el diagnóstico.
       </p>
 
       <div className="mt-6 space-y-4">
@@ -46,61 +46,75 @@ export default function StepOrgInfo({ data, onChange, onNext, onBack }: Props) {
           </label>
           <input
             type="text"
-            value={data.org_name}
-            onChange={(e) => onChange({ ...data, org_name: e.target.value })}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none"
-            placeholder="Mi Organización"
+            value={orgInfo.name}
+            onChange={(e) => setOrgInfo({ ...orgInfo, name: e.target.value })}
+            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+            placeholder="Mi empresa"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            Tipo de organización
+            Tipo
           </label>
-          <select
-            value={data.org_type}
-            onChange={(e) => onChange({ ...data, org_type: e.target.value })}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none bg-white"
-          >
+          <div className="mt-2 grid grid-cols-2 gap-2">
             {ORG_TYPES.map((t) => (
-              <option key={t.value} value={t.value}>
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setOrgInfo({ ...orgInfo, type: t.value })}
+                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                  orgInfo.type === t.value
+                    ? "border-brand-600 bg-brand-50 text-brand-700 font-medium"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                }`}
+              >
                 {t.label}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            Tamaño
+            Tamaño aproximado
           </label>
-          <select
-            value={data.size_range}
-            onChange={(e) => onChange({ ...data, size_range: e.target.value })}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none bg-white"
-          >
+          <div className="mt-2 grid grid-cols-2 gap-2">
             {SIZE_RANGES.map((s) => (
-              <option key={s.value} value={s.value}>
+              <button
+                key={s.value}
+                type="button"
+                onClick={() =>
+                  setOrgInfo({ ...orgInfo, size_range: s.value })
+                }
+                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                  orgInfo.size_range === s.value
+                    ? "border-brand-600 bg-brand-50 text-brand-700 font-medium"
+                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                }`}
+              >
                 {s.label}
-              </option>
+              </button>
             ))}
-          </select>
+          </div>
         </div>
       </div>
 
-      <div className="mt-8 flex gap-3">
+      <div className="mt-8 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="px-4 py-2.5 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
         >
+          <ArrowLeft className="h-4 w-4" />
           Atrás
         </button>
         <button
           onClick={onNext}
-          disabled={!canContinue}
-          className="flex-1 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50"
+          disabled={!valid}
+          className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40 transition-colors"
         >
-          Continuar
+          Siguiente
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>

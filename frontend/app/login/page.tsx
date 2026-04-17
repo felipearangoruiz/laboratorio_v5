@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { login, getMe, ApiError } from "@/lib/api";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { Loader2 } from "lucide-react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,44 +20,53 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      const user = await getMe();
-      if (user.organization_id) {
-        router.push(`/org/${user.organization_id}/canvas`);
-      } else {
-        // No org — send to register (not onboarding) to create one
-        router.push("/register");
+      const body = new URLSearchParams({ username: email, password });
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? "Credenciales incorrectas");
       }
+
+      const data = await res.json();
+      localStorage.setItem("access_token", data.access_token);
+      router.push("/onboarding");
     } catch (err) {
-      if (err instanceof ApiError) {
-        setError(err.message);
-      } else {
-        setError("Error de conexión. Intenta de nuevo.");
-      }
+      setError(err instanceof Error ? err.message : "Error al iniciar sesión");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-gray-900 text-center">
-          Iniciar sesión
-        </h1>
-        <p className="mt-2 text-sm text-gray-500 text-center">
-          Accede a tu diagnóstico organizacional
-        </p>
+        <div className="text-center">
+          <h1 className="text-xl font-semibold text-gray-900">
+            Iniciar sesión
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Accede a tu diagnóstico organizacional
+          </p>
+        </div>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-4">
           {error && (
-            <div className="p-3 text-sm text-red-700 bg-red-50 rounded-lg">
+            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
               {error}
             </div>
           )}
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-gray-700"
+            >
               Correo electrónico
             </label>
             <input
@@ -64,13 +75,16 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none"
-              placeholder="tu@email.com"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+              placeholder="tu@correo.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-700"
+            >
               Contraseña
             </label>
             <input
@@ -79,23 +93,26 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none"
-              placeholder="••••••••"
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
             />
           </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
           >
-            {loading ? "Ingresando..." : "Ingresar"}
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            Iniciar sesión
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500">
           ¿No tienes cuenta?{" "}
-          <Link href="/register" className="text-gray-900 font-medium hover:underline">
+          <Link
+            href="/register"
+            className="font-medium text-brand-600 hover:text-brand-700"
+          >
             Regístrate gratis
           </Link>
         </p>

@@ -1,10 +1,7 @@
 from sqlmodel import SQLModel
 
-from .diagnosis import DiagnosisResult, DiagnosisResultRead
 from .group import Group, GroupRead
 from .interview import Interview, InterviewRead
-from .lateral_relation import LateralRelation, LateralRelationCreate, LateralRelationRead
-from .membership import Membership, MembershipRead
 from .job import JobState, JobStatus, JobStatusRead
 from .member import Member, MemberRead, MemberTokenStatus
 from .organization import (
@@ -14,7 +11,15 @@ from .organization import (
     OrganizationUpdate,
 )
 from .processing import ProcessingResult, ProcessingResultRead, ProcessingType
-from .quick_assessment import QuickAssessment, QuickAssessmentMember
+from .quick_assessment import (
+    QuickAssessment,
+    QuickAssessmentCreate,
+    QuickAssessmentMember,
+    QuickAssessmentMemberCreate,
+    QuickAssessmentMemberRead,
+    QuickAssessmentRead,
+    QuickAssessmentStatus,
+)
 from .user import User, UserRead, UserRole
 
 __all__ = [
@@ -40,12 +45,10 @@ __all__ = [
     "JobStatusRead",
     "JobState",
     "QuickAssessment",
+    "QuickAssessmentCreate",
+    "QuickAssessmentRead",
+    "QuickAssessmentStatus",
     "QuickAssessmentMember",
-    "LateralRelation",
-    "LateralRelationCreate",
-    "LateralRelationRead",
-    "Membership",
-    "MembershipRead",
-    "DiagnosisResult",
-    "DiagnosisResultRead",
+    "QuickAssessmentMemberCreate",
+    "QuickAssessmentMemberRead",
 ]

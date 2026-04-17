@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
-
 export const metadata: Metadata = {
-  title: "Laboratorio de Modelamiento Institucional",
-  description: "Diagnóstico organizacional con IA",
+  title: "Laboratorio — Diagnóstico Organizacional",
+  description:
+    "Entiende cómo funciona realmente tu organización con diagnóstico asistido por IA.",
 };
 
 export default function RootLayout({
@@ -16,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es">
-      <body className={inter.className}>{children}</body>
+      <body className="min-h-screen">{children}</body>
     </html>
   );
 }

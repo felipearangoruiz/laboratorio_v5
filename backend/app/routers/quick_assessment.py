@@ -1,285 +1,366 @@
-from datetime import datetime, timezone
+"""Router para el flujo Free — Quick Assessment (diagnóstico rápido).
+
+Endpoints públicos (no requieren auth):
+- POST /quick-assessment                     → crear evaluación con respuestas del líder
+- POST /quick-assessment/{id}/invite         → invitar miembros (3-5)
+- GET  /quick-assessment/{id}/questions      → obtener preguntas para miembro
+- POST /quick-assessment/{id}/respond/{token}→ respuesta de miembro
+- GET  /quick-assessment/{id}/progress       → progreso en tiempo real
+- GET  /quick-assessment/{id}/score          → obtener score radar
+
+Endpoints autenticados:
+- GET  /quick-assessment/{id}                → detalle (requiere auth, owner de la org)
+"""
+
+from __future__ import annotations
+
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session, select
+from pydantic import BaseModel, EmailStr
+from sqlmodel import Session, func, select
 
 from app.db import get_session
 from app.models.quick_assessment import (
-    DimensionScoreRead,
-    InviteMembersRequest,
-    MemberRespondRequest,
     QuickAssessment,
-    QuickAssessmentCreate,
     QuickAssessmentMember,
+    QuickAssessmentMemberCreate,
+    QuickAssessmentMemberRead,
     QuickAssessmentRead,
-    QuickAssessmentScoreRead,
+    QuickAssessmentStatus,
 )
-from app.questions_free import FREE_DIMENSIONS, FREE_QUESTION_IDS, FREE_QUESTIONS
+from app.questions_free import DIMENSIONS_FREE, LEADER_QUESTIONS, MEMBER_QUESTIONS
 
 router = APIRouter()
 
+MAX_FREE_MEMBERS = 5
+MIN_RESPONSES_FOR_SCORE = 3
+
+
+# ---------------------------------------------------------------------------
+# Schemas
+# ---------------------------------------------------------------------------
+
+class CreateAssessmentRequest(BaseModel):
+    organization_id: UUID
+    leader_responses: dict[str, Any]
+
+
+class InviteMembersRequest(BaseModel):
+    members: list[QuickAssessmentMemberCreate]
+
+
+class MemberResponseRequest(BaseModel):
+    responses: dict[str, Any]
+
+
+class ProgressResponse(BaseModel):
+    total_invited: int
+    total_completed: int
+    threshold: int
+    ready: bool
+
+
+class ScoreResponse(BaseModel):
+    assessment_id: UUID
+    scores: dict[str, float]
+    member_count: int
+    status: QuickAssessmentStatus
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _get_assessment_or_404(session: Session, assessment_id: UUID) -> QuickAssessment:
+    assessment = session.get(QuickAssessment, assessment_id)
+    if not assessment:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assessment not found",
+        )
+    return assessment
+
 
 def _compute_scores(
-    leader_responses: dict,
-    member_responses_list: list[dict],
-) -> dict:
-    """Compute average score per dimension combining leader + member responses."""
-    dimension_scores: dict[str, list[float]] = {dim: [] for dim in FREE_DIMENSIONS}
+    leader_responses: dict[str, Any],
+    member_responses: list[dict[str, Any]],
+) -> dict[str, float]:
+    """Calcula score promedio por dimensión combinando respuestas del líder y miembros."""
+    dimension_values: dict[str, list[float]] = {d: [] for d in DIMENSIONS_FREE}
 
-    # Map question_id → dimension
-    q_dim = {q["id"]: q["dimension"] for q in FREE_QUESTIONS}
+    # Procesar respuestas del líder (preguntas Likert)
+    for q in LEADER_QUESTIONS:
+        if q["tipo"] != "likert":
+            continue
+        val = leader_responses.get(q["id"])
+        if val is not None and q["dimension"] in dimension_values:
+            try:
+                dimension_values[q["dimension"]].append(float(val))
+            except (ValueError, TypeError):
+                pass
 
-    # Add leader responses
-    for qid, val in leader_responses.items():
-        dim = q_dim.get(qid)
-        if dim and isinstance(val, (int, float)):
-            dimension_scores[dim].append(float(val))
+    # Procesar respuestas de miembros (preguntas Likert)
+    for member_resp in member_responses:
+        for q in MEMBER_QUESTIONS:
+            if q["tipo"] != "likert":
+                continue
+            val = member_resp.get(q["id"])
+            if val is not None and q["dimension"] in dimension_values:
+                try:
+                    dimension_values[q["dimension"]].append(float(val))
+                except (ValueError, TypeError):
+                    pass
 
-    # Add member responses
-    for resp in member_responses_list:
-        for qid, val in resp.items():
-            dim = q_dim.get(qid)
-            if dim and isinstance(val, (int, float)):
-                dimension_scores[dim].append(float(val))
-
-    result = {}
-    for dim, values in dimension_scores.items():
+    scores: dict[str, float] = {}
+    for dim, values in dimension_values.items():
         if values:
-            result[dim] = round(sum(values) / len(values), 2)
+            scores[dim] = round(sum(values) / len(values), 2)
         else:
-            result[dim] = 0.0
+            scores[dim] = 0.0
 
-    return result
-
-
-# ── Public endpoints (no auth) — MUST come before /{assessment_id} routes ──
-
-@router.get("/interview/{token}")
-def get_member_interview(
-    token: str,
-    session: Session = Depends(get_session),
-) -> dict:
-    """Public endpoint — no auth. Fetch interview state for a member by token."""
-    member = session.exec(
-        select(QuickAssessmentMember).where(QuickAssessmentMember.token == token)
-    ).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="Invalid interview link")
-
-    return {
-        "name": member.name,
-        "role": member.role,
-        "token": member.token,
-        "assessment_id": str(member.assessment_id),
-        "submitted": member.submitted_at is not None,
-        "responses": member.responses,
-    }
+    return scores
 
 
-@router.post("/interview/{token}/submit")
-def submit_member_interview(
-    token: str,
-    body: MemberRespondRequest,
-    session: Session = Depends(get_session),
-) -> dict:
-    """Public endpoint — no auth. Submit responses for a member by token."""
-    member = session.exec(
-        select(QuickAssessmentMember).where(QuickAssessmentMember.token == token)
-    ).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="Invalid interview link")
-    if member.submitted_at is not None:
-        raise HTTPException(status_code=400, detail="Already submitted")
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
-    for qid, val in body.responses.items():
-        if qid not in FREE_QUESTION_IDS:
-            raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
-        if not isinstance(val, int) or val < 1 or val > 5:
-            raise HTTPException(status_code=400, detail=f"Invalid value for {qid}: must be 1-5")
-
-    member.responses = body.responses
-    member.submitted_at = datetime.now(timezone.utc)
-    session.add(member)
-
-    assessment = session.get(QuickAssessment, member.assessment_id)
-    if assessment:
-        assessment.responses_count = assessment.responses_count + 1
-        session.add(assessment)
-
-    session.commit()
-    return {"status": "submitted"}
-
-
-# ── Public endpoints (no auth — free flow) ───────────────────────────────────
-
-@router.post("", status_code=status.HTTP_201_CREATED)
+@router.post("/quick-assessment", response_model=QuickAssessmentRead, status_code=201)
 def create_assessment(
-    body: QuickAssessmentCreate,
+    payload: CreateAssessmentRequest,
     session: Session = Depends(get_session),
-) -> dict:
-    """Public — no auth required. Creates an anonymous QuickAssessment."""
+) -> QuickAssessment:
+    """Crea evaluación rápida con las respuestas del líder."""
     assessment = QuickAssessment(
-        org_name=body.org_name,
-        org_type=body.org_type,
-        size_range=body.size_range,
-        owner_id=None,
-        leader_responses=body.leader_responses,
+        organization_id=payload.organization_id,
+        leader_responses=payload.leader_responses,
+        status=QuickAssessmentStatus.WAITING,
     )
     session.add(assessment)
     session.commit()
     session.refresh(assessment)
-    return {"id": str(assessment.id)}
+    return assessment
 
 
-@router.get("/{assessment_id}", response_model=QuickAssessmentRead)
-def get_assessment(
-    assessment_id: UUID,
-    session: Session = Depends(get_session),
-) -> QuickAssessmentRead:
-    """Public — no auth. Anyone with the assessment ID can view it."""
-    assessment = session.get(QuickAssessment, assessment_id)
-    if not assessment:
-        raise HTTPException(status_code=404, detail="Assessment not found")
-    return QuickAssessmentRead.model_validate(assessment)
-
-
-@router.post("/{assessment_id}/invite")
+@router.post(
+    "/quick-assessment/{assessment_id}/invite",
+    response_model=list[QuickAssessmentMemberRead],
+    status_code=201,
+)
 def invite_members(
     assessment_id: UUID,
-    body: InviteMembersRequest,
+    payload: InviteMembersRequest,
     session: Session = Depends(get_session),
-) -> dict:
-    """Public — no auth. Anyone with the assessment ID can invite members."""
-    assessment = session.get(QuickAssessment, assessment_id)
-    if not assessment:
-        raise HTTPException(status_code=404, detail="Assessment not found")
+) -> list[QuickAssessmentMember]:
+    """Invita miembros al diagnóstico rápido (máximo 5 en total)."""
+    assessment = _get_assessment_or_404(session, assessment_id)
 
-    created = 0
-    for m in body.members:
+    existing_count = session.exec(
+        select(func.count())
+        .select_from(QuickAssessmentMember)
+        .where(QuickAssessmentMember.assessment_id == assessment.id)
+    ).one()
+
+    if existing_count + len(payload.members) > MAX_FREE_MEMBERS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot exceed {MAX_FREE_MEMBERS} members in free plan. "
+            f"Currently {existing_count}, trying to add {len(payload.members)}.",
+        )
+
+    if len(payload.members) < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="At least 1 member is required.",
+        )
+
+    # Verificar emails duplicados dentro del assessment
+    existing_emails = set(
+        session.exec(
+            select(QuickAssessmentMember.email).where(
+                QuickAssessmentMember.assessment_id == assessment.id
+            )
+        ).all()
+    )
+    new_emails = [m.email for m in payload.members]
+    duplicates = existing_emails & set(new_emails)
+    if duplicates:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Emails already invited: {', '.join(duplicates)}",
+        )
+
+    created: list[QuickAssessmentMember] = []
+    for member_data in payload.members:
         member = QuickAssessmentMember(
             assessment_id=assessment.id,
-            name=m.name,
-            role=m.role,
-            email=m.email,
+            name=member_data.name,
+            role_label=member_data.role_label,
+            email=member_data.email,
         )
         session.add(member)
-        created += 1
+        created.append(member)
 
-    assessment.member_count = assessment.member_count + created
+    assessment.member_count = existing_count + len(payload.members)
     session.add(assessment)
     session.commit()
-    return {"invited": created}
+
+    for m in created:
+        session.refresh(m)
+
+    return created
 
 
-@router.post("/{assessment_id}/respond")
-def respond_member(
+@router.get("/quick-assessment/{assessment_id}/questions")
+def get_member_questions(assessment_id: UUID) -> list[dict]:
+    """Devuelve las preguntas que debe responder un miembro invitado."""
+    return MEMBER_QUESTIONS
+
+
+@router.post(
+    "/quick-assessment/{assessment_id}/respond/{token}",
+    response_model=QuickAssessmentMemberRead,
+)
+def submit_member_response(
     assessment_id: UUID,
-    body: MemberRespondRequest,
+    token: str,
+    payload: MemberResponseRequest,
     session: Session = Depends(get_session),
-) -> dict:
-    """Public endpoint — no auth required. Member responds via token."""
+) -> QuickAssessmentMember:
+    """Registra la respuesta de un miembro invitado."""
+    assessment = _get_assessment_or_404(session, assessment_id)
+
     member = session.exec(
         select(QuickAssessmentMember).where(
-            QuickAssessmentMember.assessment_id == assessment_id,
-            QuickAssessmentMember.token == body.token,
+            QuickAssessmentMember.assessment_id == assessment.id,
+            QuickAssessmentMember.token == token,
         )
     ).first()
 
     if not member:
-        raise HTTPException(status_code=404, detail="Invalid token")
-    if member.submitted_at is not None:
-        raise HTTPException(status_code=400, detail="Already submitted")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member not found for this assessment",
+        )
 
-    for qid, val in body.responses.items():
-        if qid not in FREE_QUESTION_IDS:
-            raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
-        if not isinstance(val, int) or val < 1 or val > 5:
-            raise HTTPException(status_code=400, detail=f"Invalid value for {qid}: must be 1-5")
+    if member.completed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Response already submitted",
+        )
 
-    member.responses = body.responses
-    member.submitted_at = datetime.now(timezone.utc)
+    member.responses = payload.responses
+    member.completed = True
     session.add(member)
 
-    assessment = session.get(QuickAssessment, assessment_id)
-    if assessment:
-        assessment.responses_count = assessment.responses_count + 1
+    # Contar respuestas completadas
+    completed_count = session.exec(
+        select(func.count())
+        .select_from(QuickAssessmentMember)
+        .where(
+            QuickAssessmentMember.assessment_id == assessment.id,
+            QuickAssessmentMember.completed == True,  # noqa: E712
+        )
+    ).one()
+
+    # Si alcanza el umbral, generar scores automáticamente
+    if completed_count >= MIN_RESPONSES_FOR_SCORE and assessment.status == QuickAssessmentStatus.WAITING:
+        all_members = session.exec(
+            select(QuickAssessmentMember).where(
+                QuickAssessmentMember.assessment_id == assessment.id,
+                QuickAssessmentMember.completed == True,  # noqa: E712
+            )
+        ).all()
+
+        member_responses = [m.responses for m in all_members]
+        scores = _compute_scores(assessment.leader_responses, member_responses)
+
+        assessment.scores = scores
+        assessment.status = QuickAssessmentStatus.READY
         session.add(assessment)
 
     session.commit()
-    return {"status": "submitted"}
+    session.refresh(member)
+    return member
 
 
-@router.get("/{assessment_id}/score", response_model=QuickAssessmentScoreRead)
-def get_score(
+@router.get("/quick-assessment/{assessment_id}/progress", response_model=ProgressResponse)
+def get_progress(
     assessment_id: UUID,
     session: Session = Depends(get_session),
-) -> QuickAssessmentScoreRead:
-    """Public — no auth. Score is accessible via assessment ID."""
-    assessment = session.get(QuickAssessment, assessment_id)
-    if not assessment:
-        raise HTTPException(status_code=404, detail="Assessment not found")
+) -> ProgressResponse:
+    """Progreso de respuestas en tiempo real."""
+    assessment = _get_assessment_or_404(session, assessment_id)
 
-    # Gather submitted member responses
-    members = session.exec(
-        select(QuickAssessmentMember).where(
-            QuickAssessmentMember.assessment_id == assessment_id,
-            QuickAssessmentMember.submitted_at.is_not(None),
+    completed_count = session.exec(
+        select(func.count())
+        .select_from(QuickAssessmentMember)
+        .where(
+            QuickAssessmentMember.assessment_id == assessment.id,
+            QuickAssessmentMember.completed == True,  # noqa: E712
         )
-    ).all()
+    ).one()
 
-    member_responses = [m.responses for m in members if m.responses]
-
-    # Compute scores
-    scores = _compute_scores(assessment.leader_responses, member_responses)
-    assessment.scores = scores
-    session.add(assessment)
-    session.commit()
-
-    dimensions = [
-        DimensionScoreRead(
-            dimension=dim_id,
-            label=label,
-            score=scores.get(dim_id, 0.0),
-            max_score=5.0,
-        )
-        for dim_id, label in FREE_DIMENSIONS.items()
-    ]
-
-    return QuickAssessmentScoreRead(
-        id=assessment.id,
-        org_name=assessment.org_name,
-        dimensions=dimensions,
-        member_count=assessment.member_count,
-        responses_count=len(member_responses),
-        created_at=assessment.created_at,
+    return ProgressResponse(
+        total_invited=assessment.member_count,
+        total_completed=completed_count,
+        threshold=MIN_RESPONSES_FOR_SCORE,
+        ready=completed_count >= MIN_RESPONSES_FOR_SCORE,
     )
 
 
-@router.get("/{assessment_id}/members")
-def list_members(
+@router.get("/quick-assessment/{assessment_id}/score", response_model=ScoreResponse)
+def get_score(
     assessment_id: UUID,
     session: Session = Depends(get_session),
-) -> list[dict]:
-    """Public — no auth. Members list accessible via assessment ID."""
-    assessment = session.get(QuickAssessment, assessment_id)
-    if not assessment:
-        raise HTTPException(status_code=404, detail="Assessment not found")
+) -> ScoreResponse:
+    """Obtiene el score radar. Si ya está calculado lo devuelve; si no, lo calcula si hay suficientes respuestas."""
+    assessment = _get_assessment_or_404(session, assessment_id)
 
-    members = session.exec(
+    # Si el score ya fue calculado, devolverlo
+    if assessment.status in (QuickAssessmentStatus.READY, QuickAssessmentStatus.COMPLETED):
+        return ScoreResponse(
+            assessment_id=assessment.id,
+            scores=assessment.scores,
+            member_count=assessment.member_count,
+            status=assessment.status,
+        )
+
+    # Intentar calcular si hay suficientes respuestas
+    completed_members = session.exec(
         select(QuickAssessmentMember).where(
-            QuickAssessmentMember.assessment_id == assessment_id,
+            QuickAssessmentMember.assessment_id == assessment.id,
+            QuickAssessmentMember.completed == True,  # noqa: E712
         )
     ).all()
 
-    return [
-        {
-            "id": str(m.id),
-            "name": m.name,
-            "role": m.role,
-            "email": m.email,
-            "token": m.token,
-            "submitted": m.submitted_at is not None,
-        }
-        for m in members
-    ]
+    if len(completed_members) < MIN_RESPONSES_FOR_SCORE:
+        raise HTTPException(
+            status_code=status.HTTP_425_TOO_EARLY,
+            detail=f"Need at least {MIN_RESPONSES_FOR_SCORE} responses. "
+            f"Currently {len(completed_members)}.",
+        )
+
+    member_responses = [m.responses for m in completed_members]
+    scores = _compute_scores(assessment.leader_responses, member_responses)
+
+    assessment.scores = scores
+    assessment.status = QuickAssessmentStatus.READY
+    session.add(assessment)
+    session.commit()
+    session.refresh(assessment)
+
+    return ScoreResponse(
+        assessment_id=assessment.id,
+        scores=assessment.scores,
+        member_count=assessment.member_count,
+        status=assessment.status,
+    )
+
+
+@router.get("/quick-assessment/{assessment_id}/leader-questions")
+def get_leader_questions(assessment_id: UUID) -> list[dict]:
+    """Devuelve las preguntas de la encuesta del líder."""
+    return LEADER_QUESTIONS

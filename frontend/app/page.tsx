@@ -1,98 +1,95 @@
-"use client";
-
 import Link from "next/link";
 import { ArrowRight, BarChart3, Users, Zap } from "lucide-react";
 
-export default function LandingPage() {
+export default function HomePage() {
   return (
-    <div className="min-h-screen bg-white">
-      {/* Nav */}
-      <nav className="border-b border-gray-100 px-6 py-4 flex items-center justify-between max-w-6xl mx-auto">
-        <span className="text-lg font-semibold text-gray-900">
-          Laboratorio Institucional
-        </span>
-        <div className="flex gap-3">
-          <Link
-            href="/login"
-            className="px-4 py-2 text-sm text-gray-700 hover:text-gray-900"
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            href="/register"
-            className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800"
-          >
-            Crear cuenta
-          </Link>
+    <div className="flex min-h-screen flex-col">
+      {/* Header */}
+      <header className="border-b border-gray-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <span className="text-lg font-semibold tracking-tight text-gray-900">
+            Laboratorio
+          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="text-sm font-medium text-gray-600 hover:text-gray-900"
+            >
+              Iniciar sesión
+            </Link>
+            <Link
+              href="/register"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+            >
+              Comenzar gratis
+            </Link>
+          </div>
         </div>
-      </nav>
+      </header>
 
       {/* Hero */}
-      <section className="max-w-3xl mx-auto px-6 pt-20 pb-16 text-center">
-        <h1 className="text-4xl font-bold text-gray-900 leading-tight sm:text-5xl">
-          Descubre cómo funciona tu organización por dentro
-        </h1>
-        <p className="mt-6 text-lg text-gray-600 leading-relaxed">
-          Un diagnóstico rápido con tu equipo. Responde una encuesta corta,
-          invita a tus miembros y obtén un mapa real de liderazgo, comunicación,
-          cultura y operación.
-        </p>
-        <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
-          <Link
-            href="/onboarding"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg text-base font-medium hover:bg-gray-800"
-          >
-            Diagnostica gratis
-            <ArrowRight className="w-4 h-4" />
-          </Link>
-          <Link
-            href="/register"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg text-base font-medium hover:bg-gray-50"
-          >
-            Crear cuenta premium
-          </Link>
+      <main className="flex flex-1 flex-col items-center justify-center px-6 py-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+            Entiende cómo funciona{" "}
+            <span className="text-brand-600">realmente</span> tu organización
+          </h1>
+          <p className="mt-4 text-lg text-gray-500">
+            Diagnóstico organizacional asistido por IA. Captura la percepción de
+            tu equipo, identifica tensiones ocultas y recibe recomendaciones
+            accionables.
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <Link
+              href="/register"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+            >
+              Diagnostica tu organización
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <span className="text-sm text-gray-400">
+              Gratis — resultados en 10 minutos
+            </span>
+          </div>
         </div>
-        <p className="mt-3 text-sm text-gray-400">
-          El diagnóstico gratis no requiere cuenta
-        </p>
-      </section>
 
-      {/* Features */}
-      <section className="max-w-5xl mx-auto px-6 pb-20 grid sm:grid-cols-3 gap-8">
-        <FeatureCard
-          icon={<Zap className="w-6 h-6 text-amber-500" />}
-          title="5 minutos"
-          description="Encuesta corta para ti y tu equipo. Sin configuración compleja."
-        />
-        <FeatureCard
-          icon={<Users className="w-6 h-6 text-blue-500" />}
-          title="Perspectiva del equipo"
-          description="Tus miembros responden de forma anónima. Mínimo 3 respuestas."
-        />
-        <FeatureCard
-          icon={<BarChart3 className="w-6 h-6 text-emerald-500" />}
-          title="Score radar"
-          description="Visualiza fortalezas y áreas de mejora en 4 dimensiones clave."
-        />
-      </section>
-    </div>
-  );
-}
-
-function FeatureCard({
-  icon,
-  title,
-  description,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="border border-gray-100 rounded-xl p-6">
-      <div className="mb-3">{icon}</div>
-      <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-      <p className="mt-1 text-sm text-gray-500">{description}</p>
+        {/* Features */}
+        <div className="mx-auto mt-20 grid max-w-3xl gap-8 sm:grid-cols-3">
+          <div className="text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
+              <Users className="h-5 w-5 text-brand-600" />
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-gray-900">
+              Tu equipo responde
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Invita a 3-5 miembros. Encuesta corta de 5 minutos.
+            </p>
+          </div>
+          <div className="text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
+              <Zap className="h-5 w-5 text-brand-600" />
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-gray-900">
+              Análisis instantáneo
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Score automático en 4 dimensiones organizacionales.
+            </p>
+          </div>
+          <div className="text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
+              <BarChart3 className="h-5 w-5 text-brand-600" />
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-gray-900">
+              Radar de tu organización
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Visualiza fortalezas y áreas de mejora de un vistazo.
+            </p>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

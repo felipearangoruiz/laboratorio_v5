@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from enum import Enum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, Integer
+from sqlalchemy.dialects.postgresql import JSON, UUID as PGUUID
 from sqlmodel import Field, SQLModel
+
+
+class QuickAssessmentStatus(str, Enum):
+    WAITING = "waiting"
+    READY = "ready"
+    COMPLETED = "completed"
 
 
 class QuickAssessment(SQLModel, table=True):
@@ -15,28 +22,63 @@ class QuickAssessment(SQLModel, table=True):
         default_factory=uuid4,
         sa_column=Column(PGUUID(as_uuid=True), primary_key=True, nullable=False),
     )
-    org_name: str = Field(nullable=False, max_length=255)
-    org_type: str = Field(default="empresa", nullable=False, max_length=50)
-    size_range: str = Field(default="1-10", nullable=False, max_length=20)
-    owner_id: UUID | None = Field(
-        default=None,
+    organization_id: UUID = Field(
         sa_column=Column(
             PGUUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="SET NULL"),
-            nullable=True,
+            ForeignKey("organizations.id", ondelete="CASCADE"),
+            nullable=False,
+        )
+    )
+    leader_responses: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False, server_default="{}"),
+    )
+    scores: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False, server_default="{}"),
+    )
+    member_count: int = Field(
+        default=0,
+        sa_column=Column(Integer, nullable=False, server_default="0"),
+    )
+    status: QuickAssessmentStatus = Field(
+        default=QuickAssessmentStatus.WAITING,
+        sa_column=Column(
+            SAEnum(
+                QuickAssessmentStatus,
+                name="quick_assessment_status",
+                native_enum=True,
+                create_type=False,
+                values_callable=lambda enum_cls: [m.value for m in enum_cls],
+            ),
+            nullable=False,
+            server_default=QuickAssessmentStatus.WAITING.value,
         ),
     )
-    leader_responses: dict = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False))
-    scores: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
-    member_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
-    responses_count: int = Field(default=0, sa_column=Column(Integer, nullable=False, server_default="0"))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 
 
+class QuickAssessmentCreate(SQLModel):
+    organization_id: UUID
+    leader_responses: dict = {}
+
+
+class QuickAssessmentRead(SQLModel):
+    id: UUID
+    organization_id: UUID
+    leader_responses: dict
+    scores: dict
+    member_count: int
+    status: QuickAssessmentStatus
+    created_at: datetime
+
+
 class QuickAssessmentMember(SQLModel, table=True):
+    """Miembros invitados al diagnóstico rápido (plan free). No toca la tabla members existente."""
+
     __tablename__ = "quick_assessment_members"
 
     id: UUID = Field(
@@ -51,7 +93,7 @@ class QuickAssessmentMember(SQLModel, table=True):
         )
     )
     name: str = Field(nullable=False, max_length=255)
-    role: str = Field(default="", nullable=False, max_length=255)
+    role_label: str = Field(default="", nullable=False, max_length=255)
     email: str = Field(nullable=False, max_length=255)
     token: str = Field(
         default_factory=lambda: uuid4().hex,
@@ -60,64 +102,29 @@ class QuickAssessmentMember(SQLModel, table=True):
         index=True,
         max_length=32,
     )
-    responses: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
-    submitted_at: datetime | None = Field(
-        default=None,
-        sa_column=Column(DateTime(timezone=True), nullable=True),
+    responses: dict = Field(
+        default_factory=dict,
+        sa_column=Column(JSON, nullable=False, server_default="{}"),
     )
+    completed: bool = Field(default=False, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
     )
 
 
-# ── Schemas ───────────────────────────────────────────
-
-class QuickAssessmentCreate(SQLModel):
-    org_name: str
-    org_type: str = "empresa"
-    size_range: str = "1-10"
-    leader_responses: dict
-
-
-class MemberInvite(SQLModel):
+class QuickAssessmentMemberCreate(SQLModel):
     name: str
-    role: str = ""
+    role_label: str = ""
     email: str
 
 
-class InviteMembersRequest(SQLModel):
-    members: list[MemberInvite]
-
-
-class MemberRespondRequest(SQLModel):
+class QuickAssessmentMemberRead(SQLModel):
+    id: UUID
+    assessment_id: UUID
+    name: str
+    role_label: str
+    email: str
     token: str
-    responses: dict[str, int]
-
-
-class QuickAssessmentRead(SQLModel):
-    id: UUID
-    org_name: str
-    org_type: str
-    size_range: str
-    leader_responses: dict
-    scores: dict | None
-    member_count: int
-    responses_count: int
-    created_at: datetime
-
-
-class DimensionScoreRead(SQLModel):
-    dimension: str
-    label: str
-    score: float
-    max_score: float
-
-
-class QuickAssessmentScoreRead(SQLModel):
-    id: UUID
-    org_name: str
-    dimensions: list[DimensionScoreRead]
-    member_count: int
-    responses_count: int
+    completed: bool
     created_at: datetime
