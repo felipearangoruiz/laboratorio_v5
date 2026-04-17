@@ -35,6 +35,7 @@ services:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       SECRET_KEY: ${JWT_SECRET:-change_me}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     entrypoint: ["/usr/local/bin/backend-entrypoint.sh"]
     env_file:
       - .env

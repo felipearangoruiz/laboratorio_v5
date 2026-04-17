@@ -1,5 +1,6 @@
 from sqlmodel import SQLModel
 
+from .diagnosis import DiagnosisResult, DiagnosisResultRead
 from .group import Group, GroupRead
 from .interview import Interview, InterviewRead
 from .lateral_relation import LateralRelation, LateralRelationCreate, LateralRelationRead
@@ -45,4 +46,6 @@ __all__ = [
     "LateralRelationRead",
     "Membership",
     "MembershipRead",
+    "DiagnosisResult",
+    "DiagnosisResultRead",
 ]

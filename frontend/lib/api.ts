@@ -336,6 +336,17 @@ export async function getPremiumQuestions() {
   }[]>("/interview/premium/questions");
 }
 
+// ── Diagnosis (Fase 3) ──────────────────────────────
+export async function generateDiagnosis(orgId: string) {
+  return request<any>(`/organizations/${orgId}/diagnosis/generate`, {
+    method: "POST",
+  });
+}
+
+export async function getLatestDiagnosis(orgId: string) {
+  return request<any | null>(`/organizations/${orgId}/diagnosis/latest`);
+}
+
 // ── Organizations ────────────────────────────────────
 export async function getOrganization(orgId: string) {
   return request<import("./types").Organization>(`/organizations/${orgId}`);

@@ -6,30 +6,35 @@ interface LayerSelectorProps {
   active: string;
   onChange: (layer: string) => void;
   hasNodes: boolean;
+  thresholdMet: boolean;
+  hasDiagnosis: boolean;
 }
 
 export default function LayerSelector({
   active,
   onChange,
   hasNodes,
+  thresholdMet,
+  hasDiagnosis,
 }: LayerSelectorProps) {
   const layers = [
     { id: "estructura", label: "Estructura", locked: false },
     { id: "recoleccion", label: "Recolección", locked: !hasNodes },
-    { id: "analisis", label: "Análisis", locked: true },
-    { id: "resultados", label: "Resultados", locked: true },
+    { id: "analisis", label: "Análisis", locked: !thresholdMet },
+    { id: "resultados", label: "Resultados", locked: !hasDiagnosis },
   ];
+
+  const tooltips: Record<string, string> = {
+    recoleccion: "Crea tu estructura primero",
+    analisis: "Alcanza el umbral de recolección primero",
+    resultados: "Genera tu diagnóstico primero",
+  };
 
   return (
     <div className="h-11 border-b border-gray-200 bg-white flex items-center px-4 gap-1">
       {layers.map((layer) => {
         const isActive = active === layer.id;
         const isLocked = layer.locked;
-        const tooltip = isLocked
-          ? layer.id === "recoleccion"
-            ? "Crea tu estructura primero"
-            : "Completa las fases anteriores"
-          : undefined;
 
         return (
           <button
@@ -43,7 +48,7 @@ export default function LayerSelector({
                 ? "text-gray-400 cursor-not-allowed"
                 : "text-gray-600 hover:bg-gray-100"
             }`}
-            title={tooltip}
+            title={isLocked ? tooltips[layer.id] : undefined}
           >
             <span className="flex items-center gap-1.5">
               {layer.label}
