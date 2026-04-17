@@ -20,7 +20,13 @@ from app.models.group import Group
 from app.models.interview import Interview
 from app.models.member import Member, MemberTokenStatus
 from app.models.organization import Organization
-from app.questions_premium import PREMIUM_DIMENSIONS, PREMIUM_QUESTIONS
+from app.questions_instrument_v2 import (
+    DIMENSIONS_V2 as PREMIUM_DIMENSIONS,
+    MANAGER_QUESTIONS,
+    EMPLOYEE_QUESTIONS,
+    ADAPTIVE_QUESTIONS,
+    QUESTION_BY_ID,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,15 +36,26 @@ def compute_scores(
     interviews: list[Interview],
     members: list[Member],
 ) -> dict[str, Any]:
-    """Compute normalised 0-100 scores per dimension from Likert responses."""
+    """Compute normalised 0-100 scores per dimension from v2 instrument responses.
+
+    v2 responses are option indices (0-based for single_select).
+    We normalise: index / (num_options - 1) * 100 → 0-100 scale.
+    """
     dim_values: dict[str, list[float]] = {d: [] for d in PREMIUM_DIMENSIONS}
 
-    # Map question_id → dimension (only Likert)
-    q_dim = {
-        q["id"]: q["dimension"]
-        for q in PREMIUM_QUESTIONS
-        if q["tipo"] == "likert"
-    }
+    # Build question metadata: id → (dimension, num_options, type)
+    all_questions = MANAGER_QUESTIONS + EMPLOYEE_QUESTIONS + ADAPTIVE_QUESTIONS
+    q_meta: dict[str, tuple[str, int, str]] = {}
+    for q in all_questions:
+        base_type = q["base"]["type"]
+        num_opts = len(q["base"].get("options", []))
+        q_meta[q["id"]] = (q["dimension"], num_opts, base_type)
+        # Also index layer IDs
+        for layer in q.get("layers", []):
+            lid = layer.get("id", "")
+            layer_type = layer.get("type", "")
+            layer_opts = len(layer.get("options", []))
+            q_meta[lid] = (q["dimension"], layer_opts, layer_type)
 
     # Per-node scores
     member_node: dict[UUID, UUID | None] = {m.id: m.group_id for m in members}
@@ -52,17 +69,23 @@ def compute_scores(
         for qid, val in (iv.data or {}).items():
             if qid.startswith("_"):
                 continue
-            dim = q_dim.get(qid)
-            if dim and isinstance(val, (int, float)):
-                dim_values[dim].append(float(val))
-                node_dim_values[node_id][dim].append(float(val))
+            meta = q_meta.get(qid)
+            if not meta:
+                continue
+            dim, num_opts, qtype = meta
 
-    # Global scores normalised to 0-100
+            # Score single_select and scale responses
+            if qtype in ("single_select", "scale_1_5", "numeric_select") and isinstance(val, (int, float)):
+                max_idx = max(num_opts - 1, 1)
+                score = (float(val) / max_idx) * 100
+                dim_values[dim].append(score)
+                node_dim_values[node_id][dim].append(score)
+
+    # Global scores
     global_scores: dict[str, float] = {}
     for dim, values in dim_values.items():
         if values:
-            avg = sum(values) / len(values)  # 1-5 scale
-            global_scores[dim] = round((avg / 5) * 100, 1)
+            global_scores[dim] = round(sum(values) / len(values), 1)
         else:
             global_scores[dim] = 0.0
 
@@ -78,8 +101,7 @@ def compute_scores(
         per_node[nid] = {}
         for dim, values in dims.items():
             if values:
-                avg = sum(values) / len(values)
-                per_node[nid][dim] = round((avg / 5) * 100, 1)
+                per_node[nid][dim] = round(sum(values) / len(values), 1)
             else:
                 per_node[nid][dim] = 0.0
 
@@ -200,12 +222,25 @@ Responde SIEMPRE en formato JSON válido con esta estructura exacta:
 
 
 def _collect_open_responses(interviews: list[Interview]) -> str:
-    """Extract open-ended responses grouped by dimension."""
-    q_info = {
-        q["id"]: {"dimension": q["dimension"], "texto": q["texto"]}
-        for q in PREMIUM_QUESTIONS
-        if q["tipo"] in ("abierta", "seleccion_multiple")
-    }
+    """Extract qualitative responses from v2 instrument grouped by dimension."""
+    # Build lookup: qid → (dimension, base_text, base_type, options)
+    all_questions = MANAGER_QUESTIONS + EMPLOYEE_QUESTIONS + ADAPTIVE_QUESTIONS
+    q_info: dict[str, dict] = {}
+    for q in all_questions:
+        q_info[q["id"]] = {
+            "dimension": q["dimension"],
+            "text": q["base"]["text"],
+            "type": q["base"]["type"],
+            "options": q["base"].get("options", []),
+        }
+        for layer in q.get("layers", []):
+            lid = layer.get("id", "")
+            q_info[lid] = {
+                "dimension": q["dimension"],
+                "text": layer.get("text", ""),
+                "type": layer.get("type", ""),
+                "options": layer.get("options", []),
+            }
 
     by_dim: dict[str, list[str]] = {}
     for iv in interviews:
@@ -216,13 +251,25 @@ def _collect_open_responses(interviews: list[Interview]) -> str:
             if not info:
                 continue
             dim = info["dimension"]
+            text = info["text"]
+
             if isinstance(val, str) and val.strip():
-                by_dim.setdefault(dim, []).append(
-                    f"Pregunta: {info['texto']}\nRespuesta: {val}"
-                )
+                by_dim.setdefault(dim, []).append(f"Pregunta: {text}\nRespuesta: {val}")
             elif isinstance(val, list):
+                items = ", ".join(str(v) for v in val)
+                by_dim.setdefault(dim, []).append(f"Pregunta: {text}\nSelección: {items}")
+            elif isinstance(val, (int, float)):
+                # Map option index to label for readability
+                options = info.get("options", [])
+                label = options[int(val)] if 0 <= int(val) < len(options) else str(val)
+                by_dim.setdefault(dim, []).append(f"Pregunta: {text}\nRespuesta: {label}")
+            elif isinstance(val, dict):
+                # Gradient responses (frequency × severity)
+                parts_inner = []
+                for k, v in val.items():
+                    parts_inner.append(f"  {k}: {v}")
                 by_dim.setdefault(dim, []).append(
-                    f"Pregunta: {info['texto']}\nSelección: {', '.join(val)}"
+                    f"Pregunta: {text}\nDetalle:\n" + "\n".join(parts_inner)
                 )
 
     parts = []
@@ -231,7 +278,7 @@ def _collect_open_responses(interviews: list[Interview]) -> str:
         if entries:
             parts.append(f"\n## {label}\n" + "\n---\n".join(entries))
 
-    return "\n".join(parts) if parts else "(Sin respuestas abiertas disponibles)"
+    return "\n".join(parts) if parts else "(Sin respuestas disponibles)"
 
 
 async def generate_narrative(

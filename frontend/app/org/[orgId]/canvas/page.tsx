@@ -23,6 +23,8 @@ import {
   updatePositions,
   getCollectionStatus,
   getLatestDiagnosis,
+  getOrganization,
+  updateOrganization,
 } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
 import OrgNode from "./OrgNode";
@@ -34,14 +36,18 @@ import DiagnosisPanel from "./DiagnosisPanel";
 import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import LayerSelector from "./LayerSelector";
-import { Plus } from "lucide-react";
+import { Plus, User, Users } from "lucide-react";
 
 const nodeTypes = { orgNode: OrgNode };
+
+type StructureType = "people" | "areas" | "mixed";
 
 interface GroupData {
   id: string;
   name: string;
   description: string;
+  node_type: string;
+  email: string;
   area: string;
   tarea_general: string;
   nivel_jerarquico: number | null;
@@ -65,14 +71,6 @@ function flattenTree(nodes: GroupData[]): GroupData[] {
   return result;
 }
 
-// Map member statuses to node interview status
-function getNodeInterviewStatus(memberCount: number, _nodeId: string): string {
-  // In collection layer, we'll enrich nodes with status from the backend
-  // For now, default based on member presence
-  if (memberCount > 0) return "invited";
-  return "none";
-}
-
 function treeToFlow(
   groups: GroupData[],
   activeLayer: string,
@@ -87,8 +85,10 @@ function treeToFlow(
       label: g.name,
       area: g.area,
       role: g.tarea_general,
+      email: g.email || "",
       memberCount: g.member_count,
       level: g.nivel_jerarquico,
+      nodeType: g.node_type || "area",
       activeLayer,
       interviewStatus: nodeStatuses[g.id] || "none",
     },
@@ -110,7 +110,6 @@ function treeToFlow(
 
 export default function CanvasPage() {
   const { user, loading: authLoading } = useAuth();
-  // ALWAYS use the user's real org UUID — never trust the URL param
   const orgId = user?.organization_id ?? "";
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
@@ -124,8 +123,22 @@ export default function CanvasPage() {
   const [collectionRefreshKey, setCollectionRefreshKey] = useState(0);
   const [thresholdMet, setThresholdMet] = useState(false);
   const [diagnosis, setDiagnosis] = useState<any>(null);
+  const [structureType, setStructureType] = useState<StructureType>("areas");
+  const [showNodeTypeSelector, setShowNodeTypeSelector] = useState(false);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rawGroupsRef = useRef<GroupData[]>([]);
+
+  // Load org structure type
+  useEffect(() => {
+    if (!orgId) return;
+    getOrganization(orgId)
+      .then((org) => {
+        if (org.org_structure_type) {
+          setStructureType(org.org_structure_type as StructureType);
+        }
+      })
+      .catch(() => {});
+  }, [orgId]);
 
   const loadGroups = useCallback(async () => {
     if (!orgId) return;
@@ -149,7 +162,6 @@ export default function CanvasPage() {
     }
   }, [orgId, setNodes, setEdges, activeLayer, nodeStatuses]);
 
-  // Load collection status + diagnosis
   const loadMeta = useCallback(async () => {
     if (!orgId) return;
     try {
@@ -163,18 +175,11 @@ export default function CanvasPage() {
       if (diag.status === "fulfilled" && diag.value && diag.value.status === "completed") {
         setDiagnosis(diag.value);
       }
-    } catch {
-      // ignore
-    }
+    } catch { /* ignore */ }
   }, [orgId]);
 
-  useEffect(() => {
-    loadGroups();
-  }, [loadGroups]);
-
-  useEffect(() => {
-    loadMeta();
-  }, [loadMeta]);
+  useEffect(() => { loadGroups(); }, [loadGroups]);
+  useEffect(() => { loadMeta(); }, [loadMeta]);
 
   // Re-render nodes when layer changes
   useEffect(() => {
@@ -228,12 +233,39 @@ export default function CanvasPage() {
 
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
+    setShowNodeTypeSelector(false);
   }, []);
 
-  async function handleAddNode() {
+  async function handleStructureTypeSelected(type: StructureType) {
+    setStructureType(type);
+    await updateOrganization(orgId, { org_structure_type: type });
+  }
+
+  async function handleAddNode(nodeType?: "person" | "area") {
+    // Determine node type based on structure setting
+    let resolvedType: "person" | "area";
+    if (nodeType) {
+      resolvedType = nodeType;
+    } else if (structureType === "people") {
+      resolvedType = "person";
+    } else if (structureType === "areas") {
+      resolvedType = "area";
+    } else {
+      // Mixed mode — show selector
+      setShowNodeTypeSelector(true);
+      return;
+    }
+
+    await createNodeOfType(resolvedType);
+  }
+
+  async function createNodeOfType(nodeType: "person" | "area") {
+    setShowNodeTypeSelector(false);
+    const defaultName = nodeType === "person" ? "Nueva persona" : "Nueva área";
     const newNode = await createGroup({
       organization_id: orgId,
-      name: "Nuevo nodo",
+      node_type: nodeType,
+      name: defaultName,
       position_x: Math.random() * 400 + 100,
       position_y: Math.random() * 300 + 100,
     });
@@ -248,8 +280,10 @@ export default function CanvasPage() {
           label: newNode.name,
           area: newNode.area || "",
           role: newNode.tarea_general || "",
+          email: newNode.email || "",
           memberCount: 0,
           level: newNode.nivel_jerarquico,
+          nodeType: newNode.node_type || nodeType,
           activeLayer,
           interviewStatus: "none",
         },
@@ -270,6 +304,7 @@ export default function CanvasPage() {
                 label: data.name ?? n.data.label,
                 area: data.area ?? n.data.area,
                 role: data.tarea_general ?? n.data.role,
+                email: data.email ?? n.data.email,
                 level: data.nivel_jerarquico ?? n.data.level,
               },
             }
@@ -335,7 +370,8 @@ export default function CanvasPage() {
           {isEmpty ? (
             <EmptyState
               orgId={orgId}
-              onCreateNode={handleAddNode}
+              onStructureTypeSelected={handleStructureTypeSelected}
+              onCreateNode={(nodeType) => handleAddNode(nodeType)}
               onTemplateApplied={handleTemplateApplied}
               onCsvImported={handleTemplateApplied}
             />
@@ -359,25 +395,47 @@ export default function CanvasPage() {
             >
               <Background color="#e2e8f0" gap={20} />
               <Controls showInteractive={false} />
-
-              {activeLayer === "estructura" && (
-                <Panel position="bottom-right">
-                  <button
-                    onClick={handleAddNode}
-                    className="w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors"
-                    title="Agregar nodo"
-                  >
-                    <Plus className="w-5 h-5" />
-                  </button>
-                </Panel>
-              )}
             </ReactFlow>
+          )}
+
+          {/* Floating add button — always visible in estructura layer */}
+          {!isEmpty && activeLayer === "estructura" && (
+            <div className="absolute bottom-6 right-6 z-20">
+              <div className="relative">
+                {showNodeTypeSelector && (
+                  <div className="absolute bottom-14 right-0 bg-white rounded-xl shadow-lg border border-gray-200 py-2 w-48">
+                    <button
+                      onClick={() => createNodeOfType("person")}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                    >
+                      <User className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm text-gray-700">Persona</span>
+                    </button>
+                    <button
+                      onClick={() => createNodeOfType("area")}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                    >
+                      <Users className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm text-gray-700">Área</span>
+                    </button>
+                  </div>
+                )}
+                <button
+                  onClick={() => handleAddNode()}
+                  className="w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  title="Agregar nodo"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Side panel — changes based on active layer */}
           {selectedNodeData && activeLayer === "estructura" && (
             <SidePanel
               nodeId={selectedNode!}
+              orgId={orgId}
               data={selectedNodeData.data}
               onUpdate={handleUpdateNode}
               onDelete={handleDeleteNode}

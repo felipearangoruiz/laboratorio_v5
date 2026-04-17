@@ -18,9 +18,11 @@ router = APIRouter()
 
 class GroupCreate(BaseModel):
     organization_id: UUID
+    node_type: str = "area"
     name: str
     description: str = ""
     tarea_general: str = ""
+    email: str = ""
     area: str = ""
     nivel_jerarquico: int | None = None
     tipo_nivel: str | None = None
@@ -30,9 +32,11 @@ class GroupCreate(BaseModel):
 
 
 class GroupUpdate(BaseModel):
+    node_type: str | None = None
     name: str | None = None
     description: str | None = None
     tarea_general: str | None = None
+    email: str | None = None
     area: str | None = None
     nivel_jerarquico: int | None = None
     tipo_nivel: str | None = None
@@ -45,9 +49,11 @@ class GroupTreeNode(BaseModel):
     id: UUID
     organization_id: UUID
     parent_group_id: UUID | None
+    node_type: str
     name: str
     description: str
     tarea_general: str
+    email: str
     area: str
     nivel_jerarquico: int | None
     tipo_nivel: str | None
@@ -136,9 +142,11 @@ def create_group(
 
     group = Group(
         organization_id=payload.organization_id,
+        node_type=payload.node_type,
         name=payload.name,
         description=payload.description,
         tarea_general=payload.tarea_general,
+        email=payload.email,
         area=payload.area,
         nivel_jerarquico=payload.nivel_jerarquico,
         tipo_nivel=payload.tipo_nivel,
@@ -277,9 +285,11 @@ def get_organization_groups_tree(
                     "id": group.id,
                     "organization_id": group.organization_id,
                     "parent_group_id": group.parent_group_id,
+                    "node_type": group.node_type,
                     "name": group.name,
                     "description": group.description,
                     "tarea_general": group.tarea_general,
+                    "email": group.email,
                     "area": group.area,
                     "nivel_jerarquico": group.nivel_jerarquico,
                     "tipo_nivel": group.tipo_nivel,
