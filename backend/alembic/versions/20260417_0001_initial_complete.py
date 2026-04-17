@@ -334,12 +334,15 @@ def upgrade() -> None:
     )
 
     # ─────────────────────────────────────────────────────────────────────
-    # 8. quick_assessments (flujo free)
+    # 8. quick_assessments (flujo free — owner opcional, anónimo hasta registro)
     # ─────────────────────────────────────────────────────────────────────
     op.create_table(
         "quick_assessments",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("organization_id", postgresql.UUID(as_uuid=True), nullable=False),
+        sa.Column("owner_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("org_name", sa.String(length=255), nullable=False),
+        sa.Column("org_type", sa.String(length=50), nullable=False, server_default=""),
+        sa.Column("size_range", sa.String(length=50), nullable=False, server_default=""),
         sa.Column(
             "leader_responses",
             postgresql.JSON(),
@@ -353,6 +356,7 @@ def upgrade() -> None:
             server_default="{}",
         ),
         sa.Column("member_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column("responses_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "status",
             quick_assessment_status,
@@ -361,10 +365,10 @@ def upgrade() -> None:
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
-            ["organization_id"],
-            ["organizations.id"],
-            name="fk_quick_assessments_organization_id_organizations",
-            ondelete="CASCADE",
+            ["owner_id"],
+            ["users.id"],
+            name="fk_quick_assessments_owner_id_users",
+            ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name="pk_quick_assessments"),
     )
@@ -377,7 +381,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("assessment_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
-        sa.Column("role_label", sa.String(length=255), nullable=False, server_default=""),
+        sa.Column("role", sa.String(length=255), nullable=False, server_default=""),
         sa.Column("email", sa.String(length=255), nullable=False),
         sa.Column("token", sa.String(length=32), nullable=False),
         sa.Column(
@@ -386,12 +390,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column(
-            "completed",
-            sa.Boolean(),
-            nullable=False,
-            server_default=sa.false(),
-        ),
+        sa.Column("submitted_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.ForeignKeyConstraint(
             ["assessment_id"],

@@ -19,12 +19,17 @@ from .organization import (
 )
 from .processing import ProcessingResult, ProcessingResultRead, ProcessingType
 from .quick_assessment import (
+    DimensionScoreRead,
+    InviteMember,
+    InviteMembersRequest,
+    MemberRespondRequest,
     QuickAssessment,
     QuickAssessmentCreate,
     QuickAssessmentMember,
     QuickAssessmentMemberCreate,
     QuickAssessmentMemberRead,
     QuickAssessmentRead,
+    QuickAssessmentScoreRead,
     QuickAssessmentStatus,
 )
 from .user import User, UserRead, UserRole
@@ -72,7 +77,12 @@ __all__ = [
     "QuickAssessmentCreate",
     "QuickAssessmentRead",
     "QuickAssessmentStatus",
+    "QuickAssessmentScoreRead",
     "QuickAssessmentMember",
     "QuickAssessmentMemberCreate",
     "QuickAssessmentMemberRead",
+    "DimensionScoreRead",
+    "InviteMember",
+    "InviteMembersRequest",
+    "MemberRespondRequest",
 ]
