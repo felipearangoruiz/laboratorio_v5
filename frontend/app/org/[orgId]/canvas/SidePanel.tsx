@@ -105,6 +105,7 @@ export default function SidePanel({
       });
     }
     setSaving(false);
+    onClose();
   }
 
   async function handleDelete() {

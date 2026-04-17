@@ -395,40 +395,40 @@ export default function CanvasPage() {
             >
               <Background color="#e2e8f0" gap={20} />
               <Controls showInteractive={false} />
+            </ReactFlow>
+          )}
 
-              {activeLayer === "estructura" && (
-                <Panel position="bottom-right">
-                  <div className="relative">
-                    {/* Node type selector for mixed mode */}
-                    {showNodeTypeSelector && (
-                      <div className="absolute bottom-14 right-0 bg-white rounded-xl shadow-lg border border-gray-200 py-2 w-48">
-                        <button
-                          onClick={() => createNodeOfType("person")}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
-                        >
-                          <User className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-700">Persona</span>
-                        </button>
-                        <button
-                          onClick={() => createNodeOfType("area")}
-                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
-                        >
-                          <Users className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-700">Área</span>
-                        </button>
-                      </div>
-                    )}
+          {/* Floating add button — always visible in estructura layer */}
+          {!isEmpty && activeLayer === "estructura" && (
+            <div className="absolute bottom-6 right-6 z-20">
+              <div className="relative">
+                {showNodeTypeSelector && (
+                  <div className="absolute bottom-14 right-0 bg-white rounded-xl shadow-lg border border-gray-200 py-2 w-48">
                     <button
-                      onClick={() => handleAddNode()}
-                      className="w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors"
-                      title="Agregar nodo"
+                      onClick={() => createNodeOfType("person")}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
                     >
-                      <Plus className="w-5 h-5" />
+                      <User className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm text-gray-700">Persona</span>
+                    </button>
+                    <button
+                      onClick={() => createNodeOfType("area")}
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                    >
+                      <Users className="w-4 h-4 text-gray-500" />
+                      <span className="text-sm text-gray-700">Área</span>
                     </button>
                   </div>
-                </Panel>
-              )}
-            </ReactFlow>
+                )}
+                <button
+                  onClick={() => handleAddNode()}
+                  className="w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  title="Agregar nodo"
+                >
+                  <Plus className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Side panel — changes based on active layer */}
