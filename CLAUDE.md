@@ -11,7 +11,7 @@ Una plataforma web que permite a líderes organizacionales (CEOs, directores, ge
 
 **Fuente de verdad:** `docs/PRD_v2_Diagnostico_Organizacional.docx` — este PRD gobierna todas las decisiones. Si hay conflicto entre este archivo, el código existente o cualquier otro documento, el PRD v2 gana.
 
-**Documento secundario (referencia técnica):** `docs/ARCHITECTURE_V1_FINAL.md` — contiene especificaciones técnicas de API, pipeline de análisis y reglas de negocio que siguen siendo válidas en lo que no contradigan el PRD v2.
+**Documento secundario (referencia técnica):** Eliminado (`docs/ARCHITECTURE_V1_FINAL.md`). El PRD v2 es la única fuente de verdad.
 
 ---
 
@@ -42,10 +42,10 @@ El frontend actual está construido como SaaS modular con sidebar y páginas sep
 - React Flow (para el canvas organizacional)
 - Dependencias UI: lucide-react (iconos), shadcn/ui (componentes base)
 
-### ⚠️ Ajustar
+### 🗑️ Eliminado
 
-- `agents/` — El orchestrator existe pero los sprints deben redefinirse según el roadmap del PRD v2.
-- `docs/ARCHITECTURE_V1_FINAL.md` — Sigue siendo referencia para API contracts y pipeline de análisis, pero el modelo de datos y la UX del PRD v2 prevalecen.
+- `agents/` — Eliminado. Ya no aplica.
+- `docs/ARCHITECTURE_V1_FINAL.md` — Eliminado. PRD v2 es la única fuente de verdad.
 
 ---
 

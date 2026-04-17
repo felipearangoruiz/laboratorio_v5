@@ -1,9 +1,0 @@
-{
-  "repo_root": ".",
-  "backend_path": "backend",
-  "frontend_path": "frontend",
-  "docs_path": "docs/ARCHITECTURE_V1_FINAL.md",
-  "test_command_backend": "pytest -q",
-  "test_command_frontend": "npm test -- --runInBand",
-  "max_debug_loops": 3
-}
