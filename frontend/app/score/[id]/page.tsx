@@ -2,53 +2,48 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-import type { Progress, ScoreResponse } from "@/lib/types";
+import { getAssessmentScore, getAssessmentMembers, ApiError } from "@/lib/api";
+import type { QuickAssessmentScore } from "@/lib/types";
 import { Loader2, RefreshCw, ArrowRight, Users, Clock } from "lucide-react";
 import RadarChart from "./RadarChart";
 
 const POLL_INTERVAL = 15_000; // 15 seconds
-
-const DIMENSION_LABELS: Record<string, string> = {
-  liderazgo: "Liderazgo",
-  comunicacion: "Comunicación",
-  cultura: "Cultura",
-  operacion: "Operación",
-};
+const READY_THRESHOLD = 3; // mínimo de respuestas para mostrar el radar
 
 export default function ScorePage() {
   const params = useParams();
   const assessmentId = params.id as string;
 
-  const [progress, setProgress] = useState<Progress | null>(null);
-  const [scores, setScores] = useState<ScoreResponse | null>(null);
+  const [scoreData, setScoreData] = useState<QuickAssessmentScore | null>(null);
+  const [totalInvited, setTotalInvited] = useState<number>(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const fetchProgress = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const prog = await apiFetch<Progress>(
-        `/quick-assessment/${assessmentId}/progress`,
-      );
-      setProgress(prog);
-
-      if (prog.ready) {
-        const scoreData = await apiFetch<ScoreResponse>(
-          `/quick-assessment/${assessmentId}/score`,
-        );
-        setScores(scoreData);
-      }
-    } catch {
-      // Silently retry on next poll
+      // `/score` siempre está disponible (endpoint público) y devuelve
+      // responses_count + member_count. No existe `/progress` en backend:
+      // derivamos el estado de espera desde los campos del score response.
+      const [score, members] = await Promise.all([
+        getAssessmentScore(assessmentId),
+        getAssessmentMembers(assessmentId).catch(() => []),
+      ]);
+      setScoreData(score);
+      setTotalInvited(members.length || score.member_count || 0);
+      setError("");
+    } catch (err) {
+      if (err instanceof ApiError) setError(err.message);
+      else setError("No se pudo cargar el score. Reintentando...");
     } finally {
       setLoading(false);
     }
   }, [assessmentId]);
 
   useEffect(() => {
-    fetchProgress();
-    const interval = setInterval(fetchProgress, POLL_INTERVAL);
+    fetchData();
+    const interval = setInterval(fetchData, POLL_INTERVAL);
     return () => clearInterval(interval);
-  }, [fetchProgress]);
+  }, [fetchData]);
 
   if (loading) {
     return (
@@ -58,8 +53,24 @@ export default function ScorePage() {
     );
   }
 
-  // Waiting state
-  if (!scores) {
+  if (error && !scoreData) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="text-center max-w-sm">
+          <h1 className="text-lg font-semibold text-gray-900">
+            No pudimos cargar tu score
+          </h1>
+          <p className="mt-2 text-sm text-gray-500">{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const responsesCount = scoreData?.responses_count ?? 0;
+  const isReady = responsesCount >= READY_THRESHOLD;
+
+  // Waiting state — aún no hay suficientes respuestas de miembros
+  if (!isReady) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center px-4">
         <div className="w-full max-w-md text-center">
@@ -72,7 +83,7 @@ export default function ScorePage() {
           </h1>
           <p className="mt-2 text-sm text-gray-500">
             Tu score se generará automáticamente cuando al menos{" "}
-            {progress?.threshold ?? 3} miembros respondan.
+            {READY_THRESHOLD} miembros respondan.
           </p>
 
           {/* Progress indicator */}
@@ -85,8 +96,7 @@ export default function ScorePage() {
                 </span>
               </div>
               <span className="text-sm font-semibold text-gray-900">
-                {progress?.total_completed ?? 0} de{" "}
-                {progress?.total_invited ?? 0}
+                {responsesCount} de {totalInvited}
               </span>
             </div>
 
@@ -95,9 +105,8 @@ export default function ScorePage() {
                 className="h-2 rounded-full bg-brand-600 transition-all duration-500"
                 style={{
                   width: `${
-                    progress && progress.total_invited > 0
-                      ? (progress.total_completed / progress.total_invited) *
-                        100
+                    totalInvited > 0
+                      ? (responsesCount / totalInvited) * 100
                       : 0
                   }%`,
                 }}
@@ -106,18 +115,14 @@ export default function ScorePage() {
 
             {/* Individual dots */}
             <div className="mt-4 flex justify-center gap-2">
-              {Array.from({ length: progress?.total_invited ?? 0 }).map(
-                (_, i) => (
-                  <div
-                    key={i}
-                    className={`h-3 w-3 rounded-full transition-colors ${
-                      i < (progress?.total_completed ?? 0)
-                        ? "bg-green-500"
-                        : "bg-gray-200"
-                    }`}
-                  />
-                ),
-              )}
+              {Array.from({ length: totalInvited }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-3 w-3 rounded-full transition-colors ${
+                    i < responsesCount ? "bg-green-500" : "bg-gray-200"
+                  }`}
+                />
+              ))}
             </div>
           </div>
 
@@ -130,10 +135,18 @@ export default function ScorePage() {
     );
   }
 
-  // Score ready state
-  const lowestDim = Object.entries(scores.scores).sort(
-    ([, a], [, b]) => a - b,
-  )[0];
+  // Score ready state — construir el map y labels a partir del response v2
+  const scoresMap: Record<string, number> = {};
+  const labelsMap: Record<string, string> = {};
+  for (const d of scoreData!.dimensions) {
+    scoresMap[d.dimension] = d.score;
+    labelsMap[d.dimension] = d.label;
+  }
+
+  const sortedDims = [...scoreData!.dimensions].sort(
+    (a, b) => a.score - b.score,
+  );
+  const lowestDim = sortedDims[0];
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
@@ -142,42 +155,42 @@ export default function ScorePage() {
           El score de tu organización
         </h1>
         <p className="mt-2 text-sm text-gray-500">
-          Basado en tu percepción y la de {scores.member_count} miembros de tu
-          equipo.
+          Basado en tu percepción y la de {scoreData!.member_count} miembros de
+          tu equipo.
         </p>
 
         {/* Radar Chart */}
         <div className="mt-8">
-          <RadarChart scores={scores.scores} labels={DIMENSION_LABELS} />
+          <RadarChart scores={scoresMap} labels={labelsMap} />
         </div>
 
         {/* Score breakdown */}
         <div className="mt-8 space-y-3">
-          {Object.entries(scores.scores)
-            .sort(([, a], [, b]) => b - a)
-            .map(([dim, score]) => (
+          {[...scoreData!.dimensions]
+            .sort((a, b) => b.score - a.score)
+            .map((d) => (
               <div
-                key={dim}
+                key={d.dimension}
                 className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3"
               >
                 <span className="text-sm font-medium text-gray-700">
-                  {DIMENSION_LABELS[dim] ?? dim}
+                  {d.label}
                 </span>
                 <div className="flex items-center gap-3">
                   <div className="h-2 w-24 rounded-full bg-gray-100">
                     <div
                       className={`h-2 rounded-full transition-all ${
-                        score >= 4
+                        d.score >= 4
                           ? "bg-green-500"
-                          : score >= 3
+                          : d.score >= 3
                             ? "bg-yellow-500"
                             : "bg-red-400"
                       }`}
-                      style={{ width: `${(score / 5) * 100}%` }}
+                      style={{ width: `${(d.score / 5) * 100}%` }}
                     />
                   </div>
                   <span className="w-8 text-right text-sm font-semibold text-gray-900">
-                    {score.toFixed(1)}
+                    {d.score.toFixed(1)}
                   </span>
                 </div>
               </div>
@@ -189,10 +202,10 @@ export default function ScorePage() {
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-left">
             <p className="text-sm text-amber-800">
               Tu organización tiene un score de{" "}
-              <strong>{lowestDim[1].toFixed(1)}</strong> en{" "}
-              <strong>{DIMENSION_LABELS[lowestDim[0]]}</strong>. Con el
-              diagnóstico completo podrías entender por qué, identificar dónde
-              está la fricción y recibir recomendaciones específicas.
+              <strong>{lowestDim.score.toFixed(1)}</strong> en{" "}
+              <strong>{lowestDim.label}</strong>. Con el diagnóstico completo
+              podrías entender por qué, identificar dónde está la fricción y
+              recibir recomendaciones específicas.
             </p>
           </div>
         )}

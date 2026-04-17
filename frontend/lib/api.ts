@@ -43,17 +43,25 @@ async function request<T>(
     credentials: "include",
   });
 
-  // Auto-refresh on 401 (token expired), retry once
+  // Auto-refresh on 401 (token expired), retry once. Only redirect to /login
+  // if the caller was actually trying to authenticate (had a token). For
+  // anonymous requests to public endpoints, propagate the error to the caller
+  // instead of hijacking the user out of the flow (e.g., free onboarding).
   if (res.status === 401 && !_retried) {
-    const refreshed = await tryRefreshToken();
-    if (refreshed) {
-      return request<T>(path, options, true);
+    if (token) {
+      const refreshed = await tryRefreshToken();
+      if (refreshed) {
+        return request<T>(path, options, true);
+      }
+      // Refresh failed and we had a token — user's session is invalid,
+      // send them to login.
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("access_token");
+        window.location.href = "/login";
+      }
     }
-    // Refresh failed — redirect to login
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("access_token");
-      window.location.href = "/login";
-    }
+    // No token was sent → 401 from a public endpoint is unexpected but must
+    // NOT redirect. Fall through to raise ApiError below.
   }
 
   if (!res.ok) {
