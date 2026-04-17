@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { getAssessmentScore, getAssessmentMembers, getMe, ApiError } from "@/lib/api";
+import { getAssessmentScore, getAssessmentMembers, getMeSafe, ApiError } from "@/lib/api";
 import type { QuickAssessmentScore } from "@/lib/types";
 import RadarChart from "./RadarChart";
 import MemberLinks from "./MemberLinks";
@@ -53,8 +53,8 @@ export default function ScorePage() {
   }, [id]);
 
   useEffect(() => {
-    // Load user's org for canvas link
-    getMe().then((u) => setOrgId(u.organization_id || null)).catch(() => {});
+    // Load user's org for canvas link (safe — no redirect if not logged in)
+    getMeSafe().then((u) => setOrgId(u?.organization_id || null));
     loadData();
     intervalRef.current = setInterval(() => {
       loadData(true);
@@ -179,8 +179,8 @@ export default function ScorePage() {
               })}
             </div>
 
-            {/* Go to canvas */}
-            {orgId && (
+            {/* CTA — context-aware */}
+            {orgId ? (
               <Link
                 href={`/org/${orgId}/canvas`}
                 className="mt-6 w-full inline-flex items-center justify-center gap-2 px-5 py-3 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800"
@@ -188,22 +188,24 @@ export default function ScorePage() {
                 Ir al canvas organizacional
                 <ArrowUpRight className="w-4 h-4" />
               </Link>
+            ) : (
+              <div className="mt-6 p-6 bg-gray-900 rounded-xl text-center">
+                <h3 className="text-base font-semibold text-white">
+                  ¿Quieres un diagnóstico completo?
+                </h3>
+                <p className="mt-2 text-sm text-gray-300">
+                  Crea tu cuenta para desbloquear el canvas organizacional,
+                  8 dimensiones, entrevistas profundas y diagnóstico con IA.
+                </p>
+                <Link
+                  href="/register"
+                  className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 bg-white text-gray-900 text-sm font-medium rounded-lg hover:bg-gray-100"
+                >
+                  Crea tu cuenta para el diagnóstico completo
+                  <ArrowUpRight className="w-4 h-4" />
+                </Link>
+              </div>
             )}
-
-            {/* CTA Upgrade */}
-            <div className="mt-4 p-6 bg-gray-100 rounded-xl text-center">
-              <h3 className="text-base font-semibold text-gray-900">
-                ¿Quieres un diagnóstico completo?
-              </h3>
-              <p className="mt-2 text-sm text-gray-500">
-                Desbloquea 8 dimensiones, entrevistas profundas, motor de IA y
-                diagnóstico narrativo con recomendaciones.
-              </p>
-              <button className="mt-4 inline-flex items-center gap-2 px-5 py-2.5 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-white">
-                Conocer plan Premium
-                <ArrowUpRight className="w-4 h-4" />
-              </button>
-            </div>
           </>
         )}
       </div>

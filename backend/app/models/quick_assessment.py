@@ -18,12 +18,13 @@ class QuickAssessment(SQLModel, table=True):
     org_name: str = Field(nullable=False, max_length=255)
     org_type: str = Field(default="empresa", nullable=False, max_length=50)
     size_range: str = Field(default="1-10", nullable=False, max_length=20)
-    owner_id: UUID = Field(
+    owner_id: UUID | None = Field(
+        default=None,
         sa_column=Column(
             PGUUID(as_uuid=True),
-            ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
-        )
+            ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
+        ),
     )
     leader_responses: dict = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False))
     scores: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))

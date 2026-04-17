@@ -88,15 +88,17 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 
 ## 4. Modelo de negocio (Freemium)
 
-### Plan Free — Diagnóstico rápido
+### Plan Free — Diagnóstico rápido (SIN autenticación)
 
-- El líder se registra, responde encuesta corta (4 dimensiones: Liderazgo, Comunicación, Cultura, Operación).
-- Ingresa 3-5 miembros (nombre, rol, correo).
-- Los miembros responden encuesta corta (5-8 min).
-- Con ≥3 respuestas se genera score radar.
+- Cualquier persona accede a `/onboarding` sin crear cuenta.
+- Completa: info org → encuesta líder (4 dimensiones) → agregar miembros (emails).
+- Se crea `QuickAssessment` sin `user_id` (anónimo).
+- Redirige a `/score/{id}` con resultado.
+- Los miembros responden en `/interview/[token]` (público).
+- CTA en score: "Crea tu cuenta para el diagnóstico completo".
 - **No tiene canvas, no tiene IA, no tiene diagnóstico narrativo.**
 
-### Plan Premium — Producto completo
+### Plan Premium — Producto completo (CON autenticación)
 
 - Canvas organizacional con 4 capas.
 - 8 dimensiones: Liderazgo, Comunicación, Cultura, Procesos, Poder, Economía/Finanzas, Operación, Misión.
@@ -106,7 +108,33 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 
 ---
 
-## 5. Modelo de datos — Cambios requeridos
+## 5. Flujos de Usuario
+
+### Free (Encuesta Rápida) — SIN autenticación
+
+1. Landing `/` → CTA "Diagnostica tu organización gratis" → `/onboarding`
+2. `/onboarding`: info org → encuesta líder → agregar miembros (emails)
+3. Se crea `QuickAssessment` sin `user_id` (anónimo)
+4. Redirige a `/score/{id}` con resultado
+5. Miembros responden en `/interview/[token]` (público, sin auth)
+6. CTA en score: "Crea tu cuenta para el diagnóstico completo" → `/register`
+
+### Premium (Canvas) — CON autenticación
+
+1. `/register` → crea cuenta → `/org/{uuid}/canvas`
+2. `/login` → si tiene org → `/org/{uuid}/canvas` directo
+3. Canvas requiere auth (`useAuth` hook)
+4. Al crear cuenta desde score page, vincular el `QuickAssessment` existente (futuro)
+
+### Landing Page (`/`)
+
+- CTA primario: "Diagnostica tu organización gratis" → `/onboarding`
+- CTA secundario: "Iniciar sesión" → `/login`
+- No requiere autenticación
+
+---
+
+## 6. Modelo de datos
 
 ### Modelos existentes que necesitan ajustes
 
@@ -175,7 +203,7 @@ class Recommendation:
 
 ---
 
-## 6. Banco de preguntas — Migración
+## 7. Banco de preguntas — Migración
 
 El banco actual (`backend/app/questions.py`) usa 5 lentes: actores, procesos, reglas, incentivos, episodios.
 
@@ -195,7 +223,7 @@ El PRD v2 define **8 dimensiones** para premium y **4 dimensiones** para free.
 
 ---
 
-## 7. Roadmap de ejecución (sprints)
+## 8. Roadmap de ejecución (sprints)
 
 ### Fase 0 — Free MVP (prioridad máxima)
 
@@ -282,7 +310,7 @@ El PRD v2 define **8 dimensiones** para premium y **4 dimensiones** para free.
 
 ---
 
-## 8. Convenciones de código
+## 9. Convenciones de código
 
 ### Backend (Python)
 
@@ -314,7 +342,7 @@ El PRD v2 define **8 dimensiones** para premium y **4 dimensiones** para free.
 
 ---
 
-## 9. Cómo ejecutar
+## 10. Cómo ejecutar
 
 ```bash
 # Clonar y entrar
@@ -333,7 +361,7 @@ docker-compose up --build
 
 ---
 
-## 10. Reglas para Claude Code
+## 11. Reglas para Claude Code
 
 1. **Siempre lee el PRD v2 antes de tomar decisiones de producto.** Si no estás seguro de cómo debe funcionar algo, búscalo ahí.
 2. **No construyas nada que viole la sección 7 del PRD (arquitectura de interacción).** Si una feature requiere navegar fuera del canvas, rediseña hasta que pueda vivir como panel, overlay o capa.
