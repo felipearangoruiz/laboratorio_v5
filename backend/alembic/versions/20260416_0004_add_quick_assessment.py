@@ -16,18 +16,25 @@ branch_labels = None
 depends_on = None
 
 
+# Declare the enum type separately with create_type=False so it's never
+# auto-created when used inside column definitions. We create/drop it
+# explicitly with checkfirst=True so the migration is idempotent and
+# never crashes with "type already exists".
+quick_assessment_status = postgresql.ENUM(
+    "waiting",
+    "ready",
+    "completed",
+    name="quick_assessment_status",
+    create_type=False,
+)
+
+
 def upgrade() -> None:
     bind = op.get_bind()
 
-    # Crear enum para quick_assessment_status
-    bind.execute(
-        sa.text(
-            "DO $$ BEGIN "
-            "IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'quick_assessment_status') "
-            "THEN CREATE TYPE quick_assessment_status AS ENUM ('waiting', 'ready', 'completed'); "
-            "END IF; END $$;"
-        )
-    )
+    # Create the enum type explicitly — checkfirst ensures we don't crash
+    # if it already exists in the database.
+    quick_assessment_status.create(bind, checkfirst=True)
 
     op.create_table(
         "quick_assessments",
@@ -43,13 +50,7 @@ def upgrade() -> None:
         sa.Column("member_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "status",
-            sa.Enum(
-                "waiting",
-                "ready",
-                "completed",
-                name="quick_assessment_status",
-                create_type=False,
-            ),
+            quick_assessment_status,
             nullable=False,
             server_default="waiting",
         ),
@@ -95,5 +96,5 @@ def downgrade() -> None:
     op.drop_table("quick_assessment_members")
     op.drop_table("quick_assessments")
 
-    bind = op.get_bind()
-    bind.execute(sa.text("DROP TYPE IF EXISTS quick_assessment_status;"))
+    # Drop the enum type explicitly — checkfirst avoids crash if already gone.
+    quick_assessment_status.drop(op.get_bind(), checkfirst=True)
