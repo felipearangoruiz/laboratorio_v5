@@ -6,6 +6,7 @@ from sqlmodel import Session, select
 
 from app.core.dependencies import get_current_user
 from app.db import get_session
+from app.models.organization import Organization
 from app.models.quick_assessment import (
     DimensionScoreRead,
     InviteMembersRequest,
@@ -121,6 +122,21 @@ def create_assessment(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
+    # Create Organization if user doesn't have one yet
+    if not current_user.organization_id:
+        org = Organization(
+            name=body.org_name,
+            description="",
+            sector=body.org_type,
+        )
+        session.add(org)
+        session.flush()
+
+        current_user.organization_id = org.id
+        org.admin_id = current_user.id
+        session.add(current_user)
+        session.add(org)
+
     assessment = QuickAssessment(
         org_name=body.org_name,
         org_type=body.org_type,
@@ -131,7 +147,7 @@ def create_assessment(
     session.add(assessment)
     session.commit()
     session.refresh(assessment)
-    return {"id": str(assessment.id)}
+    return {"id": str(assessment.id), "organization_id": str(current_user.organization_id)}
 
 
 @router.get("/{assessment_id}", response_model=QuickAssessmentRead)
