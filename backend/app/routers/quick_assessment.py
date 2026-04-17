@@ -55,6 +55,66 @@ def _compute_scores(
     return result
 
 
+# ── Public endpoints (no auth) — MUST come before /{assessment_id} routes ──
+
+@router.get("/interview/{token}")
+def get_member_interview(
+    token: str,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Public endpoint — no auth. Fetch interview state for a member by token."""
+    member = session.exec(
+        select(QuickAssessmentMember).where(QuickAssessmentMember.token == token)
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Invalid interview link")
+
+    return {
+        "name": member.name,
+        "role": member.role,
+        "token": member.token,
+        "assessment_id": str(member.assessment_id),
+        "submitted": member.submitted_at is not None,
+        "responses": member.responses,
+    }
+
+
+@router.post("/interview/{token}/submit")
+def submit_member_interview(
+    token: str,
+    body: MemberRespondRequest,
+    session: Session = Depends(get_session),
+) -> dict:
+    """Public endpoint — no auth. Submit responses for a member by token."""
+    member = session.exec(
+        select(QuickAssessmentMember).where(QuickAssessmentMember.token == token)
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Invalid interview link")
+    if member.submitted_at is not None:
+        raise HTTPException(status_code=400, detail="Already submitted")
+
+    for qid, val in body.responses.items():
+        if qid not in FREE_QUESTION_IDS:
+            raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
+        if not isinstance(val, int) or val < 1 or val > 5:
+            raise HTTPException(status_code=400, detail=f"Invalid value for {qid}: must be 1-5")
+
+    member.responses = body.responses
+    member.submitted_at = datetime.now(timezone.utc)
+    session.add(member)
+
+    assessment = session.get(QuickAssessment, member.assessment_id)
+    if assessment:
+        assessment.responses_count = assessment.responses_count + 1
+        session.add(assessment)
+
+    session.commit()
+    return {"status": "submitted"}
+
+
+# ── Authenticated endpoints ──────────────────────────────────────────────────
+
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_assessment(
     body: QuickAssessmentCreate,
@@ -137,7 +197,6 @@ def respond_member(
     if member.submitted_at is not None:
         raise HTTPException(status_code=400, detail="Already submitted")
 
-    # Validate responses are valid question IDs with values 1-5
     for qid, val in body.responses.items():
         if qid not in FREE_QUESTION_IDS:
             raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
@@ -148,7 +207,6 @@ def respond_member(
     member.submitted_at = datetime.now(timezone.utc)
     session.add(member)
 
-    # Update response count on assessment
     assessment = session.get(QuickAssessment, assessment_id)
     if assessment:
         assessment.responses_count = assessment.responses_count + 1
@@ -204,62 +262,6 @@ def get_score(
         responses_count=len(member_responses),
         created_at=assessment.created_at,
     )
-
-
-@router.get("/interview/{token}")
-def get_member_interview(
-    token: str,
-    session: Session = Depends(get_session),
-) -> dict:
-    """Public endpoint — no auth. Fetch interview state for a member by token."""
-    member = session.exec(
-        select(QuickAssessmentMember).where(QuickAssessmentMember.token == token)
-    ).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="Invalid interview link")
-
-    return {
-        "name": member.name,
-        "role": member.role,
-        "token": member.token,
-        "assessment_id": str(member.assessment_id),
-        "submitted": member.submitted_at is not None,
-        "responses": member.responses,
-    }
-
-
-@router.post("/interview/{token}/submit")
-def submit_member_interview(
-    token: str,
-    body: MemberRespondRequest,
-    session: Session = Depends(get_session),
-) -> dict:
-    """Public endpoint — no auth. Submit responses for a member by token."""
-    member = session.exec(
-        select(QuickAssessmentMember).where(QuickAssessmentMember.token == token)
-    ).first()
-    if not member:
-        raise HTTPException(status_code=404, detail="Invalid interview link")
-    if member.submitted_at is not None:
-        raise HTTPException(status_code=400, detail="Already submitted")
-
-    for qid, val in body.responses.items():
-        if qid not in FREE_QUESTION_IDS:
-            raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
-        if not isinstance(val, int) or val < 1 or val > 5:
-            raise HTTPException(status_code=400, detail=f"Invalid value for {qid}: must be 1-5")
-
-    member.responses = body.responses
-    member.submitted_at = datetime.now(timezone.utc)
-    session.add(member)
-
-    assessment = session.get(QuickAssessment, member.assessment_id)
-    if assessment:
-        assessment.responses_count = assessment.responses_count + 1
-        session.add(assessment)
-
-    session.commit()
-    return {"status": "submitted"}
 
 
 @router.get("/{assessment_id}/members")

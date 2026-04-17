@@ -113,6 +113,19 @@ export async function getAssessmentScore(assessmentId: string) {
   );
 }
 
+export async function getAssessmentMembers(assessmentId: string) {
+  return request<
+    {
+      id: string;
+      name: string;
+      role: string;
+      email: string;
+      token: string;
+      submitted: boolean;
+    }[]
+  >(`/api/quick-assessment/${assessmentId}/members`);
+}
+
 // ── Free Member Interview (public, no auth) ─────────
 export async function getFreeInterview(token: string) {
   return request<{
