@@ -11,6 +11,15 @@ from .organization import (
     OrganizationUpdate,
 )
 from .processing import ProcessingResult, ProcessingResultRead, ProcessingType
+from .quick_assessment import (
+    QuickAssessment,
+    QuickAssessmentCreate,
+    QuickAssessmentMember,
+    QuickAssessmentMemberCreate,
+    QuickAssessmentMemberRead,
+    QuickAssessmentRead,
+    QuickAssessmentStatus,
+)
 from .user import User, UserRead, UserRole
 
 __all__ = [
@@ -35,4 +44,11 @@ __all__ = [
     "JobStatus",
     "JobStatusRead",
     "JobState",
+    "QuickAssessment",
+    "QuickAssessmentCreate",
+    "QuickAssessmentRead",
+    "QuickAssessmentStatus",
+    "QuickAssessmentMember",
+    "QuickAssessmentMemberCreate",
+    "QuickAssessmentMemberRead",
 ]
