@@ -19,12 +19,12 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      // Route based on user state: org → canvas, no org → onboarding
       const user = await getMe();
       if (user.organization_id) {
         router.push(`/org/${user.organization_id}/canvas`);
       } else {
-        router.push("/onboarding");
+        // No org — send to register (not onboarding) to create one
+        router.push("/register");
       }
     } catch (err) {
       if (err instanceof ApiError) {

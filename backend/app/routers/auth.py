@@ -9,6 +9,7 @@ from pydantic import BaseModel, EmailStr
 from app.core.dependencies import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password, verify_token
 from app.db import get_session
+from app.models.organization import Organization
 from app.models.user import User, UserRead, UserRole
 
 router = APIRouter()
@@ -18,6 +19,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     name: str = ""
+    org_name: str = ""
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -32,15 +34,36 @@ def register(
             detail="Email already registered",
         )
 
+    # Create Organization first
+    org = Organization(
+        name=body.org_name or f"Org de {body.name or body.email}",
+        description="",
+        sector="",
+    )
+    session.add(org)
+    session.flush()  # Get org.id
+
+    # Create User linked to the Organization
     user = User(
         email=body.email,
         hashed_password=hash_password(body.password),
         role=UserRole.ADMIN,
+        organization_id=org.id,
     )
     session.add(user)
+    session.flush()
+
+    # Link org back to user as admin
+    org.admin_id = user.id
+    session.add(org)
     session.commit()
     session.refresh(user)
-    return {"id": str(user.id), "email": user.email}
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "organization_id": str(org.id),
+    }
 
 
 @router.post("/login")

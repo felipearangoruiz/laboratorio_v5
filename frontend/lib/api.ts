@@ -94,11 +94,19 @@ export async function login(email: string, password: string) {
   return data;
 }
 
-export async function register(email: string, password: string, name: string) {
-  return request<{ id: string; email: string }>("/auth/register", {
-    method: "POST",
-    body: JSON.stringify({ email, password, name }),
-  });
+export async function register(
+  email: string,
+  password: string,
+  name: string,
+  orgName: string = "",
+) {
+  return request<{ id: string; email: string; organization_id: string }>(
+    "/auth/register",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password, name, org_name: orgName }),
+    }
+  );
 }
 
 export async function getMe() {
