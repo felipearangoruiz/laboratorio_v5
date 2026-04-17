@@ -1,14 +1,18 @@
+import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from app.core.dependencies import get_current_user
 from app.core.security import create_access_token, hash_password, verify_password, verify_token
 from app.db import get_session
+from app.models.organization import Organization
 from app.models.user import User, UserRead, UserRole
 
 router = APIRouter()
@@ -18,6 +22,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     name: str = ""
+    org_name: str = ""
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -25,22 +30,44 @@ def register(
     body: RegisterRequest,
     session: Session = Depends(get_session),
 ) -> dict:
-    existing = session.exec(select(User).where(User.email == body.email)).first()
+    email = body.email.strip().lower()
+    existing = session.exec(select(User).where(User.email == email)).first()
     if existing:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Email already registered",
         )
 
+    # Create Organization first
+    org = Organization(
+        name=body.org_name or f"Org de {body.name or body.email}",
+        description="",
+        sector="",
+    )
+    session.add(org)
+    session.flush()  # Get org.id
+
+    # Create User linked to the Organization
     user = User(
-        email=body.email,
+        email=email,
         hashed_password=hash_password(body.password),
         role=UserRole.ADMIN,
+        organization_id=org.id,
     )
     session.add(user)
+    session.flush()
+
+    # Link org back to user as admin
+    org.admin_id = user.id
+    session.add(org)
     session.commit()
     session.refresh(user)
-    return {"id": str(user.id), "email": user.email}
+
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "organization_id": str(org.id),
+    }
 
 
 @router.post("/login")
@@ -49,8 +76,18 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    user = session.exec(select(User).where(User.email == form_data.username)).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
+    email = form_data.username.strip().lower()
+    logger.info(f"Login attempt: email={email}")
+    user = session.exec(select(User).where(User.email == email)).first()
+    if not user:
+        logger.warning(f"Login failed: user not found for email={form_data.username}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_password(form_data.password, user.hashed_password):
+        logger.warning(f"Login failed: wrong password for email={form_data.username}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

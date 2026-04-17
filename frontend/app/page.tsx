@@ -19,10 +19,10 @@ export default function LandingPage() {
             Iniciar sesión
           </Link>
           <Link
-            href="/onboarding"
+            href="/register"
             className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800"
           >
-            Comenzar gratis
+            Crear cuenta
           </Link>
         </div>
       </nav>
@@ -37,13 +37,24 @@ export default function LandingPage() {
           invita a tus miembros y obtén un mapa real de liderazgo, comunicación,
           cultura y operación.
         </p>
-        <Link
-          href="/onboarding"
-          className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg text-base font-medium hover:bg-gray-800"
-        >
-          Diagnosticar mi organización gratis
-          <ArrowRight className="w-4 h-4" />
-        </Link>
+        <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+          <Link
+            href="/onboarding"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg text-base font-medium hover:bg-gray-800"
+          >
+            Diagnostica gratis
+            <ArrowRight className="w-4 h-4" />
+          </Link>
+          <Link
+            href="/register"
+            className="inline-flex items-center justify-center gap-2 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg text-base font-medium hover:bg-gray-50"
+          >
+            Crear cuenta premium
+          </Link>
+        </div>
+        <p className="mt-3 text-sm text-gray-400">
+          El diagnóstico gratis no requiere cuenta
+        </p>
       </section>
 
       {/* Features */}
