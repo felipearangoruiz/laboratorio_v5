@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, DateTime, ForeignKey
+from sqlalchemy import Column, DateTime, ForeignKey, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
@@ -22,6 +22,10 @@ class Organization(SQLModel, table=True):
     strategic_concerns: str = Field(default="", nullable=False)
     key_questions: str = Field(default="", nullable=False)
     additional_context: str = Field(default="", nullable=False)
+    org_structure_type: str = Field(
+        default="areas",
+        sa_column=Column(String(20), nullable=False, server_default="areas"),
+    )
     admin_id: UUID | None = Field(
         default=None,
         sa_column=Column(
@@ -44,6 +48,7 @@ class OrganizationCreate(SQLModel):
     strategic_concerns: str = ""
     key_questions: str = ""
     additional_context: str = ""
+    org_structure_type: str = "areas"
     admin_id: UUID | None = None
 
 
@@ -55,6 +60,7 @@ class OrganizationUpdate(SQLModel):
     strategic_concerns: str | None = None
     key_questions: str | None = None
     additional_context: str | None = None
+    org_structure_type: str | None = None
     admin_id: UUID | None = None
 
 
@@ -67,5 +73,6 @@ class OrganizationRead(SQLModel):
     strategic_concerns: str
     key_questions: str
     additional_context: str
+    org_structure_type: str
     admin_id: UUID | None
     created_at: datetime

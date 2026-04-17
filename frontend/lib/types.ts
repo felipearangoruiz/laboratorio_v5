@@ -15,6 +15,7 @@ export interface Organization {
   strategic_concerns: string;
   key_questions: string;
   additional_context: string;
+  org_structure_type: "people" | "areas" | "mixed";
   admin_id: string | null;
   created_at: string;
 }

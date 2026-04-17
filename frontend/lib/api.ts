@@ -238,8 +238,11 @@ export async function getOrgGroups(orgId: string) {
 
 export async function createGroup(data: {
   organization_id: string;
+  node_type?: string;
   name: string;
   description?: string;
+  tarea_general?: string;
+  email?: string;
   area?: string;
   nivel_jerarquico?: number;
   parent_group_id?: string | null;
@@ -377,6 +380,13 @@ export async function getLatestDiagnosis(orgId: string) {
 // ── Organizations ────────────────────────────────────
 export async function getOrganization(orgId: string) {
   return request<import("./types").Organization>(`/organizations/${orgId}`);
+}
+
+export async function updateOrganization(orgId: string, data: Record<string, any>) {
+  return request<import("./types").Organization>(`/organizations/${orgId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getOrgStats(orgId: string) {
