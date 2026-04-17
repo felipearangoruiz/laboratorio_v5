@@ -11,7 +11,6 @@ import ReactFlow, {
   useEdgesState,
   addEdge,
   type Connection,
-  type NodeChange,
   MarkerType,
   Panel,
 } from "reactflow";
@@ -23,9 +22,12 @@ import {
   updateGroup,
   deleteGroup,
   updatePositions,
+  getCollectionStatus,
 } from "@/lib/api";
 import OrgNode from "./OrgNode";
 import SidePanel from "./SidePanel";
+import CollectionPanel from "./CollectionPanel";
+import CollectionProgress from "./CollectionProgress";
 import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import LayerSelector from "./LayerSelector";
@@ -60,7 +62,19 @@ function flattenTree(nodes: GroupData[]): GroupData[] {
   return result;
 }
 
-function treeToFlow(groups: GroupData[]): { nodes: Node[]; edges: Edge[] } {
+// Map member statuses to node interview status
+function getNodeInterviewStatus(memberCount: number, _nodeId: string): string {
+  // In collection layer, we'll enrich nodes with status from the backend
+  // For now, default based on member presence
+  if (memberCount > 0) return "invited";
+  return "none";
+}
+
+function treeToFlow(
+  groups: GroupData[],
+  activeLayer: string,
+  nodeStatuses: Record<string, string>,
+): { nodes: Node[]; edges: Edge[] } {
   const flat = flattenTree(groups);
   const nodes: Node[] = flat.map((g) => ({
     id: g.id,
@@ -72,6 +86,8 @@ function treeToFlow(groups: GroupData[]): { nodes: Node[]; edges: Edge[] } {
       role: g.tarea_general,
       memberCount: g.member_count,
       level: g.nivel_jerarquico,
+      activeLayer,
+      interviewStatus: nodeStatuses[g.id] || "none",
     },
   }));
 
@@ -100,57 +116,94 @@ export default function CanvasPage() {
   const [loading, setLoading] = useState(true);
   const [isEmpty, setIsEmpty] = useState(false);
   const [activeLayer, setActiveLayer] = useState<string>("estructura");
+  const [nodeStatuses, setNodeStatuses] = useState<Record<string, string>>({});
+  const [collectionRefreshKey, setCollectionRefreshKey] = useState(0);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rawGroupsRef = useRef<GroupData[]>([]);
 
   const loadGroups = useCallback(async () => {
     try {
       const tree = await getOrgGroups(orgId);
+      rawGroupsRef.current = tree || [];
       if (!tree || tree.length === 0) {
         setIsEmpty(true);
         setNodes([]);
         setEdges([]);
       } else {
         setIsEmpty(false);
-        const { nodes: n, edges: e } = treeToFlow(tree);
+        const { nodes: n, edges: e } = treeToFlow(tree, activeLayer, nodeStatuses);
         setNodes(n);
         setEdges(e);
       }
     } catch {
-      // will show empty state on error
       setIsEmpty(true);
     } finally {
       setLoading(false);
     }
-  }, [orgId, setNodes, setEdges]);
+  }, [orgId, setNodes, setEdges, activeLayer, nodeStatuses]);
+
+  // Load node interview statuses for collection layer
+  const loadStatuses = useCallback(async () => {
+    if (activeLayer !== "recoleccion") return;
+    try {
+      const status = await getCollectionStatus(orgId);
+      // We need per-node status. For now, use collection status as source.
+      // The node status will be enriched by the backend /collection/status
+      // In a full implementation, we'd have per-node status endpoint
+      // For now, mark nodes based on member presence
+    } catch {
+      // ignore
+    }
+  }, [orgId, activeLayer]);
 
   useEffect(() => {
     loadGroups();
   }, [loadGroups]);
 
+  useEffect(() => {
+    loadStatuses();
+  }, [loadStatuses]);
+
+  // Re-render nodes when layer changes
+  useEffect(() => {
+    if (rawGroupsRef.current.length > 0) {
+      const { nodes: n, edges: e } = treeToFlow(rawGroupsRef.current, activeLayer, nodeStatuses);
+      setNodes(n);
+      setEdges(e);
+    }
+  }, [activeLayer, nodeStatuses, setNodes, setEdges]);
+
   const onConnect = useCallback(
     async (connection: Connection) => {
       if (!connection.source || !connection.target) return;
-      // Update parent in backend
       await updateGroup(connection.target, {
         parent_group_id: connection.source,
       });
-      setEdges((eds) => addEdge({
-        ...connection,
-        type: "smoothstep",
-        markerEnd: { type: MarkerType.ArrowClosed },
-        style: { stroke: "#94a3b8", strokeWidth: 2 },
-      }, eds));
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...connection,
+            type: "smoothstep",
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: "#94a3b8", strokeWidth: 2 },
+          },
+          eds
+        )
+      );
     },
     [setEdges]
   );
 
   const onNodeDragStop = useCallback(
     (_: any, node: Node) => {
-      // Debounce position save
       if (dragTimerRef.current) clearTimeout(dragTimerRef.current);
       dragTimerRef.current = setTimeout(() => {
         updatePositions(orgId, [
-          { id: node.id, position_x: node.position.x, position_y: node.position.y },
+          {
+            id: node.id,
+            position_x: node.position.x,
+            position_y: node.position.y,
+          },
         ]);
       }, 500);
     },
@@ -185,16 +238,15 @@ export default function CanvasPage() {
           role: newNode.tarea_general || "",
           memberCount: 0,
           level: newNode.nivel_jerarquico,
+          activeLayer,
+          interviewStatus: "none",
         },
       },
     ]);
     setSelectedNode(newNode.id);
   }
 
-  async function handleUpdateNode(
-    nodeId: string,
-    data: Record<string, any>
-  ) {
+  async function handleUpdateNode(nodeId: string, data: Record<string, any>) {
     await updateGroup(nodeId, data);
     setNodes((nds) =>
       nds.map((n) =>
@@ -228,6 +280,11 @@ export default function CanvasPage() {
     await loadGroups();
   }
 
+  function handleCollectionChanged() {
+    setCollectionRefreshKey((k) => k + 1);
+    loadGroups();
+  }
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50">
@@ -242,15 +299,24 @@ export default function CanvasPage() {
 
   return (
     <div className="h-screen flex overflow-hidden bg-gray-50">
-      {/* Sidebar mínimo */}
-      <Sidebar open={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} orgId={orgId} />
+      <Sidebar
+        open={sidebarOpen}
+        onToggle={() => setSidebarOpen(!sidebarOpen)}
+        orgId={orgId}
+      />
 
-      {/* Main canvas area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Layer selector */}
-        <LayerSelector active={activeLayer} onChange={setActiveLayer} hasNodes={nodes.length > 0} />
+        <LayerSelector
+          active={activeLayer}
+          onChange={setActiveLayer}
+          hasNodes={nodes.length > 0}
+        />
 
-        {/* Canvas */}
+        {/* Collection progress bar */}
+        {activeLayer === "recoleccion" && (
+          <CollectionProgress orgId={orgId} refreshKey={collectionRefreshKey} />
+        )}
+
         <div className="flex-1 relative">
           {isEmpty ? (
             <EmptyState
@@ -265,7 +331,7 @@ export default function CanvasPage() {
               edges={edges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
+              onConnect={activeLayer === "estructura" ? onConnect : undefined}
               onNodeDragStop={onNodeDragStop}
               onNodeClick={onNodeClick}
               onPaneClick={onPaneClick}
@@ -274,31 +340,44 @@ export default function CanvasPage() {
               fitViewOptions={{ padding: 0.3 }}
               deleteKeyCode={null}
               proOptions={{ hideAttribution: true }}
+              nodesDraggable={true}
+              connectOnClick={activeLayer === "estructura"}
             >
               <Background color="#e2e8f0" gap={20} />
               <Controls showInteractive={false} />
 
-              {/* Floating add button */}
-              <Panel position="bottom-right">
-                <button
-                  onClick={handleAddNode}
-                  className="w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors"
-                  title="Agregar nodo"
-                >
-                  <Plus className="w-5 h-5" />
-                </button>
-              </Panel>
+              {activeLayer === "estructura" && (
+                <Panel position="bottom-right">
+                  <button
+                    onClick={handleAddNode}
+                    className="w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors"
+                    title="Agregar nodo"
+                  >
+                    <Plus className="w-5 h-5" />
+                  </button>
+                </Panel>
+              )}
             </ReactFlow>
           )}
 
-          {/* Side panel */}
-          {selectedNodeData && (
+          {/* Side panel — changes based on active layer */}
+          {selectedNodeData && activeLayer === "estructura" && (
             <SidePanel
               nodeId={selectedNode!}
               data={selectedNodeData.data}
               onUpdate={handleUpdateNode}
               onDelete={handleDeleteNode}
               onClose={() => setSelectedNode(null)}
+            />
+          )}
+
+          {selectedNodeData && activeLayer === "recoleccion" && (
+            <CollectionPanel
+              orgId={orgId}
+              nodeId={selectedNode!}
+              nodeName={selectedNodeData.data.label}
+              onClose={() => setSelectedNode(null)}
+              onChanged={handleCollectionChanged}
             />
           )}
         </div>

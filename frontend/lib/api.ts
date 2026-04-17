@@ -244,6 +244,64 @@ export async function importCsv(
   );
 }
 
+// ── Collection (Fase 2) ─────────────────────────────
+export async function inviteFromNode(
+  orgId: string,
+  nodeId: string,
+  data: { email: string; name: string; role_label?: string }
+) {
+  return request<{ member_id: string; interview_token: string; token_status: string }>(
+    `/organizations/${orgId}/nodes/${nodeId}/invite`,
+    { method: "POST", body: JSON.stringify(data) }
+  );
+}
+
+export async function sendReminder(memberId: string) {
+  return request<{ status: string; reminder_count: number }>(
+    `/members/${memberId}/remind`,
+    { method: "POST" }
+  );
+}
+
+export async function revokeInvitation(memberId: string) {
+  return request<{ status: string }>(
+    `/members/${memberId}/revoke`,
+    { method: "POST" }
+  );
+}
+
+export async function getCollectionStatus(orgId: string) {
+  return request<{
+    total_nodes: number;
+    total_members: number;
+    by_status: Record<string, number>;
+    completed: number;
+    nodes_with_interview: number;
+    threshold_percent: number;
+    threshold_met: boolean;
+  }>(`/organizations/${orgId}/collection/status`);
+}
+
+export async function getNodeInterviews(orgId: string, nodeId: string) {
+  return request<{
+    member_id: string;
+    name: string;
+    role_label: string;
+    interview_token: string;
+    token_status: string;
+    submitted_at: string | null;
+    reminder_count: number;
+  }[]>(`/organizations/${orgId}/nodes/${nodeId}/interviews`);
+}
+
+export async function getPremiumQuestions() {
+  return request<{
+    dimension: string;
+    label: string;
+    questions: { id: string; dimension: string; tipo: string; texto: string; opciones?: string[] }[];
+  }[]>("/interview/premium/questions");
+}
+
 // ── Organizations ────────────────────────────────────
 export async function getOrganization(orgId: string) {
   return request<import("./types").Organization>(`/organizations/${orgId}`);
