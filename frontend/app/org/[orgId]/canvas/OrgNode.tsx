@@ -10,13 +10,34 @@ interface OrgNodeData {
   role: string;
   memberCount: number;
   level: number | null;
+  interviewStatus?: "none" | "invited" | "in_progress" | "completed" | "expired";
+  activeLayer?: string;
 }
 
+const STATUS_STYLES: Record<string, string> = {
+  none: "border-gray-200",
+  invited: "border-blue-400 border-dashed",
+  in_progress: "border-blue-500",
+  completed: "border-emerald-500",
+  expired: "border-orange-400",
+};
+
+const STATUS_DOT: Record<string, string> = {
+  invited: "bg-blue-400",
+  in_progress: "bg-blue-500 animate-pulse",
+  completed: "bg-emerald-500",
+  expired: "bg-orange-400",
+};
+
 function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
+  const showStatus = data.activeLayer === "recoleccion";
+  const status = data.interviewStatus || "none";
+  const borderClass = showStatus ? STATUS_STYLES[status] : "border-gray-200";
+
   return (
     <div
       className={`px-4 py-3 bg-white border-2 rounded-xl shadow-sm min-w-[160px] transition-colors ${
-        selected ? "border-gray-900 shadow-md" : "border-gray-200 hover:border-gray-400"
+        selected ? "border-gray-900 shadow-md" : borderClass + " hover:border-gray-400"
       }`}
     >
       <Handle
@@ -25,8 +46,13 @@ function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
         className="!w-3 !h-3 !bg-gray-400 !border-2 !border-white"
       />
 
-      <div className="text-sm font-semibold text-gray-900 truncate">
-        {data.label}
+      <div className="flex items-center gap-2">
+        <div className="text-sm font-semibold text-gray-900 truncate flex-1">
+          {data.label}
+        </div>
+        {showStatus && status !== "none" && (
+          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[status]}`} />
+        )}
       </div>
 
       {data.role && (

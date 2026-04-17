@@ -1,11 +1,32 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function getToken(): string | null {
+  return typeof window !== "undefined"
+    ? localStorage.getItem("access_token")
+    : null;
+}
+
+async function tryRefreshToken(): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+    if (!res.ok) return false;
+    const data = await res.json();
+    localStorage.setItem("access_token", data.access_token);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  _retried = false,
 ): Promise<T> {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const token = getToken();
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -21,6 +42,19 @@ async function request<T>(
     headers,
     credentials: "include",
   });
+
+  // Auto-refresh on 401 (token expired), retry once
+  if (res.status === 401 && !_retried) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      return request<T>(path, options, true);
+    }
+    // Refresh failed — redirect to login
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("access_token");
+      window.location.href = "/login";
+    }
+  }
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
@@ -242,6 +276,64 @@ export async function importCsv(
       body: JSON.stringify({ rows }),
     }
   );
+}
+
+// ── Collection (Fase 2) ─────────────────────────────
+export async function inviteFromNode(
+  orgId: string,
+  nodeId: string,
+  data: { email: string; name: string; role_label?: string }
+) {
+  return request<{ member_id: string; interview_token: string; token_status: string }>(
+    `/organizations/${orgId}/nodes/${nodeId}/invite`,
+    { method: "POST", body: JSON.stringify(data) }
+  );
+}
+
+export async function sendReminder(memberId: string) {
+  return request<{ status: string; reminder_count: number }>(
+    `/members/${memberId}/remind`,
+    { method: "POST" }
+  );
+}
+
+export async function revokeInvitation(memberId: string) {
+  return request<{ status: string }>(
+    `/members/${memberId}/revoke`,
+    { method: "POST" }
+  );
+}
+
+export async function getCollectionStatus(orgId: string) {
+  return request<{
+    total_nodes: number;
+    total_members: number;
+    by_status: Record<string, number>;
+    completed: number;
+    nodes_with_interview: number;
+    threshold_percent: number;
+    threshold_met: boolean;
+  }>(`/organizations/${orgId}/collection/status`);
+}
+
+export async function getNodeInterviews(orgId: string, nodeId: string) {
+  return request<{
+    member_id: string;
+    name: string;
+    role_label: string;
+    interview_token: string;
+    token_status: string;
+    submitted_at: string | null;
+    reminder_count: number;
+  }[]>(`/organizations/${orgId}/nodes/${nodeId}/interviews`);
+}
+
+export async function getPremiumQuestions() {
+  return request<{
+    dimension: string;
+    label: string;
+    questions: { id: string; dimension: string; tipo: string; texto: string; opciones?: string[] }[];
+  }[]>("/interview/premium/questions");
 }
 
 // ── Organizations ────────────────────────────────────
