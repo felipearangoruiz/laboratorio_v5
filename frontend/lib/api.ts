@@ -114,7 +114,7 @@ export async function logout() {
 export async function createQuickAssessment(
   data: import("./types").QuickAssessmentCreate
 ) {
-  return request<{ id: string }>("/api/quick-assessment", {
+  return request<{ id: string; organization_id: string }>("/api/quick-assessment", {
     method: "POST",
     body: JSON.stringify(data),
   });

@@ -48,14 +48,15 @@ export default function OnboardingPage() {
     setError("");
     setLoading(true);
     try {
-      const { id } = await createQuickAssessment({
+      const result = await createQuickAssessment({
         ...orgData,
         leader_responses: leaderResponses,
       });
       if (members.length > 0) {
-        await inviteMembers(id, members);
+        await inviteMembers(result.id, members);
       }
-      router.push(`/score/${id}`);
+      // Go to score page — it has a link to canvas
+      router.push(`/score/${result.id}`);
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
