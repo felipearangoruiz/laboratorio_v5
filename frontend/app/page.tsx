@@ -19,7 +19,7 @@ export default function LandingPage() {
             Iniciar sesión
           </Link>
           <Link
-            href="/register"
+            href="/onboarding"
             className="px-4 py-2 text-sm bg-gray-900 text-white rounded-lg hover:bg-gray-800"
           >
             Comenzar gratis
@@ -38,10 +38,10 @@ export default function LandingPage() {
           cultura y operación.
         </p>
         <Link
-          href="/register"
+          href="/onboarding"
           className="mt-8 inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg text-base font-medium hover:bg-gray-800"
         >
-          Diagnosticar mi organización
+          Diagnosticar mi organización gratis
           <ArrowRight className="w-4 h-4" />
         </Link>
       </section>

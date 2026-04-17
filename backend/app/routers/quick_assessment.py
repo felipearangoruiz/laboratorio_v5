@@ -4,9 +4,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, select
 
-from app.core.dependencies import get_current_user
 from app.db import get_session
-from app.models.organization import Organization
 from app.models.quick_assessment import (
     DimensionScoreRead,
     InviteMembersRequest,
@@ -17,7 +15,6 @@ from app.models.quick_assessment import (
     QuickAssessmentRead,
     QuickAssessmentScoreRead,
 )
-from app.models.user import User
 from app.questions_free import FREE_DIMENSIONS, FREE_QUESTION_IDS, FREE_QUESTIONS
 
 router = APIRouter()
@@ -114,53 +111,36 @@ def submit_member_interview(
     return {"status": "submitted"}
 
 
-# ── Authenticated endpoints ──────────────────────────────────────────────────
+# ── Public endpoints (no auth — free flow) ───────────────────────────────────
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_assessment(
     body: QuickAssessmentCreate,
-    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
-    # Create Organization if user doesn't have one yet
-    if not current_user.organization_id:
-        org = Organization(
-            name=body.org_name,
-            description="",
-            sector=body.org_type,
-        )
-        session.add(org)
-        session.flush()
-
-        current_user.organization_id = org.id
-        org.admin_id = current_user.id
-        session.add(current_user)
-        session.add(org)
-
+    """Public — no auth required. Creates an anonymous QuickAssessment."""
     assessment = QuickAssessment(
         org_name=body.org_name,
         org_type=body.org_type,
         size_range=body.size_range,
-        owner_id=current_user.id,
+        owner_id=None,
         leader_responses=body.leader_responses,
     )
     session.add(assessment)
     session.commit()
     session.refresh(assessment)
-    return {"id": str(assessment.id), "organization_id": str(current_user.organization_id)}
+    return {"id": str(assessment.id)}
 
 
 @router.get("/{assessment_id}", response_model=QuickAssessmentRead)
 def get_assessment(
     assessment_id: UUID,
-    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> QuickAssessmentRead:
+    """Public — no auth. Anyone with the assessment ID can view it."""
     assessment = session.get(QuickAssessment, assessment_id)
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    if assessment.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
     return QuickAssessmentRead.model_validate(assessment)
 
 
@@ -168,14 +148,12 @@ def get_assessment(
 def invite_members(
     assessment_id: UUID,
     body: InviteMembersRequest,
-    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> dict:
+    """Public — no auth. Anyone with the assessment ID can invite members."""
     assessment = session.get(QuickAssessment, assessment_id)
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    if assessment.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     created = 0
     for m in body.members:
@@ -235,14 +213,12 @@ def respond_member(
 @router.get("/{assessment_id}/score", response_model=QuickAssessmentScoreRead)
 def get_score(
     assessment_id: UUID,
-    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> QuickAssessmentScoreRead:
+    """Public — no auth. Score is accessible via assessment ID."""
     assessment = session.get(QuickAssessment, assessment_id)
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    if assessment.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     # Gather submitted member responses
     members = session.exec(
@@ -283,14 +259,12 @@ def get_score(
 @router.get("/{assessment_id}/members")
 def list_members(
     assessment_id: UUID,
-    current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ) -> list[dict]:
+    """Public — no auth. Members list accessible via assessment ID."""
     assessment = session.get(QuickAssessment, assessment_id)
     if not assessment:
         raise HTTPException(status_code=404, detail="Assessment not found")
-    if assessment.owner_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     members = session.exec(
         select(QuickAssessmentMember).where(

@@ -3,13 +3,18 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import {
+  getFreeInterview,
+  submitFreeInterview,
   getPublicInterview,
   submitInterview,
   saveDraft,
   getPremiumQuestions,
   ApiError,
 } from "@/lib/api";
+import { FREE_DIMENSIONS } from "@/lib/types";
 import { CheckCircle, ChevronLeft, ChevronRight, Shield } from "lucide-react";
+
+type InterviewMode = "loading" | "free" | "premium";
 
 interface Section {
   dimension: string;
@@ -35,6 +40,7 @@ export default function InterviewPage() {
   const params = useParams();
   const token = params.token as string;
 
+  const [mode, setMode] = useState<InterviewMode>("loading");
   const [memberName, setMemberName] = useState("");
   const [responses, setResponses] = useState<Record<string, any>>({});
   const [sections, setSections] = useState<Section[]>([]);
@@ -46,50 +52,78 @@ export default function InterviewPage() {
   const [showWelcome, setShowWelcome] = useState(true);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Load interview state and questions
+  // Detect interview type: try free first, then premium
   useEffect(() => {
-    async function load() {
+    async function detect() {
+      // Try free (quick assessment) endpoint
       try {
-        const [interview, questionSections] = await Promise.all([
-          getPublicInterview(token),
-          getPremiumQuestions(),
-        ]);
-        setMemberName(interview.name);
-        setSections(questionSections);
-        if (interview.data && Object.keys(interview.data).length > 0) {
-          setResponses(interview.data);
+        const data = await getFreeInterview(token);
+        setMemberName(data.name);
+        if (data.responses) setResponses(data.responses);
+        if (data.submitted) setSubmitted(true);
+
+        // Build sections from FREE_DIMENSIONS
+        const freeSections: Section[] = FREE_DIMENSIONS.map((d) => ({
+          dimension: d.id,
+          label: d.label,
+          questions: d.questions.map((q) => ({
+            id: q.id,
+            dimension: q.dimension,
+            tipo: "likert",
+            texto: q.text,
+          })),
+        }));
+        setSections(freeSections);
+        setMode("free");
+        setLoading(false);
+        return;
+      } catch (err) {
+        // Not a free token — try premium
+      }
+
+      // Try premium (/entrevista/) endpoint
+      try {
+        const data = await getPublicInterview(token);
+        setMemberName(data.name);
+        if (data.data && Object.keys(data.data).length > 0) {
+          setResponses(data.data);
           setShowWelcome(false);
         }
-        if (interview.token_status === "COMPLETED" || interview.token_status === "completed") {
+        if (data.token_status === "COMPLETED" || data.token_status === "completed") {
           setSubmitted(true);
         }
+
+        // Load premium questions
+        const premiumSections = await getPremiumQuestions();
+        setSections(premiumSections);
+        setMode("premium");
+        setLoading(false);
       } catch (err) {
         if (err instanceof ApiError) setError(err.message);
-        else setError("Error al cargar la entrevista.");
-      } finally {
+        else setError("Enlace de entrevista no válido.");
         setLoading(false);
       }
     }
-    load();
+    detect();
   }, [token]);
 
-  // Auto-save every 30 seconds
+  // Auto-save every 30 seconds (premium only)
   const doAutoSave = useCallback(async () => {
-    if (Object.keys(responses).length === 0) return;
+    if (mode !== "premium" || Object.keys(responses).length === 0) return;
     try {
       await saveDraft(token, responses);
     } catch {
-      // Silent fail
+      // silent
     }
-  }, [token, responses]);
+  }, [token, responses, mode]);
 
   useEffect(() => {
-    if (showWelcome || submitted) return;
+    if (showWelcome || submitted || mode === "free") return;
     autoSaveRef.current = setInterval(doAutoSave, 30_000);
     return () => {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current);
     };
-  }, [doAutoSave, showWelcome, submitted]);
+  }, [doAutoSave, showWelcome, submitted, mode]);
 
   function setResponse(questionId: string, value: any) {
     setResponses((prev) => ({ ...prev, [questionId]: value }));
@@ -109,7 +143,16 @@ export default function InterviewPage() {
     setSubmitting(true);
     setError("");
     try {
-      await submitInterview(token, responses);
+      if (mode === "free") {
+        // Filter to only numeric responses for free
+        const numericResponses: Record<string, number> = {};
+        for (const [k, v] of Object.entries(responses)) {
+          if (typeof v === "number") numericResponses[k] = v;
+        }
+        await submitFreeInterview(token, numericResponses);
+      } else {
+        await submitInterview(token, responses);
+      }
       setSubmitted(true);
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
@@ -125,18 +168,8 @@ export default function InterviewPage() {
   const answeredQuestions = Object.keys(responses).filter(
     (k) => !k.startsWith("_")
   ).length;
-  const progressPct = totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
-
-  // Check if current section is complete
-  const sectionComplete = section
-    ? section.questions.every((q) => {
-        const val = responses[q.id];
-        if (q.tipo === "likert") return typeof val === "number";
-        if (q.tipo === "abierta") return typeof val === "string" && val.trim().length > 0;
-        if (q.tipo === "seleccion_multiple") return Array.isArray(val) && val.length > 0;
-        return false;
-      })
-    : false;
+  const progressPct =
+    totalQuestions > 0 ? Math.round((answeredQuestions / totalQuestions) * 100) : 0;
 
   if (loading) {
     return (
@@ -166,30 +199,25 @@ export default function InterviewPage() {
             ¡Gracias, {memberName}!
           </h1>
           <p className="mt-2 text-sm text-gray-500">
-            Tu respuesta ha sido registrada. Tus comentarios contribuirán al
-            diagnóstico organizacional. Puedes cerrar esta página.
+            Tu respuesta ha sido registrada. Puedes cerrar esta página.
           </p>
         </div>
       </div>
     );
   }
 
-  if (showWelcome) {
+  if (showWelcome && mode === "premium") {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="text-center max-w-sm">
           <Shield className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h1 className="text-xl font-bold text-gray-900">
-            Hola, {memberName}
-          </h1>
+          <h1 className="text-xl font-bold text-gray-900">Hola, {memberName}</h1>
           <p className="mt-3 text-sm text-gray-600 leading-relaxed">
             Has sido invitado(a) a participar en un diagnóstico organizacional.
-            Tu identidad es anónima y tus respuestas serán tratadas de forma
-            confidencial.
+            Tu identidad es anónima y tus respuestas serán confidenciales.
           </p>
           <div className="mt-4 p-3 bg-blue-50 rounded-lg text-xs text-blue-700">
-            Duración estimada: 15-25 minutos. Puedes guardar tu progreso y
-            volver después.
+            Duración estimada: 15-25 minutos. Puedes guardar tu progreso y volver después.
           </div>
           <button
             onClick={() => setShowWelcome(false)}
@@ -202,9 +230,81 @@ export default function InterviewPage() {
     );
   }
 
+  // For free mode, skip welcome and show all questions at once
+  if (mode === "free") {
+    const allQuestions = sections.flatMap((s) => s.questions);
+    const allAnswered = allQuestions.every((q) => responses[q.id] !== undefined);
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-lg mx-auto px-4 py-8">
+          <div className="text-center mb-8">
+            <h1 className="text-xl font-bold text-gray-900">Encuesta organizacional</h1>
+            <p className="mt-1 text-sm text-gray-500">
+              Hola {memberName}. Esta encuesta es anónima y toma menos de 5 minutos.
+            </p>
+          </div>
+          {error && (
+            <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 rounded-lg">{error}</div>
+          )}
+          <div className="space-y-8">
+            {sections.map((dim) => (
+              <div key={dim.dimension}>
+                <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                  {dim.label}
+                </h2>
+                <div className="mt-3 space-y-5">
+                  {dim.questions.map((q) => (
+                    <div key={q.id}>
+                      <p className="text-sm text-gray-700">{q.texto}</p>
+                      <div className="mt-2 flex gap-1">
+                        {LIKERT_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => setResponse(q.id, opt.value)}
+                            className={`flex-1 py-2.5 text-xs rounded-md border transition-colors ${
+                              responses[q.id] === opt.value
+                                ? "bg-gray-900 text-white border-gray-900"
+                                : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                            }`}
+                            title={opt.label}
+                          >
+                            {opt.value}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[10px] text-gray-400">Muy en desacuerdo</span>
+                        <span className="text-[10px] text-gray-400">Muy de acuerdo</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-8">
+            <button
+              onClick={handleSubmit}
+              disabled={!allAnswered || submitting}
+              className="w-full py-3 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 disabled:opacity-50"
+            >
+              {submitting ? "Enviando..." : "Enviar respuestas"}
+            </button>
+            {!allAnswered && (
+              <p className="mt-2 text-xs text-gray-400 text-center">
+                Responde todas las preguntas ({answeredQuestions}/{allQuestions.length})
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Premium: section-by-section
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {/* Progress header */}
       <div className="sticky top-0 bg-white border-b border-gray-100 z-10">
         <div className="h-1 bg-gray-100">
           <div
@@ -216,31 +316,21 @@ export default function InterviewPage() {
           <span className="text-xs text-gray-500">
             Sección {currentSection + 1} de {sections.length}
           </span>
-          <span className="text-xs font-medium text-gray-700">
-            {section?.label}
-          </span>
+          <span className="text-xs font-medium text-gray-700">{section?.label}</span>
           <span className="text-xs text-gray-500">{progressPct}%</span>
         </div>
       </div>
 
-      {/* Section content */}
       <div className="flex-1 max-w-lg mx-auto w-full px-4 py-6">
         {error && (
-          <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 rounded-lg">
-            {error}
-          </div>
+          <div className="mb-4 p-3 text-sm text-red-700 bg-red-50 rounded-lg">{error}</div>
         )}
-
         {section && (
           <div className="space-y-6">
             <h2 className="text-lg font-bold text-gray-900">{section.label}</h2>
-
             {section.questions.map((q) => (
               <div key={q.id} className="space-y-2">
-                <p className="text-sm text-gray-700 leading-relaxed">
-                  {q.texto}
-                </p>
-
+                <p className="text-sm text-gray-700 leading-relaxed">{q.texto}</p>
                 {q.tipo === "likert" && (
                   <div className="flex gap-1.5">
                     {LIKERT_OPTIONS.map((opt) => (
@@ -259,7 +349,6 @@ export default function InterviewPage() {
                     ))}
                   </div>
                 )}
-
                 {q.tipo === "abierta" && (
                   <textarea
                     value={responses[q.id] || ""}
@@ -269,13 +358,10 @@ export default function InterviewPage() {
                     placeholder="Escribe tu respuesta..."
                   />
                 )}
-
                 {q.tipo === "seleccion_multiple" && q.opciones && (
                   <div className="flex flex-wrap gap-2">
                     {q.opciones.map((opt) => {
-                      const selected = (
-                        responses[q.id] || []
-                      ).includes(opt);
+                      const selected = (responses[q.id] || []).includes(opt);
                       return (
                         <button
                           key={opt}
@@ -298,7 +384,6 @@ export default function InterviewPage() {
         )}
       </div>
 
-      {/* Navigation */}
       <div className="sticky bottom-0 bg-white border-t border-gray-100 px-4 py-3">
         <div className="max-w-lg mx-auto flex gap-3">
           {currentSection > 0 && (
@@ -310,7 +395,6 @@ export default function InterviewPage() {
               Anterior
             </button>
           )}
-
           {isLastSection ? (
             <button
               onClick={handleSubmit}
@@ -332,7 +416,6 @@ export default function InterviewPage() {
             </button>
           )}
         </div>
-
         <p className="mt-2 text-center text-[10px] text-gray-400">
           Progreso guardado automáticamente
         </p>

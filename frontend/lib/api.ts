@@ -105,6 +105,25 @@ export async function getMe() {
   return request<import("./types").User>("/auth/me");
 }
 
+/**
+ * Safe version of getMe that returns null instead of redirecting on 401.
+ * Use on public pages that optionally show auth-dependent UI.
+ */
+export async function getMeSafe(): Promise<import("./types").User | null> {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+      credentials: "include",
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function logout() {
   await request("/auth/logout", { method: "POST" });
   localStorage.removeItem("access_token");
@@ -114,7 +133,7 @@ export async function logout() {
 export async function createQuickAssessment(
   data: import("./types").QuickAssessmentCreate
 ) {
-  return request<{ id: string }>("/api/quick-assessment", {
+  return request<{ id: string; organization_id: string }>("/api/quick-assessment", {
     method: "POST",
     body: JSON.stringify(data),
   });
