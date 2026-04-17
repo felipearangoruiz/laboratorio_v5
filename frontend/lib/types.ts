@@ -35,7 +35,7 @@ export interface QuickAssessmentCreate {
   org_name: string;
   org_type: string;
   size_range: string;
-  leader_responses: Record<string, number>;
+  leader_responses: Record<string, any>;
 }
 
 export interface QuickAssessmentMemberInvite {
@@ -70,90 +70,90 @@ export interface PublicInterview {
   schema_version: number;
 }
 
-export interface FreeDimension {
-  id: string;
-  label: string;
-  questions: FreeQuestion[];
-}
+// ── Instrument v2 types ─────────────────────────────────
 
-export interface FreeQuestion {
+export interface V2Layer {
   id: string;
+  type: string;
+  condition: Record<string, any>;
   text: string;
-  type: "likert";
-  dimension: string;
+  options?: string[];
+  frequency_options?: string[];
+  severity_options?: string[];
+  max_items?: number;
 }
 
-export const FREE_DIMENSIONS: FreeDimension[] = [
+export interface V2Question {
+  id: string;
+  title: string;
+  dimension: string;
+  paired_with?: string;
+  hypothesis?: string;
+  activation_rule?: Record<string, any>;
+  base: {
+    text: string;
+    type: string;
+    options: string[];
+  };
+  layers: V2Layer[];
+  output_template?: string;
+}
+
+export interface V2Section {
+  dimension: string;
+  label: string;
+  questions: V2Question[];
+}
+
+// Free flow subset — G1-G4 base questions (for onboarding leader survey)
+export const FREE_LEADER_QUESTIONS: V2Question[] = [
   {
-    id: "liderazgo",
-    label: "Liderazgo",
-    questions: [
-      {
-        id: "free_lid_01",
-        text: "Las decisiones importantes se toman de forma oportuna en esta organización.",
-        type: "likert",
-        dimension: "liderazgo",
-      },
-      {
-        id: "free_lid_02",
-        text: "Los líderes son accesibles cuando se necesita su orientación.",
-        type: "likert",
-        dimension: "liderazgo",
-      },
-    ],
+    id: "G1",
+    title: "Distribución de tu tiempo",
+    dimension: "centralizacion",
+    base: {
+      text: "¿Cuánto de tu tiempo en la semana se te va en resolver cosas del día a día que en teoría alguien más podría resolver?",
+      type: "single_select",
+      options: ["Casi nada", "Menos de la mitad", "Más o menos la mitad", "La mayor parte", "Prácticamente todo"],
+    },
+    layers: [],
   },
   {
-    id: "comunicacion",
-    label: "Comunicación",
-    questions: [
-      {
-        id: "free_com_01",
-        text: "La información fluye de manera clara entre las áreas de la organización.",
-        type: "likert",
-        dimension: "comunicacion",
-      },
-      {
-        id: "free_com_02",
-        text: "Las personas saben a quién acudir cuando tienen dudas sobre su trabajo.",
-        type: "likert",
-        dimension: "comunicacion",
-      },
-    ],
+    id: "G2",
+    title: "Prueba de ausencia",
+    dimension: "centralizacion",
+    base: {
+      text: "Si te fueras de vacaciones una semana sin poder contestar el teléfono, ¿qué pasaría con la operación?",
+      type: "single_select",
+      options: ["Todo seguiría funcionando normal", "Algunas cosas se retrasarían", "Varias decisiones quedarían en pausa", "Se frenaría significativamente", "No me puedo ir una semana"],
+    },
+    layers: [],
   },
   {
-    id: "cultura",
-    label: "Cultura",
-    questions: [
-      {
-        id: "free_cul_01",
-        text: "Existe confianza entre los miembros del equipo.",
-        type: "likert",
-        dimension: "cultura",
-      },
-      {
-        id: "free_cul_02",
-        text: "Los valores de la organización se reflejan en las decisiones del día a día.",
-        type: "likert",
-        dimension: "cultura",
-      },
-    ],
+    id: "G3",
+    title: "Autonomía del equipo",
+    dimension: "centralizacion",
+    base: {
+      text: "¿Cuáles de estas decisiones puede tomar tu equipo SIN consultarte?",
+      type: "multi_select",
+      options: ["Ofrecer descuentos", "Resolver quejas de clientes", "Compras menores", "Cambiar un proceso", "Contratar ayuda temporal", "Negociar con proveedor", "Ninguna"],
+    },
+    layers: [],
   },
   {
-    id: "operacion",
-    label: "Operación",
-    questions: [
-      {
-        id: "free_op_01",
-        text: "Los procesos internos permiten trabajar de forma eficiente.",
-        type: "likert",
-        dimension: "operacion",
-      },
-      {
-        id: "free_op_02",
-        text: "Cuando algo falla, existe un mecanismo claro para resolverlo.",
-        type: "likert",
-        dimension: "operacion",
-      },
-    ],
+    id: "G4",
+    title: "Cuellos de botella",
+    dimension: "cuellos_botella",
+    base: {
+      text: "¿Dónde se traban las cosas más seguido en tu negocio?",
+      type: "multi_select",
+      options: ["Aprobaciones que dependen de mí", "Coordinación entre áreas o sedes", "Falta de información", "Falta de herramientas", "Errores y retrabajo", "Proveedores", "Falta de personal", "No se traban"],
+    },
+    layers: [],
   },
 ];
+
+export const FREE_DIMENSIONS_V2 = {
+  centralizacion: "Centralización",
+  cuellos_botella: "Cuellos de botella",
+};

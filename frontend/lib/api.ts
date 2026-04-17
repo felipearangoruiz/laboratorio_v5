@@ -359,11 +359,7 @@ export async function getNodeInterviews(orgId: string, nodeId: string) {
 }
 
 export async function getPremiumQuestions() {
-  return request<{
-    dimension: string;
-    label: string;
-    questions: { id: string; dimension: string; tipo: string; texto: string; opciones?: string[] }[];
-  }[]>("/interview/premium/questions");
+  return request<any>("/interview/premium/questions");
 }
 
 // ── Diagnosis (Fase 3) ──────────────────────────────

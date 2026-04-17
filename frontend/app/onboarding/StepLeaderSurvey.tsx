@@ -1,21 +1,13 @@
 "use client";
 
-import { FREE_DIMENSIONS } from "@/lib/types";
+import { FREE_LEADER_QUESTIONS, type V2Question } from "@/lib/types";
 
 interface Props {
-  responses: Record<string, number>;
-  onChange: (responses: Record<string, number>) => void;
+  responses: Record<string, any>;
+  onChange: (responses: Record<string, any>) => void;
   onNext: () => void;
   onBack: () => void;
 }
-
-const LIKERT_OPTIONS = [
-  { value: 1, label: "Muy en desacuerdo" },
-  { value: 2, label: "En desacuerdo" },
-  { value: 3, label: "Neutral" },
-  { value: 4, label: "De acuerdo" },
-  { value: 5, label: "Muy de acuerdo" },
-];
 
 export default function StepLeaderSurvey({
   responses,
@@ -23,11 +15,74 @@ export default function StepLeaderSurvey({
   onNext,
   onBack,
 }: Props) {
-  const allQuestions = FREE_DIMENSIONS.flatMap((d) => d.questions);
-  const allAnswered = allQuestions.every((q) => responses[q.id] !== undefined);
+  const allAnswered = FREE_LEADER_QUESTIONS.every(
+    (q) => responses[q.id] !== undefined
+  );
 
-  function setResponse(questionId: string, value: number) {
+  function setResponse(questionId: string, value: any) {
     onChange({ ...responses, [questionId]: value });
+  }
+
+  function toggleMultiSelect(questionId: string, option: string) {
+    const current: string[] = responses[questionId] || [];
+    const updated = current.includes(option)
+      ? current.filter((o: string) => o !== option)
+      : [...current, option];
+    setResponse(questionId, updated);
+  }
+
+  function renderQuestion(q: V2Question) {
+    const { base } = q;
+
+    if (base.type === "single_select") {
+      return (
+        <div key={q.id} className="space-y-2">
+          <p className="text-sm text-gray-700 leading-relaxed">{base.text}</p>
+          <div className="space-y-1.5">
+            {base.options.map((opt, idx) => (
+              <button
+                key={idx}
+                onClick={() => setResponse(q.id, idx)}
+                className={`w-full text-left px-4 py-2.5 text-sm rounded-lg border transition-colors ${
+                  responses[q.id] === idx
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "bg-white text-gray-700 border-gray-200 hover:border-gray-400"
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (base.type === "multi_select") {
+      const selected: string[] = responses[q.id] || [];
+      return (
+        <div key={q.id} className="space-y-2">
+          <p className="text-sm text-gray-700 leading-relaxed">{base.text}</p>
+          <p className="text-xs text-gray-400">Selecciona todas las que apliquen</p>
+          <div className="flex flex-wrap gap-2">
+            {base.options.map((opt) => (
+              <button
+                key={opt}
+                onClick={() => toggleMultiSelect(q.id, opt)}
+                className={`px-3 py-1.5 text-sm rounded-full border transition-colors ${
+                  selected.includes(opt)
+                    ? "bg-gray-900 text-white border-gray-900"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   }
 
   return (
@@ -36,43 +91,16 @@ export default function StepLeaderSurvey({
         Tu perspectiva como líder
       </h2>
       <p className="mt-2 text-sm text-gray-500">
-        Evalúa cada afirmación según tu experiencia. No hay respuestas correctas
-        o incorrectas.
+        Responde desde tu experiencia. No hay respuestas correctas o incorrectas.
       </p>
 
       <div className="mt-6 space-y-8">
-        {FREE_DIMENSIONS.map((dim) => (
-          <div key={dim.id}>
-            <h3 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
-              {dim.label}
+        {FREE_LEADER_QUESTIONS.map((q) => (
+          <div key={q.id}>
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+              {q.title}
             </h3>
-            <div className="mt-3 space-y-5">
-              {dim.questions.map((q) => (
-                <div key={q.id}>
-                  <p className="text-sm text-gray-700">{q.text}</p>
-                  <div className="mt-2 flex gap-1">
-                    {LIKERT_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setResponse(q.id, opt.value)}
-                        className={`flex-1 py-2 text-xs rounded-md border transition-colors ${
-                          responses[q.id] === opt.value
-                            ? "bg-gray-900 text-white border-gray-900"
-                            : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
-                        }`}
-                        title={opt.label}
-                      >
-                        {opt.value}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-[10px] text-gray-400">Muy en desacuerdo</span>
-                    <span className="text-[10px] text-gray-400">Muy de acuerdo</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+            {renderQuestion(q)}
           </div>
         ))}
       </div>
@@ -95,7 +123,9 @@ export default function StepLeaderSurvey({
 
       {!allAnswered && (
         <p className="mt-2 text-xs text-gray-400 text-center">
-          Responde todas las preguntas para continuar ({Object.keys(responses).length}/{allQuestions.length})
+          Responde todas las preguntas para continuar (
+          {Object.keys(responses).filter((k) => FREE_LEADER_QUESTIONS.some((q) => q.id === k)).length}/
+          {FREE_LEADER_QUESTIONS.length})
         </p>
       )}
     </div>

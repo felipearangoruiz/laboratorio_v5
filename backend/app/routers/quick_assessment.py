@@ -15,7 +15,11 @@ from app.models.quick_assessment import (
     QuickAssessmentRead,
     QuickAssessmentScoreRead,
 )
-from app.questions_free import FREE_DIMENSIONS, FREE_QUESTION_IDS, FREE_QUESTIONS
+from app.questions_instrument_v2 import (
+    FREE_DIMENSIONS_V2 as FREE_DIMENSIONS,
+    FREE_MANAGER_QUESTIONS as FREE_QUESTIONS,
+    FREE_MANAGER_QUESTION_IDS,
+)
 
 router = APIRouter()
 
@@ -24,24 +28,33 @@ def _compute_scores(
     leader_responses: dict,
     member_responses_list: list[dict],
 ) -> dict:
-    """Compute average score per dimension combining leader + member responses."""
+    """Compute average score per dimension combining leader + member responses.
+
+    v2 instrument: base answers are option indices (0-based).
+    We normalise to a 1-5 scale: index / (num_options - 1) * 4 + 1.
+    """
     dimension_scores: dict[str, list[float]] = {dim: [] for dim in FREE_DIMENSIONS}
 
-    # Map question_id → dimension
-    q_dim = {q["id"]: q["dimension"] for q in FREE_QUESTIONS}
+    # Map question_id → (dimension, num_options)
+    q_meta = {}
+    for q in FREE_QUESTIONS:
+        num_opts = len(q["base"].get("options", [])) or 5
+        q_meta[q["id"]] = (q["dimension"], num_opts)
 
-    # Add leader responses
-    for qid, val in leader_responses.items():
-        dim = q_dim.get(qid)
-        if dim and isinstance(val, (int, float)):
-            dimension_scores[dim].append(float(val))
+    def _add_responses(responses: dict) -> None:
+        for qid, val in responses.items():
+            meta = q_meta.get(qid)
+            if not meta:
+                continue
+            dim, num_opts = meta
+            if isinstance(val, (int, float)):
+                # Normalise option index (0-based) to 1-5 scale
+                normalised = (float(val) / max(num_opts - 1, 1)) * 4 + 1
+                dimension_scores[dim].append(normalised)
 
-    # Add member responses
+    _add_responses(leader_responses)
     for resp in member_responses_list:
-        for qid, val in resp.items():
-            dim = q_dim.get(qid)
-            if dim and isinstance(val, (int, float)):
-                dimension_scores[dim].append(float(val))
+        _add_responses(resp)
 
     result = {}
     for dim, values in dimension_scores.items():
@@ -92,11 +105,10 @@ def submit_member_interview(
     if member.submitted_at is not None:
         raise HTTPException(status_code=400, detail="Already submitted")
 
-    for qid, val in body.responses.items():
-        if qid not in FREE_QUESTION_IDS:
+    valid_ids = FREE_MANAGER_QUESTION_IDS | {q["id"] for q in FREE_QUESTIONS}
+    for qid in body.responses:
+        if qid not in valid_ids:
             raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
-        if not isinstance(val, int) or val < 1 or val > 5:
-            raise HTTPException(status_code=400, detail=f"Invalid value for {qid}: must be 1-5")
 
     member.responses = body.responses
     member.submitted_at = datetime.now(timezone.utc)
@@ -191,11 +203,10 @@ def respond_member(
     if member.submitted_at is not None:
         raise HTTPException(status_code=400, detail="Already submitted")
 
-    for qid, val in body.responses.items():
-        if qid not in FREE_QUESTION_IDS:
+    valid_ids = FREE_MANAGER_QUESTION_IDS | {q["id"] for q in FREE_QUESTIONS}
+    for qid in body.responses:
+        if qid not in valid_ids:
             raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
-        if not isinstance(val, int) or val < 1 or val > 5:
-            raise HTTPException(status_code=400, detail=f"Invalid value for {qid}: must be 1-5")
 
     member.responses = body.responses
     member.submitted_at = datetime.now(timezone.utc)

@@ -15,7 +15,13 @@ from app.models.group import Group
 from app.models.interview import Interview
 from app.models.member import Member, MemberTokenStatus
 from app.models.user import User, UserRole
-from app.questions_premium import PREMIUM_SECTIONS
+from app.questions_instrument_v2 import (
+    EMPLOYEE_SECTIONS,
+    MANAGER_SECTIONS,
+    ADAPTIVE_QUESTIONS,
+    HYPOTHESIS_RULES,
+    QUESTION_BY_ID,
+)
 
 router = APIRouter()
 
@@ -252,9 +258,15 @@ def node_interview_details(
     return result
 
 
-# ── Premium questions endpoint ──────────────────────────
+# ── Instrument v2 questions endpoints ─────────────────────
 
 @router.get("/interview/premium/questions")
-def get_premium_questions() -> list[dict]:
-    """Public endpoint — returns the sectioned question bank."""
-    return PREMIUM_SECTIONS
+def get_premium_questions() -> dict:
+    """Public endpoint — returns the v2 instrument question bank."""
+    return {
+        "version": 2,
+        "manager_sections": MANAGER_SECTIONS,
+        "employee_sections": EMPLOYEE_SECTIONS,
+        "adaptive_questions": ADAPTIVE_QUESTIONS,
+        "hypothesis_rules": HYPOTHESIS_RULES,
+    }
