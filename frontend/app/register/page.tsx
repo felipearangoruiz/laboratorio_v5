@@ -7,8 +7,9 @@ import { Loader2 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,24 +21,35 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const body = new URLSearchParams({ username: email, password });
-      const res = await fetch(`${API_BASE}/auth/login`, {
+      // Register
+      const regRes = await fetch(`${API_BASE}/auth/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      if (!regRes.ok) {
+        const data = await regRes.json().catch(() => ({}));
+        throw new Error(data.detail ?? "Error al registrarse");
+      }
+
+      // Auto-login
+      const loginBody = new URLSearchParams({ username: email, password });
+      const loginRes = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body,
+        body: loginBody,
         credentials: "include",
       });
 
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? "Credenciales incorrectas");
+      if (loginRes.ok) {
+        const data = await loginRes.json();
+        localStorage.setItem("access_token", data.access_token);
       }
 
-      const data = await res.json();
-      localStorage.setItem("access_token", data.access_token);
       router.push("/onboarding");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al iniciar sesión");
+      setError(err instanceof Error ? err.message : "Error al registrarse");
     } finally {
       setLoading(false);
     }
@@ -47,11 +59,9 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center">
-          <h1 className="text-xl font-semibold text-gray-900">
-            Iniciar sesión
-          </h1>
+          <h1 className="text-xl font-semibold text-gray-900">Crear cuenta</h1>
           <p className="mt-1 text-sm text-gray-500">
-            Accede a tu diagnóstico organizacional
+            Conoce cómo está tu organización en 10 minutos
           </p>
         </div>
 
@@ -61,6 +71,24 @@ export default function LoginPage() {
               {error}
             </div>
           )}
+
+          <div>
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Nombre
+            </label>
+            <input
+              id="name"
+              type="text"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+              placeholder="Tu nombre"
+            />
+          </div>
 
           <div>
             <label
@@ -91,9 +119,11 @@ export default function LoginPage() {
               id="password"
               type="password"
               required
+              minLength={8}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+              placeholder="Mínimo 8 caracteres"
             />
           </div>
 
@@ -103,17 +133,17 @@ export default function LoginPage() {
             className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
           >
             {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Iniciar sesión
+            Crear cuenta
           </button>
         </form>
 
         <p className="mt-6 text-center text-sm text-gray-500">
-          ¿No tienes cuenta?{" "}
+          ¿Ya tienes cuenta?{" "}
           <Link
-            href="/register"
+            href="/login"
             className="font-medium text-brand-600 hover:text-brand-700"
           >
-            Regístrate gratis
+            Iniciar sesión
           </Link>
         </p>
       </div>

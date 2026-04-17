@@ -1,35 +1,95 @@
 import Link from "next/link";
+import { ArrowRight, BarChart3, Users, Zap } from "lucide-react";
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-slate-950 px-6 py-16 text-white">
-      <div className="mx-auto max-w-5xl">
-        <p className="text-xs font-semibold uppercase tracking-[0.28em] text-slate-400">
-          Laboratorio
-        </p>
-        <h1 className="mt-4 max-w-3xl text-4xl font-semibold leading-tight md:text-6xl">
-          Captura entrevistas organizacionales y conviértelas en lectura diagnóstica.
-        </h1>
-        <p className="mt-6 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
-          Esta versión prioriza un flujo simple: ordenar la organización, cargar personas,
-          completar entrevistas y revisar resultados desde una vista central del caso.
-        </p>
-
-        <div className="mt-8 flex flex-wrap gap-3">
-          <Link
-            href="/login"
-            className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-slate-950 hover:bg-slate-200"
-          >
-            Iniciar sesión
-          </Link>
-          <Link
-            href="/admin"
-            className="rounded-xl border border-slate-700 px-5 py-3 text-sm font-medium text-slate-100 hover:bg-slate-900"
-          >
-            Ir al resumen del caso
-          </Link>
+    <div className="flex min-h-screen flex-col">
+      {/* Header */}
+      <header className="border-b border-gray-200 bg-white">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <span className="text-lg font-semibold tracking-tight text-gray-900">
+            Laboratorio
+          </span>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/login"
+              className="text-sm font-medium text-gray-600 hover:text-gray-900"
+            >
+              Iniciar sesión
+            </Link>
+            <Link
+              href="/register"
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+            >
+              Comenzar gratis
+            </Link>
+          </div>
         </div>
-      </div>
-    </main>
+      </header>
+
+      {/* Hero */}
+      <main className="flex flex-1 flex-col items-center justify-center px-6 py-20">
+        <div className="mx-auto max-w-2xl text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-gray-900 sm:text-5xl">
+            Entiende cómo funciona{" "}
+            <span className="text-brand-600">realmente</span> tu organización
+          </h1>
+          <p className="mt-4 text-lg text-gray-500">
+            Diagnóstico organizacional asistido por IA. Captura la percepción de
+            tu equipo, identifica tensiones ocultas y recibe recomendaciones
+            accionables.
+          </p>
+          <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
+            <Link
+              href="/register"
+              className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-6 py-3 text-sm font-medium text-white hover:bg-brand-700 transition-colors"
+            >
+              Diagnostica tu organización
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+            <span className="text-sm text-gray-400">
+              Gratis — resultados en 10 minutos
+            </span>
+          </div>
+        </div>
+
+        {/* Features */}
+        <div className="mx-auto mt-20 grid max-w-3xl gap-8 sm:grid-cols-3">
+          <div className="text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
+              <Users className="h-5 w-5 text-brand-600" />
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-gray-900">
+              Tu equipo responde
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Invita a 3-5 miembros. Encuesta corta de 5 minutos.
+            </p>
+          </div>
+          <div className="text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
+              <Zap className="h-5 w-5 text-brand-600" />
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-gray-900">
+              Análisis instantáneo
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Score automático en 4 dimensiones organizacionales.
+            </p>
+          </div>
+          <div className="text-center">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
+              <BarChart3 className="h-5 w-5 text-brand-600" />
+            </div>
+            <h3 className="mt-3 text-sm font-semibold text-gray-900">
+              Radar de tu organización
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Visualiza fortalezas y áreas de mejora de un vistazo.
+            </p>
+          </div>
+        </div>
+      </main>
+    </div>
   );
 }
