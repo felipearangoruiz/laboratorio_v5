@@ -6,6 +6,7 @@ from app.routers.auth import router as auth_router
 from app.routers.canvas import router as canvas_router
 from app.routers.collection import router as collection_router
 from app.routers.diagnosis import router as diagnosis_router
+from app.routers.documents import router as documents_router
 from app.routers.groups import router as groups_router
 from app.routers.interview_public import router as interview_public_router
 from app.routers.interviews import router as interviews_router
@@ -49,6 +50,9 @@ app.include_router(canvas_router, tags=["canvas"])
 
 # Capa Recolección (invitaciones desde nodos, umbrales, recordatorios)
 app.include_router(collection_router, tags=["collection"])
+
+# Documentos institucionales
+app.include_router(documents_router, tags=["documents"])
 
 # Motor de diagnóstico IA
 app.include_router(diagnosis_router, tags=["diagnosis"])

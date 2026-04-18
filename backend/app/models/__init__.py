@@ -1,6 +1,7 @@
 from sqlmodel import SQLModel
 
 from .diagnosis import DiagnosisResult, DiagnosisResultRead
+from .document import Document, DocumentRead, DocType
 from .group import Group, GroupRead
 from .interview import Interview, InterviewRead
 from .job import JobState, JobStatus, JobStatusRead
@@ -45,6 +46,10 @@ __all__ = [
     "OrganizationCreate",
     "OrganizationRead",
     "OrganizationUpdate",
+    # Document (institutional files)
+    "Document",
+    "DocumentRead",
+    "DocType",
     # Group (canvas node)
     "Group",
     "GroupRead",

@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import Session, func, select
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user
 from app.db import get_session
 from app.models.group import Group
@@ -37,7 +38,6 @@ def _can_access_org(user: User, org_id: UUID) -> bool:
 # ── Invite a member from a canvas node ──────────────────
 
 class InviteFromNodeRequest(BaseModel):
-    email: str
     name: str
     role_label: str = ""
 
@@ -50,6 +50,11 @@ def invite_from_node(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
 ) -> dict:
+    """Invite a member from a canvas node.
+
+    The email is read from the node's saved email field (set in the Estructura layer).
+    If the node has no email assigned, returns 400 — the admin must assign it first.
+    """
     if not _can_access_org(current_user, org_id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -57,16 +62,32 @@ def invite_from_node(
     if not group or group.organization_id != org_id:
         raise HTTPException(status_code=404, detail="Node not found")
 
-    # Check duplicate email for this org
+    # Email must be set on the node (assigned in Estructura layer)
+    if not group.email or not group.email.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Este nodo no tiene email asignado. Asígnalo en la capa Estructura.",
+        )
+
+    node_email = group.email.strip()
+
+    # Prevent duplicate invite for the same node
     existing = session.exec(
         select(Member).where(
             Member.organization_id == org_id,
-            Member.name == body.name,
             Member.group_id == node_id,
         )
     ).first()
     if existing:
-        raise HTTPException(status_code=409, detail="Member already invited for this node")
+        # Return the existing member's token instead of creating a duplicate
+        interview_link = f"{settings.FRONTEND_URL}/interview/{existing.interview_token}"
+        return {
+            "member_id": str(existing.id),
+            "token": existing.interview_token,
+            "interview_link": interview_link,
+            "status": existing.token_status.value,
+            "email": node_email,
+        }
 
     member = Member(
         organization_id=org_id,
@@ -78,10 +99,14 @@ def invite_from_node(
     session.commit()
     session.refresh(member)
 
+    interview_link = f"{settings.FRONTEND_URL}/interview/{member.interview_token}"
+
     return {
         "member_id": str(member.id),
-        "interview_token": member.interview_token,
-        "token_status": member.token_status.value,
+        "token": member.interview_token,
+        "interview_link": interview_link,
+        "status": member.token_status.value,
+        "email": node_email,
     }
 
 
