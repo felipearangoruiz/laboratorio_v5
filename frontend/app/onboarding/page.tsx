@@ -31,15 +31,7 @@ export default function OnboardingPage() {
     type: "",
     size_range: "",
   });
-  // Respuestas del líder (v2 instrument completo):
-  //   - single_select / numeric_select / scale_1_5: number (índice de opción)
-  //   - multi_select / ranking: string[]
-  //   - text_open / text_short: string
-  //   - numeric_input: number (magnitud)
-  //   - gradient_per_selection: { [item]: { frequency?: number, severity?: number } }
-  const [leaderResponses, setLeaderResponses] = useState<Record<string, any>>(
-    {},
-  );
+  const [leaderResponses, setLeaderResponses] = useState<Record<string, any>>({});
   const [members, setMembers] = useState<MemberEntry[]>([
     { name: "", role_label: "", email: "" },
     { name: "", role_label: "", email: "" },
@@ -59,59 +51,70 @@ export default function OnboardingPage() {
     router.push(`/score/${id}`);
   }
 
+  const progressPct = Math.round(((step + 1) / TOTAL_STEPS) * 100);
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center px-4 py-12">
-      {/* Progress bar */}
-      <div className="mb-8 w-full max-w-lg">
-        <div className="flex items-center justify-between text-xs text-gray-400 mb-2">
-          <span>Paso {step + 1} de {TOTAL_STEPS}</span>
-          <span>{Math.round(((step + 1) / TOTAL_STEPS) * 100)}%</span>
-        </div>
-        <div className="h-1 w-full rounded-full bg-gray-200">
-          <div
-            className="h-1 rounded-full bg-brand-600 transition-all duration-300"
-            style={{ width: `${((step + 1) / TOTAL_STEPS) * 100}%` }}
-          />
-        </div>
+    <div className="flex min-h-screen flex-col bg-warm-50">
+      {/* Thin accent progress bar at very top */}
+      <div className="fixed top-0 left-0 right-0 z-50 h-[2px] bg-warm-200">
+        <div
+          className="h-full bg-accent transition-all duration-500"
+          style={{ width: `${progressPct}%` }}
+        />
       </div>
 
-      <div className="w-full max-w-lg">
-        {step === 0 && <StepWelcome onNext={next} />}
-        {step === 1 && (
-          <StepOrgInfo
-            orgInfo={orgInfo}
-            setOrgInfo={setOrgInfo}
-            onNext={next}
-            onBack={back}
-          />
-        )}
-        {step === 2 && (
-          <StepLeaderSurvey
-            responses={leaderResponses}
-            setResponses={setLeaderResponses}
-            onNext={next}
-            onBack={back}
-          />
-        )}
-        {step === 3 && (
-          <StepMembers
-            members={members}
-            setMembers={setMembers}
-            onNext={next}
-            onBack={back}
-          />
-        )}
-        {step === 4 && (
-          <StepSending
-            orgInfo={orgInfo}
-            leaderResponses={leaderResponses}
-            members={members}
-            assessmentId={assessmentId}
-            setAssessmentId={setAssessmentId}
-            onComplete={handleComplete}
-            onBack={back}
-          />
-        )}
+      {/* Logo strip */}
+      <header className="border-b border-warm-200 bg-warm-50/80 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-lg items-center justify-between px-6 py-4">
+          <span className="font-display italic text-lg text-warm-900">
+            Laboratorio
+          </span>
+          <span className="text-xs text-warm-400">
+            {step + 1} de {TOTAL_STEPS}
+          </span>
+        </div>
+      </header>
+
+      {/* Content */}
+      <div className="flex flex-1 flex-col items-center px-4 py-10">
+        <div className="w-full max-w-lg">
+          {step === 0 && <StepWelcome onNext={next} />}
+          {step === 1 && (
+            <StepOrgInfo
+              orgInfo={orgInfo}
+              setOrgInfo={setOrgInfo}
+              onNext={next}
+              onBack={back}
+            />
+          )}
+          {step === 2 && (
+            <StepLeaderSurvey
+              responses={leaderResponses}
+              setResponses={setLeaderResponses}
+              onNext={next}
+              onBack={back}
+            />
+          )}
+          {step === 3 && (
+            <StepMembers
+              members={members}
+              setMembers={setMembers}
+              onNext={next}
+              onBack={back}
+            />
+          )}
+          {step === 4 && (
+            <StepSending
+              orgInfo={orgInfo}
+              leaderResponses={leaderResponses}
+              members={members}
+              assessmentId={assessmentId}
+              setAssessmentId={setAssessmentId}
+              onComplete={handleComplete}
+              onBack={back}
+            />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -11,10 +11,10 @@ const ORG_TYPES = [
 ];
 
 const SIZE_RANGES = [
-  { value: "1-10", label: "1-10 personas" },
-  { value: "11-50", label: "11-50 personas" },
-  { value: "51-200", label: "51-200 personas" },
-  { value: "200+", label: "Más de 200 personas" },
+  { value: "1-10",   label: "1–10 personas" },
+  { value: "11-50",  label: "11–50 personas" },
+  { value: "51-200", label: "51–200 personas" },
+  { value: "200+",   label: "Más de 200" },
 ];
 
 interface Props {
@@ -24,49 +24,46 @@ interface Props {
   onBack: () => void;
 }
 
-export default function StepOrgInfo({
-  orgInfo,
-  setOrgInfo,
-  onNext,
-  onBack,
-}: Props) {
+export default function StepOrgInfo({ orgInfo, setOrgInfo, onNext, onBack }: Props) {
   const valid = orgInfo.name.trim() && orgInfo.type && orgInfo.size_range;
 
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900">Tu organización</h2>
-      <p className="mt-1 text-sm text-gray-500">
+      <h2 className="font-display italic text-2xl text-warm-900">Tu organización</h2>
+      <p className="mt-1.5 text-sm text-warm-500">
         Datos básicos para contextualizar el diagnóstico.
       </p>
 
-      <div className="mt-6 space-y-4">
+      <div className="mt-7 space-y-5">
+        {/* Org name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-warm-900 mb-1.5">
             Nombre de la organización
           </label>
           <input
             type="text"
             value={orgInfo.name}
             onChange={(e) => setOrgInfo({ ...orgInfo, name: e.target.value })}
-            className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+            className="block w-full rounded-md border border-warm-300 bg-white px-3 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             placeholder="Mi empresa"
           />
         </div>
 
+        {/* Org type */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-warm-900 mb-2">
             Tipo
           </label>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {ORG_TYPES.map((t) => (
               <button
                 key={t.value}
                 type="button"
                 onClick={() => setOrgInfo({ ...orgInfo, type: t.value })}
-                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors text-left ${
                   orgInfo.type === t.value
-                    ? "border-brand-600 bg-brand-50 text-brand-700 font-medium"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                    ? "border-accent bg-accent/8 text-accent"
+                    : "border-warm-200 bg-white text-warm-700 hover:border-warm-300 hover:bg-warm-50"
                 }`}
               >
                 {t.label}
@@ -75,22 +72,21 @@ export default function StepOrgInfo({
           </div>
         </div>
 
+        {/* Size range */}
         <div>
-          <label className="block text-sm font-medium text-gray-700">
+          <label className="block text-sm font-medium text-warm-900 mb-2">
             Tamaño aproximado
           </label>
-          <div className="mt-2 grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {SIZE_RANGES.map((s) => (
               <button
                 key={s.value}
                 type="button"
-                onClick={() =>
-                  setOrgInfo({ ...orgInfo, size_range: s.value })
-                }
-                className={`rounded-lg border px-3 py-2 text-sm transition-colors ${
+                onClick={() => setOrgInfo({ ...orgInfo, size_range: s.value })}
+                className={`rounded-md border px-3 py-2 text-sm font-medium transition-colors text-left ${
                   orgInfo.size_range === s.value
-                    ? "border-brand-600 bg-brand-50 text-brand-700 font-medium"
-                    : "border-gray-200 bg-white text-gray-700 hover:border-gray-300"
+                    ? "border-accent bg-accent/8 text-accent"
+                    : "border-warm-200 bg-white text-warm-700 hover:border-warm-300 hover:bg-warm-50"
                 }`}
               >
                 {s.label}
@@ -103,7 +99,7 @@ export default function StepOrgInfo({
       <div className="mt-8 flex items-center justify-between">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          className="inline-flex items-center gap-1 text-sm font-medium text-warm-500 hover:text-warm-900 transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
           Atrás
@@ -111,7 +107,7 @@ export default function StepOrgInfo({
         <button
           onClick={onNext}
           disabled={!valid}
-          className="inline-flex items-center gap-2 rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-40 transition-colors"
+          className="inline-flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-40 transition-colors"
         >
           Siguiente
           <ArrowRight className="h-4 w-4" />

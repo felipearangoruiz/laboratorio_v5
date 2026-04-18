@@ -36,9 +36,6 @@ export default function LoginPage() {
       const data = await res.json();
       localStorage.setItem("access_token", data.access_token);
 
-      // Fetch user profile to decide where to send them. Premium flow:
-      //   - user con organization_id → /org/{id}/canvas
-      //   - user sin organization_id → /register (completar datos de org)
       try {
         const meRes = await fetch(`${API_BASE}/auth/me`, {
           headers: { Authorization: `Bearer ${data.access_token}` },
@@ -56,8 +53,6 @@ export default function LoginPage() {
       } catch {
         // si falla /me por cualquier razón, caemos al canvas genérico
       }
-      // Fallback defensivo: el canvas lee la org del user via useAuth, así que
-      // empujar a una ruta canvas con placeholder también funciona.
       router.push("/org/me/canvas");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al iniciar sesión");
@@ -67,74 +62,83 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center bg-warm-50 px-4">
       <div className="w-full max-w-sm">
-        <div className="text-center">
-          <h1 className="text-xl font-semibold text-gray-900">
-            Iniciar sesión
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Accede a tu diagnóstico organizacional
-          </p>
+        {/* Logo */}
+        <div className="mb-8 text-center">
+          <Link href="/" className="font-display italic text-2xl text-warm-900">
+            Laboratorio
+          </Link>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-          {error && (
-            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
-              {error}
+        <div className="rounded-lg border border-warm-200 bg-white p-8 shadow-warm-sm">
+          <div className="mb-6">
+            <h1 className="font-display italic text-2xl text-warm-900">
+              Iniciar sesión
+            </h1>
+            <p className="mt-1 text-sm text-warm-500">
+              Accede a tu diagnóstico organizacional
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-warm-900 mb-1.5"
+              >
+                Correo electrónico
+              </label>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="block w-full rounded-md border border-warm-300 bg-white px-3 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                placeholder="tu@correo.com"
+              />
             </div>
-          )}
 
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-warm-900 mb-1.5"
+              >
+                Contraseña
+              </label>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full rounded-md border border-warm-300 bg-white px-3 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"
             >
-              Correo electrónico
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
-              placeholder="tu@correo.com"
-            />
-          </div>
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              Iniciar sesión
+            </button>
+          </form>
+        </div>
 
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
-          >
-            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Iniciar sesión
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-warm-500">
           ¿No tienes cuenta?{" "}
           <Link
             href="/register"
-            className="font-medium text-brand-600 hover:text-brand-700"
+            className="font-medium text-accent hover:text-accent-hover"
           >
             Regístrate gratis
           </Link>

@@ -22,16 +22,10 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // Register — el backend crea User + Organization en una sola llamada
       const regRes = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          email,
-          password,
-          org_name: orgName,
-        }),
+        body: JSON.stringify({ name, email, password, org_name: orgName }),
       });
 
       if (!regRes.ok) {
@@ -42,7 +36,6 @@ export default function RegisterPage() {
       const regData = await regRes.json();
       const organizationId: string | undefined = regData.organization_id;
 
-      // Auto-login para guardar el access_token
       const loginBody = new URLSearchParams({ username: email, password });
       const loginRes = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
@@ -56,12 +49,9 @@ export default function RegisterPage() {
         localStorage.setItem("access_token", data.access_token);
       }
 
-      // Redirigir al canvas premium — el useAuth hook protege la ruta.
       if (organizationId) {
         router.push(`/org/${organizationId}/canvas`);
       } else {
-        // Caso raro: registro exitoso pero sin org id en la respuesta.
-        // El canvas igual lee la org del user autenticado via /auth/me.
         router.push("/org/me/canvas");
       }
     } catch (err) {
@@ -72,111 +62,83 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center bg-warm-50 px-4 py-12">
       <div className="w-full max-w-sm">
-        <div className="text-center">
-          <h1 className="text-xl font-semibold text-gray-900">Crear cuenta</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Conoce cómo está tu organización en 10 minutos
-          </p>
+        {/* Logo */}
+        <div className="mb-8 text-center">
+          <Link href="/" className="font-display italic text-2xl text-warm-900">
+            Laboratorio
+          </Link>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-          {error && (
-            <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600">
-              {error}
+        <div className="rounded-lg border border-warm-200 bg-white p-8 shadow-warm-sm">
+          <div className="mb-6">
+            <h1 className="font-display italic text-2xl text-warm-900">
+              Crear cuenta
+            </h1>
+            <p className="mt-1 text-sm text-warm-500">
+              Conoce cómo está tu organización en 10 minutos
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="rounded-md bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-200">
+                {error}
+              </div>
+            )}
+
+            {[
+              { id: "name",    label: "Tu nombre",              type: "text",     value: name,    setter: setName,    placeholder: "Tu nombre" },
+              { id: "orgName", label: "Nombre de la organización", type: "text", value: orgName, setter: setOrgName, placeholder: "Ej: Specialized Colombia" },
+              { id: "email",   label: "Correo electrónico",     type: "email",    value: email,   setter: setEmail,   placeholder: "tu@correo.com" },
+            ].map((f) => (
+              <div key={f.id}>
+                <label htmlFor={f.id} className="block text-sm font-medium text-warm-900 mb-1.5">
+                  {f.label}
+                </label>
+                <input
+                  id={f.id}
+                  type={f.type}
+                  required
+                  value={f.value}
+                  onChange={(e) => f.setter(e.target.value)}
+                  className="block w-full rounded-md border border-warm-300 bg-white px-3 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                  placeholder={f.placeholder}
+                />
+              </div>
+            ))}
+
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-warm-900 mb-1.5">
+                Contraseña
+              </label>
+              <input
+                id="password"
+                type="password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="block w-full rounded-md border border-warm-300 bg-white px-3 py-2.5 text-sm text-warm-900 placeholder:text-warm-400 focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                placeholder="Mínimo 8 caracteres"
+              />
             </div>
-          )}
 
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-gray-700"
+            <button
+              type="submit"
+              disabled={loading}
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-accent px-4 py-2.5 text-sm font-semibold text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"
             >
-              Tu nombre
-            </label>
-            <input
-              id="name"
-              type="text"
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
-              placeholder="Tu nombre"
-            />
-          </div>
+              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+              Crear cuenta
+            </button>
+          </form>
+        </div>
 
-          <div>
-            <label
-              htmlFor="orgName"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Nombre de la organización
-            </label>
-            <input
-              id="orgName"
-              type="text"
-              required
-              value={orgName}
-              onChange={(e) => setOrgName(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
-              placeholder="Ej: Specialized Colombia"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Correo electrónico
-            </label>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
-              placeholder="tu@correo.com"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-gray-700"
-            >
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
-              placeholder="Mínimo 8 caracteres"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50 transition-colors"
-          >
-            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-            Crear cuenta
-          </button>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-500">
+        <p className="mt-6 text-center text-sm text-warm-500">
           ¿Ya tienes cuenta?{" "}
-          <Link
-            href="/login"
-            className="font-medium text-brand-600 hover:text-brand-700"
-          >
+          <Link href="/login" className="font-medium text-accent hover:text-accent-hover">
             Iniciar sesión
           </Link>
         </p>
