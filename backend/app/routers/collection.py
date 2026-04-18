@@ -205,6 +205,24 @@ def collection_status(
         and completed >= THRESHOLD_MIN_INTERVIEWS
     )
 
+    # Per-node interview status (highest-priority status wins)
+    # Priority: completed > in_progress > pending > expired > none
+    STATUS_PRIORITY: dict[str, int] = {
+        "completed": 4,
+        "in_progress": 3,
+        "pending": 2,
+        "expired": 1,
+    }
+    node_statuses: dict[str, str] = {}
+    for m in members:
+        if m.group_id is None:
+            continue
+        node_id_str = str(m.group_id)
+        current_priority = STATUS_PRIORITY.get(node_statuses.get(node_id_str, ""), 0)
+        new_priority = STATUS_PRIORITY.get(m.token_status.value, 0)
+        if new_priority > current_priority:
+            node_statuses[node_id_str] = m.token_status.value
+
     return {
         "total_nodes": total_nodes,
         "total_members": total_members,
@@ -213,6 +231,7 @@ def collection_status(
         "nodes_with_interview": nodes_with_interview,
         "threshold_percent": round(threshold_percent, 1),
         "threshold_met": threshold_met,
+        "node_statuses": node_statuses,
     }
 
 
