@@ -1,0 +1,35 @@
+# Entorno virtual del host — Docker reinstala con uv
+.venv
+venv
+
+# Caché de Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+
+# Version control
+.git
+.gitignore
+
+# Entornos locales — secrets
+.env
+.env.local
+
+# macOS / editor
+.DS_Store
+.vscode
+.idea
+
+# Artefactos de testing / coverage
+coverage
+.coverage
+htmlcov
+
+# Docker
+Dockerfile
+.dockerignore

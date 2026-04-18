@@ -1,0 +1,37 @@
+# Dependencias reinstaladas dentro del contenedor por `npm ci`
+node_modules
+npm-debug.log
+
+# Build artifacts del host — no deben entrar al contexto
+.next
+out
+build
+
+# Archivos de caché y logs
+.turbo
+.swc
+*.tsbuildinfo
+coverage
+.eslintcache
+
+# Version control
+.git
+.gitignore
+
+# Entornos locales — secrets
+.env
+.env.local
+.env.*.local
+
+# macOS / editor
+.DS_Store
+.vscode
+.idea
+*.swp
+
+# Artefactos de testing
+__tests__/__snapshots__
+
+# Docker
+Dockerfile
+.dockerignore
