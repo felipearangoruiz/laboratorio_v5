@@ -31,11 +31,15 @@ export default function OnboardingPage() {
     type: "",
     size_range: "",
   });
-  // Respuestas del líder (v2 instrument): index numérico para single_select,
-  // string[] para multi_select, string para preguntas abiertas.
-  const [leaderResponses, setLeaderResponses] = useState<
-    Record<string, number | string | string[]>
-  >({});
+  // Respuestas del líder (v2 instrument completo):
+  //   - single_select / numeric_select / scale_1_5: number (índice de opción)
+  //   - multi_select / ranking: string[]
+  //   - text_open / text_short: string
+  //   - numeric_input: number (magnitud)
+  //   - gradient_per_selection: { [item]: { frequency?: number, severity?: number } }
+  const [leaderResponses, setLeaderResponses] = useState<Record<string, any>>(
+    {},
+  );
   const [members, setMembers] = useState<MemberEntry[]>([
     { name: "", role_label: "", email: "" },
     { name: "", role_label: "", email: "" },

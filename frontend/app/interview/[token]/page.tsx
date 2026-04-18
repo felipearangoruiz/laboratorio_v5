@@ -35,38 +35,18 @@ export default function InterviewPage() {
   // Detect interview type
   useEffect(() => {
     async function detect() {
-      // Try free endpoint
+      // Try free endpoint — el backend devuelve ahora el instrumento v2
+      // completo (10 preguntas base + hasta 3 adaptativas seleccionadas
+      // según hipótesis activas en las respuestas del gerente).
       try {
         const data = await getFreeInterview(token);
         setMemberName(data.name);
         if (data.responses) setResponses(data.responses);
         if (data.submitted) setSubmitted(true);
 
-        // Use free subset of v2 questions (employee-facing: E1-E4 equivalent)
-        // For free members, we use the same G1-G4 base structure
-        const freeQuestions: V2Question[] = [
-          {
-            id: "E1", title: "Tiempo del jefe", dimension: "centralizacion",
-            base: { text: "¿Tu jefe dedica su tiempo a decisiones importantes o se la pasa resolviendo cosas del día a día?", type: "single_select", options: ["Se enfoca en lo estratégico", "Hace de todo un poco", "Se la pasa apagando incendios", "No sé en qué se le va el tiempo"] },
-            layers: [],
-          },
-          {
-            id: "E2", title: "Ausencia del jefe", dimension: "centralizacion",
-            base: { text: "Cuando tu jefe no está o no contesta, ¿qué pasa con el trabajo?", type: "single_select", options: ["Todo sigue normal", "Algunas cosas se retrasan", "Varias cosas quedan paradas", "Casi todo se frena", "Nunca pasa, siempre está disponible"] },
-            layers: [],
-          },
-          {
-            id: "E3", title: "Autonomía real", dimension: "centralizacion",
-            base: { text: "¿Cuáles de estas cosas puedes decidir SIN pedirle permiso a tu jefe?", type: "multi_select", options: ["Ofrecer descuentos", "Resolver quejas de clientes", "Compras menores", "Cambiar un proceso", "Contratar ayuda temporal", "Negociar con proveedor", "Ninguna"] },
-            layers: [],
-          },
-          {
-            id: "E4", title: "Cuellos de botella", dimension: "cuellos_botella",
-            base: { text: "¿Dónde se traban las cosas más seguido en tu trabajo?", type: "multi_select", options: ["Aprobaciones que dependen de mi jefe", "Coordinación entre áreas o sedes", "Falta de información", "Falta de herramientas", "Errores y retrabajo", "Proveedores", "Falta de personal", "No se traban"] },
-            layers: [],
-          },
-        ];
-        setQuestions(freeQuestions);
+        if (Array.isArray(data.questions) && data.questions.length > 0) {
+          setQuestions(data.questions);
+        }
         setMode("free");
         setShowWelcome(false);
         setLoading(false);

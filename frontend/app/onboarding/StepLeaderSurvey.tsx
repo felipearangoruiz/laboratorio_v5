@@ -6,13 +6,9 @@ import type { V2Question } from "@/lib/types";
 import { Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import QuestionRenderer, { isBaseAnswered } from "@/components/QuestionRenderer";
 
-type ResponseValue = number | string | string[];
-
 interface Props {
-  responses: Record<string, ResponseValue>;
-  setResponses: React.Dispatch<
-    React.SetStateAction<Record<string, ResponseValue>>
-  >;
+  responses: Record<string, any>;
+  setResponses: React.Dispatch<React.SetStateAction<Record<string, any>>>;
   onNext: () => void;
   onBack: () => void;
 }
