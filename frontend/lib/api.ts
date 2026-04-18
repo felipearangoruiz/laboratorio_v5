@@ -195,7 +195,17 @@ export async function getAssessmentMembers(assessmentId: string) {
   >(`/api/quick-assessment/${assessmentId}/members`);
 }
 
+// ── Free flow: preguntas del instrumento v2 ──────────
+export async function getLeaderQuestions() {
+  return request<{
+    questions: import("./types").V2Question[];
+    dimensions: Record<string, string>;
+  }>("/api/quick-assessment/leader-questions");
+}
+
 // ── Free Member Interview (public, no auth) ─────────
+// Devuelve el estado del miembro + las preguntas a responder (10 base + 3
+// adaptativas seleccionadas según hipótesis del gerente).
 export async function getFreeInterview(token: string) {
   return request<{
     name: string;
@@ -203,20 +213,22 @@ export async function getFreeInterview(token: string) {
     token: string;
     assessment_id: string;
     submitted: boolean;
-    responses: Record<string, number> | null;
+    responses: Record<string, any> | null;
+    questions: import("./types").V2Question[];
+    dimensions: Record<string, string>;
   }>(`/api/quick-assessment/interview/${token}`);
 }
 
 export async function submitFreeInterview(
   token: string,
-  responses: Record<string, number>
+  responses: Record<string, any>,
 ) {
   return request<{ status: string }>(
     `/api/quick-assessment/interview/${token}/submit`,
     {
       method: "POST",
       body: JSON.stringify({ token, responses }),
-    }
+    },
   );
 }
 

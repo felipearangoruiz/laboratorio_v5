@@ -757,21 +757,26 @@ HYPOTHESIS_RULES: dict[str, dict] = {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# SUBCONJUNTO FREE (para flujo sin auth — onboarding)
-# Usa solo las capas base de G1-G4 (gerente) y E1-E4 (empleado)
+# FLUJO FREE (sin auth — onboarding)
+#
+# Según el documento de diseño `instrumento_v2_adaptativo.docx`, el flujo free
+# usa el instrumento COMPLETO:
+#   - Gerente: 13 preguntas base + capas condicionales (gradiente, numérica,
+#     ranking, texto)
+#   - Empleado: 10 preguntas base + capas + 3 preguntas adaptativas
+#     seleccionadas por el sistema según hipótesis detectadas
+#   - 8 dimensiones analizadas
 # ══════════════════════════════════════════════════════════════════════════════
 
-FREE_MANAGER_QUESTION_IDS = ["G1", "G2", "G3", "G4"]
-FREE_EMPLOYEE_QUESTION_IDS = ["E1", "E2", "E3", "E4"]
+# Todo el instrumento es parte del flujo free
+FREE_MANAGER_QUESTIONS = MANAGER_QUESTIONS
+FREE_EMPLOYEE_QUESTIONS = EMPLOYEE_QUESTIONS
 
-FREE_MANAGER_QUESTIONS = [q for q in MANAGER_QUESTIONS if q["id"] in FREE_MANAGER_QUESTION_IDS]
-FREE_EMPLOYEE_QUESTIONS = [q for q in EMPLOYEE_QUESTIONS if q["id"] in FREE_EMPLOYEE_QUESTION_IDS]
+FREE_MANAGER_QUESTION_IDS = {q["id"] for q in FREE_MANAGER_QUESTIONS}
+FREE_EMPLOYEE_QUESTION_IDS = {q["id"] for q in FREE_EMPLOYEE_QUESTIONS}
 
-# Dimensions used in free flow (subset)
-FREE_DIMENSIONS_V2 = {
-    "centralizacion": "Centralización",
-    "cuellos_botella": "Cuellos de botella",
-}
+# Dimensiones completas del instrumento v2 (8)
+FREE_DIMENSIONS_V2 = DIMENSIONS_V2
 
 # All question IDs for validation
 ALL_MANAGER_IDS = {q["id"] for q in MANAGER_QUESTIONS}
@@ -807,4 +812,100 @@ def build_sections(questions: list[dict]) -> list[dict]:
 
 
 MANAGER_SECTIONS = build_sections(MANAGER_QUESTIONS)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SELECTOR ADAPTATIVO
+# Evalúa las respuestas del gerente y selecciona hasta 3 preguntas adaptativas
+# para los empleados, según las hipótesis activas.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _answer_index(value) -> int | None:
+    """Devuelve el índice como int si es un single_select válido."""
+    if isinstance(value, (int, float)):
+        return int(value)
+    return None
+
+
+def _selected_count(value) -> int:
+    """Cuenta elementos en una respuesta multi_select."""
+    if isinstance(value, list):
+        return len(value)
+    return 0
+
+
+def _contains(value, item: str) -> bool:
+    """Verifica si una respuesta multi_select contiene un item."""
+    if isinstance(value, list):
+        return item in value
+    return False
+
+
+def _hypothesis_active(hypothesis_id: str, leader_responses: dict) -> bool:
+    """Evalúa si una hipótesis está activa según las respuestas del gerente."""
+    rule = HYPOTHESIS_RULES.get(hypothesis_id)
+    if not rule:
+        return False
+
+    qid = rule["trigger_question"]
+    answer = leader_responses.get(qid)
+    if answer is None:
+        return False
+
+    # Cada hipótesis tiene su lógica particular basada en el doc del instrumento
+    if hypothesis_id == "centralizacion_oculta":
+        # G2: "todo seguiría normal" = answer_index 0
+        return _answer_index(answer) == 0
+
+    if hypothesis_id == "autonomia_inflada":
+        # G3 multi_select: 5+ áreas delegadas (marca 5 o más opciones)
+        # No cuenta "Ninguna" como delegación real.
+        items = answer if isinstance(answer, list) else []
+        real_delegations = [o for o in items if o != "Ninguna"]
+        return len(real_delegations) >= 5
+
+    if hypothesis_id == "info_no_fluye":
+        # G5 multi_select: NO incluye "Reportes o dashboards"
+        if not isinstance(answer, list):
+            return False
+        return "Reportes o dashboards" not in answer
+
+    if hypothesis_id == "incentivos_ciegos":
+        # G6: "No sé cómo lo percibe mi equipo" = last option
+        return _answer_index(answer) == 4
+
+    if hypothesis_id == "errores_ocultos":
+        # G7: "Me entero tarde o no me entero" = last option
+        return _answer_index(answer) == 4
+
+    if hypothesis_id == "desconexion_financiera":
+        # G11: "No lo sé con certeza" = index 2
+        return _answer_index(answer) == 2
+
+    if hypothesis_id == "restriccion_llega_abajo":
+        # G12: "Varias veces" (2), "Es constante" (3). Excluye "Prefiero no responder" (4)
+        idx = _answer_index(answer)
+        return idx is not None and idx >= 2 and idx != 4
+
+    return False
+
+
+def select_adaptive_questions(
+    leader_responses: dict,
+    max_count: int = 3,
+) -> list[dict]:
+    """Selecciona hasta `max_count` preguntas adaptativas según las hipótesis
+    activas detectadas en las respuestas del gerente.
+
+    Las preguntas se devuelven en el orden que aparecen en ADAPTIVE_QUESTIONS
+    (orden de prioridad definido en el documento de diseño).
+    """
+    activated: list[dict] = []
+    for aq in ADAPTIVE_QUESTIONS:
+        hypothesis_id = aq.get("hypothesis")
+        if hypothesis_id and _hypothesis_active(hypothesis_id, leader_responses):
+            activated.append(aq)
+            if len(activated) >= max_count:
+                break
+    return activated
 EMPLOYEE_SECTIONS = build_sections(EMPLOYEE_QUESTIONS)

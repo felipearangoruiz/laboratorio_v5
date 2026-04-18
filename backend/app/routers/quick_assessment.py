@@ -16,10 +16,28 @@ from app.models.quick_assessment import (
     QuickAssessmentScoreRead,
 )
 from app.questions_instrument_v2 import (
+    ADAPTIVE_QUESTIONS,
     FREE_DIMENSIONS_V2 as FREE_DIMENSIONS,
+    FREE_EMPLOYEE_QUESTIONS,
     FREE_MANAGER_QUESTIONS as FREE_QUESTIONS,
     FREE_MANAGER_QUESTION_IDS,
+    select_adaptive_questions,
 )
+
+
+def _all_valid_ids() -> set[str]:
+    """IDs aceptados en responses: preguntas base + capas + adaptativas + sus capas."""
+    ids: set[str] = set()
+    for q in FREE_QUESTIONS + FREE_EMPLOYEE_QUESTIONS + ADAPTIVE_QUESTIONS:
+        ids.add(q["id"])
+        for layer in q.get("layers", []):
+            lid = layer.get("id")
+            if lid:
+                ids.add(lid)
+    return ids
+
+
+VALID_RESPONSE_IDS = _all_valid_ids()
 
 router = APIRouter()
 
@@ -30,25 +48,45 @@ def _compute_scores(
 ) -> dict:
     """Compute average score per dimension combining leader + member responses.
 
-    v2 instrument: base answers are option indices (0-based).
-    We normalise to a 1-5 scale: index / (num_options - 1) * 4 + 1.
+    Instrumento v2 completo: cruza preguntas del gerente (G*), empleado (E*) y
+    adaptativas (A*), así como las capas numéricas (numeric_select, scale_1_5).
+    Los tipos categóricos (multi_select, text) no aportan al score cuantitativo
+    pero sí se capturan para el análisis narrativo.
+
+    Normalización: índice de opción (0-based) → escala 1-5 vía
+    (idx / (num_options - 1)) * 4 + 1.
     """
     dimension_scores: dict[str, list[float]] = {dim: [] for dim in FREE_DIMENSIONS}
 
-    # Map question_id → (dimension, num_options)
-    q_meta = {}
-    for q in FREE_QUESTIONS:
+    # Construir metadata de todas las preguntas y capas del instrumento free
+    # q_meta: id → (dimension, num_options, type)
+    all_questions = FREE_QUESTIONS + FREE_EMPLOYEE_QUESTIONS + ADAPTIVE_QUESTIONS
+    q_meta: dict[str, tuple[str, int, str]] = {}
+    for q in all_questions:
+        base_type = q["base"].get("type", "")
         num_opts = len(q["base"].get("options", [])) or 5
-        q_meta[q["id"]] = (q["dimension"], num_opts)
+        q_meta[q["id"]] = (q["dimension"], num_opts, base_type)
+        for layer in q.get("layers", []):
+            lid = layer.get("id")
+            if lid:
+                q_meta[lid] = (
+                    q["dimension"],
+                    len(layer.get("options", [])) or 5,
+                    layer.get("type", ""),
+                )
+
+    # Tipos que aportan score numérico (índice de opción → escala 1-5)
+    SCORABLE_TYPES = {"single_select", "numeric_select", "scale_1_5"}
 
     def _add_responses(responses: dict) -> None:
         for qid, val in responses.items():
             meta = q_meta.get(qid)
             if not meta:
                 continue
-            dim, num_opts = meta
+            dim, num_opts, qtype = meta
+            if qtype not in SCORABLE_TYPES:
+                continue
             if isinstance(val, (int, float)):
-                # Normalise option index (0-based) to 1-5 scale
                 normalised = (float(val) / max(num_opts - 1, 1)) * 4 + 1
                 dimension_scores[dim].append(normalised)
 
@@ -68,17 +106,37 @@ def _compute_scores(
 
 # ── Public endpoints (no auth) — MUST come before /{assessment_id} routes ──
 
+@router.get("/leader-questions")
+def get_leader_questions() -> dict:
+    """Public endpoint — no auth. Devuelve las 13 preguntas del gerente del
+    instrumento v2 completo (flujo free). Se usa en el onboarding."""
+    return {
+        "questions": FREE_QUESTIONS,
+        "dimensions": FREE_DIMENSIONS,
+    }
+
+
 @router.get("/interview/{token}")
 def get_member_interview(
     token: str,
     session: Session = Depends(get_session),
 ) -> dict:
-    """Public endpoint — no auth. Fetch interview state for a member by token."""
+    """Public endpoint — no auth. Fetch interview state for a member by token.
+
+    Devuelve las 10 preguntas base del empleado + hasta 3 preguntas adaptativas
+    seleccionadas según las hipótesis activas detectadas en las respuestas
+    del gerente (instrumento v2 completo — flujo free).
+    """
     member = session.exec(
         select(QuickAssessmentMember).where(QuickAssessmentMember.token == token)
     ).first()
     if not member:
         raise HTTPException(status_code=404, detail="Invalid interview link")
+
+    # Cargar el assessment del líder para seleccionar las preguntas adaptativas
+    assessment = session.get(QuickAssessment, member.assessment_id)
+    leader_responses = assessment.leader_responses if assessment else {}
+    adaptive = select_adaptive_questions(leader_responses, max_count=3)
 
     return {
         "name": member.name,
@@ -87,6 +145,9 @@ def get_member_interview(
         "assessment_id": str(member.assessment_id),
         "submitted": member.submitted_at is not None,
         "responses": member.responses,
+        # Preguntas que el miembro debe responder: 10 base + 3 adaptativas
+        "questions": FREE_EMPLOYEE_QUESTIONS + adaptive,
+        "dimensions": FREE_DIMENSIONS,
     }
 
 
@@ -105,9 +166,8 @@ def submit_member_interview(
     if member.submitted_at is not None:
         raise HTTPException(status_code=400, detail="Already submitted")
 
-    valid_ids = FREE_MANAGER_QUESTION_IDS | {q["id"] for q in FREE_QUESTIONS}
     for qid in body.responses:
-        if qid not in valid_ids:
+        if qid not in VALID_RESPONSE_IDS:
             raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
 
     member.responses = body.responses
@@ -203,9 +263,8 @@ def respond_member(
     if member.submitted_at is not None:
         raise HTTPException(status_code=400, detail="Already submitted")
 
-    valid_ids = FREE_MANAGER_QUESTION_IDS | {q["id"] for q in FREE_QUESTIONS}
     for qid in body.responses:
-        if qid not in valid_ids:
+        if qid not in VALID_RESPONSE_IDS:
             raise HTTPException(status_code=400, detail=f"Invalid question: {qid}")
 
     member.responses = body.responses

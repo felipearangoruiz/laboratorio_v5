@@ -3,7 +3,13 @@
 import { useEffect, useState } from "react";
 import type { MemberEntry, OrgInfo } from "./page";
 import { ApiError, createQuickAssessment, inviteMembers } from "@/lib/api";
-import { ArrowLeft, Check, Loader2, AlertCircle } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Check,
+  Loader2,
+} from "lucide-react";
 
 interface Props {
   orgInfo: OrgInfo;
