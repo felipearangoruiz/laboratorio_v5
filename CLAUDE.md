@@ -62,6 +62,22 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 5. **Sidebar mínimo izquierdo (colapsable):** solo para settings, billing, documentos, selector de org, cuenta.
 6. **Diagnóstico narrativo:** panel expandido lateral derecho (60-70% viewport), canvas visible en segundo plano.
 
+### Comportamiento por capa (fuente de verdad)
+
+**CAPA ESTRUCTURA:**
+- El admin construye el mapa organizacional y caracteriza cada nodo.
+- Cada nodo tiene: nombre, rol/cargo, área, email del miembro asignado, contexto libre, descripción.
+- El email se ingresa **UNA SOLA VEZ aquí** — es la persona que responderá la entrevista por ese nodo.
+- También desde esta capa el admin puede subir documentos institucionales (estatutos, misión, manuales) que alimentarán el análisis de IA.
+- El panel lateral en esta capa muestra: formulario de edición completo del nodo + campo de email + campo de contexto.
+
+**CAPA RECOLECCIÓN:**
+- Muestra el **MISMO grafo de Estructura** pero en modo lectura de estado.
+- El admin **NO recaracteriza nada aquí** — la estructura ya está definida.
+- El panel lateral muestra: estado de la entrevista (sin invitar / invitado / en progreso / completado / vencido), el link copiable para compartir, botón WhatsApp, fecha de respuesta si aplica.
+- El sistema usa el email guardado en Estructura para generar el token automáticamente — no se pide email de nuevo.
+- Los nodos sin email asignado muestran un aviso "Asigna un email en Estructura para invitar".
+
 ### Antipatrones prohibidos
 
 - ❌ Sidebar con secciones "Grupos", "Miembros", "Entrevistas", "Resultados"
