@@ -35,7 +35,30 @@ export default function LoginPage() {
 
       const data = await res.json();
       localStorage.setItem("access_token", data.access_token);
-      router.push("/onboarding");
+
+      // Fetch user profile to decide where to send them. Premium flow:
+      //   - user con organization_id → /org/{id}/canvas
+      //   - user sin organization_id → /register (completar datos de org)
+      try {
+        const meRes = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${data.access_token}` },
+          credentials: "include",
+        });
+        if (meRes.ok) {
+          const me = await meRes.json();
+          if (me.organization_id) {
+            router.push(`/org/${me.organization_id}/canvas`);
+            return;
+          }
+          router.push("/register");
+          return;
+        }
+      } catch {
+        // si falla /me por cualquier razón, caemos al canvas genérico
+      }
+      // Fallback defensivo: el canvas lee la org del user via useAuth, así que
+      // empujar a una ruta canvas con placeholder también funciona.
+      router.push("/org/me/canvas");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al iniciar sesión");
     } finally {

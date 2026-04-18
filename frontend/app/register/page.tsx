@@ -10,6 +10,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [orgName, setOrgName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -21,11 +22,16 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      // Register
+      // Register — el backend crea User + Organization en una sola llamada
       const regRes = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          org_name: orgName,
+        }),
       });
 
       if (!regRes.ok) {
@@ -33,7 +39,10 @@ export default function RegisterPage() {
         throw new Error(data.detail ?? "Error al registrarse");
       }
 
-      // Auto-login
+      const regData = await regRes.json();
+      const organizationId: string | undefined = regData.organization_id;
+
+      // Auto-login para guardar el access_token
       const loginBody = new URLSearchParams({ username: email, password });
       const loginRes = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
@@ -47,7 +56,14 @@ export default function RegisterPage() {
         localStorage.setItem("access_token", data.access_token);
       }
 
-      router.push("/onboarding");
+      // Redirigir al canvas premium — el useAuth hook protege la ruta.
+      if (organizationId) {
+        router.push(`/org/${organizationId}/canvas`);
+      } else {
+        // Caso raro: registro exitoso pero sin org id en la respuesta.
+        // El canvas igual lee la org del user autenticado via /auth/me.
+        router.push("/org/me/canvas");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al registrarse");
     } finally {
@@ -77,7 +93,7 @@ export default function RegisterPage() {
               htmlFor="name"
               className="block text-sm font-medium text-gray-700"
             >
-              Nombre
+              Tu nombre
             </label>
             <input
               id="name"
@@ -87,6 +103,24 @@ export default function RegisterPage() {
               onChange={(e) => setName(e.target.value)}
               className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
               placeholder="Tu nombre"
+            />
+          </div>
+
+          <div>
+            <label
+              htmlFor="orgName"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Nombre de la organización
+            </label>
+            <input
+              id="orgName"
+              type="text"
+              required
+              value={orgName}
+              onChange={(e) => setOrgName(e.target.value)}
+              className="mt-1 block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:ring-brand-500"
+              placeholder="Ej: Specialized Colombia"
             />
           </div>
 
