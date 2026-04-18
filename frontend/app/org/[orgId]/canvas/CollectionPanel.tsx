@@ -113,18 +113,18 @@ export default function CollectionPanel({
   };
 
   return (
-    <div className="absolute top-0 right-0 h-full w-80 bg-white border-l border-gray-200 shadow-lg z-10 flex flex-col">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900">{nodeName}</h3>
-          <p className="text-xs text-gray-500">Recolección</p>
+    <div className="absolute top-0 right-0 h-full w-80 bg-warm-50 border-l border-warm-200 shadow-warm-md z-10 flex flex-col">
+      <div className="flex items-start justify-between px-5 py-4 border-b border-warm-200 bg-white">
+        <div className="flex-1 min-w-0 pr-2">
+          <h3 className="font-display italic text-lg text-warm-900 leading-tight truncate">{nodeName}</h3>
+          <p className="text-xs text-warm-500 mt-0.5">Recolección</p>
         </div>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+        <button onClick={onClose} className="text-warm-400 hover:text-warm-700 flex-shrink-0 mt-0.5">
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
         {error && (
           <div className="p-2 text-xs text-red-700 bg-red-50 rounded-lg">{error}</div>
         )}
@@ -233,11 +233,11 @@ export default function CollectionPanel({
         )}
       </div>
 
-      <div className="px-4 py-3 border-t border-gray-100">
+      <div className="px-5 py-4 border-t border-warm-200 bg-white">
         {!showInviteForm && (
           <button
             onClick={() => setShowInviteForm(true)}
-            className="w-full inline-flex items-center justify-center gap-1.5 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
+            className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 bg-accent text-white text-sm font-semibold rounded-md hover:bg-accent-hover transition-colors"
           >
             <Send className="w-3.5 h-3.5" />
             Invitar miembro

@@ -12,79 +12,99 @@ export interface OrgNodeData {
   memberCount: number;
   level: number | null;
   nodeType: "person" | "area";
-  interviewStatus?: "none" | "invited" | "in_progress" | "completed" | "expired";
+  contextNotes?: string | null;
+  interviewStatus?: "none" | "invited" | "in_progress" | "completed" | "expired" | "pending";
   activeLayer?: string;
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  none: "border-gray-200",
-  invited: "border-blue-400 border-dashed",
-  in_progress: "border-blue-500",
-  completed: "border-emerald-500",
-  expired: "border-orange-400",
+// Dot color for interview status (shown only in recoleccion layer)
+const STATUS_DOT: Record<string, string> = {
+  pending:     "bg-blue-400",
+  invited:     "bg-blue-400",
+  in_progress: "bg-blue-500 animate-pulse",
+  completed:   "bg-emerald-500",
+  expired:     "bg-orange-400",
 };
 
-const STATUS_DOT: Record<string, string> = {
-  invited: "bg-blue-400",
-  in_progress: "bg-blue-500 animate-pulse",
-  completed: "bg-emerald-500",
-  expired: "bg-orange-400",
+// Border accent for status (replaces default gray border)
+const STATUS_BORDER: Record<string, string> = {
+  pending:     "border-blue-300",
+  invited:     "border-blue-300 border-dashed",
+  in_progress: "border-blue-400",
+  completed:   "border-emerald-400",
+  expired:     "border-orange-300",
 };
 
 function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
   const showStatus = data.activeLayer === "recoleccion";
   const status = data.interviewStatus || "none";
-  const borderClass = showStatus ? STATUS_STYLES[status] : "border-gray-200";
   const isPerson = data.nodeType === "person";
+
+  const borderClass = selected
+    ? "border-[#C2410C] border-2 shadow-[0_0_0_3px_rgba(194,65,12,0.15)]"
+    : showStatus && status !== "none"
+    ? `${STATUS_BORDER[status]} border-[1.5px]`
+    : "border-[#D4D0C8] border-[1.5px] hover:border-[#A8A29E]";
 
   return (
     <div
-      className={`px-4 py-3 bg-white border-2 rounded-xl shadow-sm min-w-[160px] transition-colors ${
-        selected ? "border-gray-900 shadow-md" : borderClass + " hover:border-gray-400"
-      }`}
+      className={`bg-white rounded-[6px] px-4 py-3 min-w-[160px] transition-all ${borderClass}`}
+      style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.18)" }}
     >
       <Handle
         type="target"
         position={Position.Top}
-        className="!w-3 !h-3 !bg-gray-400 !border-2 !border-white"
+        className="!w-2.5 !h-2.5 !bg-[#6b7280] !border-2 !border-[#0D0D14]"
       />
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
+        {/* Icon */}
         <div className="flex-shrink-0">
           {isPerson ? (
-            <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
-              <User className="w-3.5 h-3.5 text-gray-500" />
+            <div className="w-7 h-7 rounded-full bg-warm-100 flex items-center justify-center">
+              <User className="w-3.5 h-3.5 text-warm-500" strokeWidth={1.5} />
             </div>
           ) : (
-            <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
-              <Users className="w-3.5 h-3.5 text-blue-600" />
+            <div className="w-7 h-7 rounded-md bg-accent/10 flex items-center justify-center">
+              <Users className="w-3.5 h-3.5 text-accent" strokeWidth={1.5} />
             </div>
           )}
         </div>
+
+        {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-gray-900 truncate">
+          <div className="text-sm font-semibold text-warm-900 truncate leading-tight">
             {data.label}
           </div>
           {isPerson && data.role && (
-            <div className="text-xs text-gray-500 truncate">{data.role}</div>
+            <div className="text-[11px] text-warm-500 truncate mt-0.5 leading-tight">
+              {data.role}
+            </div>
           )}
         </div>
+
+        {/* Status dot — top-right, only in recoleccion */}
         {showStatus && status !== "none" && (
-          <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${STATUS_DOT[status]}`} />
+          <div
+            className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[status] ?? "bg-warm-400"}`}
+          />
         )}
       </div>
 
-      {!isPerson && data.memberCount > 0 && (
-        <div className="mt-1.5 flex items-center gap-1 text-xs text-gray-400">
-          <Users className="w-3 h-3" />
-          {data.memberCount} miembro{data.memberCount !== 1 ? "s" : ""}
+      {/* Area badge */}
+      {!isPerson && data.area && (
+        <div className="mt-2">
+          <span className="inline-block px-2 py-0.5 text-[10px] font-medium bg-accent/8 text-accent rounded-full">
+            {data.area}
+          </span>
         </div>
       )}
 
-      {data.area && (
-        <div className="mt-1.5">
-          <span className="inline-block px-2 py-0.5 text-[10px] font-medium bg-blue-50 text-blue-700 rounded-full">
-            {data.area}
+      {/* Member count pill */}
+      {!isPerson && data.memberCount > 0 && (
+        <div className="mt-1.5 flex items-center gap-1">
+          <span className="text-[10px] text-warm-400">
+            {data.memberCount} miembro{data.memberCount !== 1 ? "s" : ""}
           </span>
         </div>
       )}
@@ -92,7 +112,7 @@ function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
       <Handle
         type="source"
         position={Position.Bottom}
-        className="!w-3 !h-3 !bg-gray-400 !border-2 !border-white"
+        className="!w-2.5 !h-2.5 !bg-[#6b7280] !border-2 !border-[#0D0D14]"
       />
     </div>
   );

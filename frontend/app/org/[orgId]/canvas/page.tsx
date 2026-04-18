@@ -339,8 +339,8 @@ export default function CanvasPage() {
 
   if (authLoading || loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50">
-        <div className="w-8 h-8 border-2 border-gray-300 border-t-gray-900 rounded-full animate-spin" />
+      <div className="h-screen flex items-center justify-center" style={{ background: "#0D0D14" }}>
+        <div className="w-8 h-8 border-2 border-white/10 border-t-white/60 rounded-full animate-spin" />
       </div>
     );
   }
@@ -350,7 +350,7 @@ export default function CanvasPage() {
     : null;
 
   return (
-    <div className="h-screen flex overflow-hidden bg-gray-50">
+    <div className="h-screen flex overflow-hidden" style={{ background: "#0D0D14" }}>
       <Sidebar
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
@@ -386,6 +386,7 @@ export default function CanvasPage() {
               edges={edges}
               onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
+              style={{ background: "#0D0D14" }}
               onConnect={activeLayer === "estructura" ? onConnect : undefined}
               onNodeDragStop={onNodeDragStop}
               onNodeClick={onNodeClick}
@@ -398,7 +399,7 @@ export default function CanvasPage() {
               nodesDraggable={true}
               connectOnClick={activeLayer === "estructura"}
             >
-              <Background color="#e2e8f0" gap={20} />
+              <Background color="#1a1a2a" gap={28} />
               <Controls showInteractive={false} />
             </ReactFlow>
           )}
@@ -408,26 +409,27 @@ export default function CanvasPage() {
             <div className="absolute bottom-6 right-6 z-20">
               <div className="relative">
                 {showNodeTypeSelector && (
-                  <div className="absolute bottom-14 right-0 bg-white rounded-xl shadow-lg border border-gray-200 py-2 w-48">
+                  <div className="absolute bottom-14 right-0 rounded-lg border border-white/10 bg-[#1a1a2a] py-2 w-48 shadow-canvas">
                     <button
                       onClick={() => createNodeOfType("person")}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/6 text-left transition-colors"
                     >
-                      <User className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm text-gray-700">Persona</span>
+                      <User className="w-4 h-4 text-white/50" strokeWidth={1.5} />
+                      <span className="text-sm text-white/70">Persona</span>
                     </button>
                     <button
                       onClick={() => createNodeOfType("area")}
-                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 text-left"
+                      className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-white/6 text-left transition-colors"
                     >
-                      <Users className="w-4 h-4 text-gray-500" />
-                      <span className="text-sm text-gray-700">Área</span>
+                      <Users className="w-4 h-4 text-white/50" strokeWidth={1.5} />
+                      <span className="text-sm text-white/70">Área</span>
                     </button>
                   </div>
                 )}
                 <button
                   onClick={() => handleAddNode()}
-                  className="w-12 h-12 bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-gray-800 transition-colors"
+                  className="w-12 h-12 bg-accent text-white rounded-full flex items-center justify-center hover:bg-accent-hover transition-all hover:scale-105 active:scale-95"
+                  style={{ boxShadow: "0 4px 20px rgba(194,65,12,0.45)" }}
                   title="Agregar nodo"
                 >
                   <Plus className="w-5 h-5" />
