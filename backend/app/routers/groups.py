@@ -43,6 +43,7 @@ class GroupUpdate(BaseModel):
     parent_group_id: UUID | None = None
     position_x: float | None = None
     position_y: float | None = None
+    context_notes: str | None = None
 
 
 class GroupTreeNode(BaseModel):
@@ -59,6 +60,7 @@ class GroupTreeNode(BaseModel):
     tipo_nivel: str | None
     position_x: float
     position_y: float
+    context_notes: str | None
     is_default: bool
     member_count: int
     children: list["GroupTreeNode"]
@@ -295,6 +297,7 @@ def get_organization_groups_tree(
                     "tipo_nivel": group.tipo_nivel,
                     "position_x": group.position_x,
                     "position_y": group.position_y,
+                    "context_notes": group.context_notes,
                     "is_default": group.is_default,
                     "member_count": member_counts.get(group.id, 0),
                     "children": build(group.id),

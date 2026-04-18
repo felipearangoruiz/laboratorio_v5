@@ -363,6 +363,7 @@ export async function getCollectionStatus(orgId: string) {
     nodes_with_interview: number;
     threshold_percent: number;
     threshold_met: boolean;
+    node_statuses: Record<string, string>;
   }>(`/organizations/${orgId}/collection/status`);
 }
 

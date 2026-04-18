@@ -50,6 +50,7 @@ interface GroupData {
   email: string;
   area: string;
   tarea_general: string;
+  context_notes: string | null;
   nivel_jerarquico: number | null;
   position_x: number;
   position_y: number;
@@ -89,6 +90,7 @@ function treeToFlow(
       memberCount: g.member_count,
       level: g.nivel_jerarquico,
       nodeType: g.node_type || "area",
+      contextNotes: g.context_notes ?? null,
       activeLayer,
       interviewStatus: nodeStatuses[g.id] || "none",
     },
@@ -171,6 +173,7 @@ export default function CanvasPage() {
       ]);
       if (collStatus.status === "fulfilled") {
         setThresholdMet(collStatus.value.threshold_met);
+        setNodeStatuses(collStatus.value.node_statuses ?? {});
       }
       if (diag.status === "fulfilled" && diag.value && diag.value.status === "completed") {
         setDiagnosis(diag.value);
@@ -284,6 +287,7 @@ export default function CanvasPage() {
           memberCount: 0,
           level: newNode.nivel_jerarquico,
           nodeType: newNode.node_type || nodeType,
+          contextNotes: null,
           activeLayer,
           interviewStatus: "none",
         },
@@ -330,6 +334,7 @@ export default function CanvasPage() {
   function handleCollectionChanged() {
     setCollectionRefreshKey((k) => k + 1);
     loadGroups();
+    loadMeta();
   }
 
   if (authLoading || loading) {

@@ -43,6 +43,7 @@ class Group(SQLModel, table=True):
     tipo_nivel: str | None = Field(default=None, max_length=255)
     position_x: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default="0"))
     position_y: float = Field(default=0.0, sa_column=Column(Float, nullable=False, server_default="0"))
+    context_notes: str | None = Field(default=None, nullable=True)
     is_default: bool = Field(default=False, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -64,5 +65,6 @@ class GroupRead(SQLModel):
     tipo_nivel: str | None
     position_x: float
     position_y: float
+    context_notes: str | None
     is_default: bool
     created_at: datetime

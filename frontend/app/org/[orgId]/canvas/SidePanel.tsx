@@ -20,6 +20,7 @@ interface SidePanelProps {
     email: string;
     level: number | null;
     nodeType: "person" | "area";
+    contextNotes?: string | null;
   };
   onUpdate: (nodeId: string, data: Record<string, any>) => Promise<void>;
   onDelete: (nodeId: string) => Promise<void>;
@@ -43,6 +44,8 @@ export default function SidePanel({
   const [email, setEmail] = useState(data.email || "");
   const [area, setArea] = useState(data.area);
   const [description, setDescription] = useState("");
+  const [contextNotes, setContextNotes] = useState(data.contextNotes ?? "");
+  const [savingContext, setSavingContext] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -59,6 +62,7 @@ export default function SidePanel({
     setRole(data.role);
     setEmail(data.email || "");
     setArea(data.area);
+    setContextNotes(data.contextNotes ?? "");
     setConfirmDelete(false);
     setTab("info");
   }, [nodeId, data]);
@@ -88,6 +92,27 @@ export default function SidePanel({
   useEffect(() => {
     if (!isPerson) loadMembers();
   }, [loadMembers, isPerson]);
+
+  async function handleContextNotesBlur() {
+    // Autosave context_notes when the textarea loses focus
+    if (contextNotes === (data.contextNotes ?? "")) return; // no change
+    setSavingContext(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/groups/${nodeId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ context_notes: contextNotes || null }),
+        }
+      );
+    } catch { /* ignore — non-critical */ }
+    setSavingContext(false);
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -274,6 +299,24 @@ export default function SidePanel({
                 </div>
               </>
             )}
+
+            {/* Context notes — available for both person and area nodes, autosaves on blur */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Contexto del nodo
+                {savingContext && (
+                  <span className="ml-2 text-[10px] text-gray-400 font-normal">guardando…</span>
+                )}
+              </label>
+              <textarea
+                value={contextNotes}
+                onChange={(e) => setContextNotes(e.target.value)}
+                onBlur={handleContextNotesBlur}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gray-900 focus:ring-1 focus:ring-gray-900 outline-none resize-none"
+                rows={4}
+                placeholder="¿Qué hace este equipo? ¿Hay algo importante sobre su dinámica que debamos saber?"
+              />
+            </div>
           </div>
 
           {/* Actions */}
