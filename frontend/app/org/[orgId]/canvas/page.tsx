@@ -26,6 +26,7 @@ import {
   getOrganization,
   updateOrganization,
 } from "@/lib/api";
+import DocumentsOverlay from "./DocumentsOverlay";
 import { useAuth } from "@/hooks/useAuth";
 import OrgNode from "./OrgNode";
 import SidePanel from "./SidePanel";
@@ -127,6 +128,7 @@ export default function CanvasPage() {
   const [diagnosis, setDiagnosis] = useState<any>(null);
   const [structureType, setStructureType] = useState<StructureType>("areas");
   const [showNodeTypeSelector, setShowNodeTypeSelector] = useState(false);
+  const [showDocuments, setShowDocuments] = useState(false);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rawGroupsRef = useRef<GroupData[]>([]);
 
@@ -355,6 +357,7 @@ export default function CanvasPage() {
         open={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         orgId={orgId}
+        onDocumentsClick={() => setShowDocuments(true)}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -455,8 +458,11 @@ export default function CanvasPage() {
               orgId={orgId}
               nodeId={selectedNode!}
               nodeName={selectedNodeData.data.label}
+              nodeEmail={selectedNodeData.data.email || ""}
+              interviewStatus={selectedNodeData.data.interviewStatus || "none"}
               onClose={() => setSelectedNode(null)}
               onChanged={handleCollectionChanged}
+              onSwitchToEstructura={() => setActiveLayer("estructura")}
             />
           )}
 
@@ -480,6 +486,14 @@ export default function CanvasPage() {
           )}
         </div>
       </div>
+
+      {/* Documents overlay */}
+      {showDocuments && (
+        <DocumentsOverlay
+          orgId={orgId}
+          onClose={() => setShowDocuments(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,122 +1,178 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { X, Send, Bell, XCircle, Copy, Check, ExternalLink } from "lucide-react";
+import { useEffect, useState, useCallback } from "react";
 import {
-  getNodeInterviews,
-  inviteFromNode,
-  sendReminder,
-  revokeInvitation,
-  ApiError,
-} from "@/lib/api";
+  X,
+  Mail,
+  Copy,
+  Check,
+  MessageCircle,
+  AlertTriangle,
+  ArrowLeft,
+  CheckCircle2,
+  Clock,
+  RefreshCw,
+  Link2,
+} from "lucide-react";
+import { inviteFromNode, revokeInvitation, getNodeInterviews, ApiError } from "@/lib/api";
 
 interface Props {
   orgId: string;
   nodeId: string;
   nodeName: string;
+  nodeEmail: string;
+  interviewStatus: string; // "none" | "pending" | "in_progress" | "completed" | "expired"
   onClose: () => void;
   onChanged: () => void;
+  onSwitchToEstructura: () => void;
 }
 
-interface MemberInterview {
+interface MemberDetail {
   member_id: string;
-  name: string;
-  role_label: string;
   interview_token: string;
   token_status: string;
   submitted_at: string | null;
   reminder_count: number;
 }
 
+function interviewUrl(token: string): string {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}/interview/${token}`;
+}
+
+function whatsappUrl(nodeName: string, token: string): string {
+  const url = interviewUrl(token);
+  const text = `Hola, te invito a participar en un diagnóstico anónimo de nuestra organización (5-10 min). Responde aquí: ${url}`;
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("es-ES", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function CollectionPanel({
   orgId,
   nodeId,
   nodeName,
+  nodeEmail,
+  interviewStatus,
   onClose,
   onChanged,
+  onSwitchToEstructura,
 }: Props) {
-  const [members, setMembers] = useState<MemberInterview[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [inviteName, setInviteName] = useState("");
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("");
-  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [member, setMember] = useState<MemberDetail | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [revoking, setRevoking] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
-  const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
-  async function loadMembers() {
+  const loadMember = useCallback(async () => {
+    if (interviewStatus === "none") return;
+    setLoading(true);
     try {
-      const data = await getNodeInterviews(orgId, nodeId);
-      setMembers(data);
-    } catch {
-      setError("Error cargando miembros");
-    } finally {
-      setLoading(false);
-    }
-  }
+      const list = await getNodeInterviews(orgId, nodeId);
+      if (list.length > 0) {
+        // Highest-priority member: completed > in_progress > pending > expired
+        const priority: Record<string, number> = {
+          completed: 4, in_progress: 3, pending: 2, expired: 1,
+        };
+        const sorted = [...list].sort(
+          (a, b) => (priority[b.token_status] ?? 0) - (priority[a.token_status] ?? 0)
+        );
+        setMember(sorted[0]);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, [orgId, nodeId, interviewStatus]);
 
   useEffect(() => {
-    loadMembers();
-  }, [orgId, nodeId]);
+    setMember(null);
+    setError("");
+    loadMember();
+  }, [loadMember]);
 
-  async function handleInvite() {
-    if (!inviteName.trim() || !inviteEmail.trim()) return;
+  async function handleGenerateLink() {
+    setGenerating(true);
     setError("");
     try {
-      await inviteFromNode(orgId, nodeId, {
-        email: inviteEmail,
-        name: inviteName,
-        role_label: inviteRole,
+      const res = await inviteFromNode(orgId, nodeId, { name: nodeName });
+      setMember({
+        member_id: res.member_id,
+        interview_token: res.token,
+        token_status: res.status,
+        submitted_at: null,
+        reminder_count: 0,
       });
-      setInviteName("");
-      setInviteEmail("");
-      setInviteRole("");
-      setShowInviteForm(false);
-      await loadMembers();
       onChanged();
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
+      else setError("No se pudo generar el link");
     }
+    setGenerating(false);
   }
 
-  async function handleRemind(memberId: string) {
+  async function handleRevoke() {
+    if (!member) return;
+    setRevoking(true);
     try {
-      await sendReminder(memberId);
-      await loadMembers();
-    } catch (err) {
-      if (err instanceof ApiError) setError(err.message);
-    }
+      await revokeInvitation(member.member_id);
+      setMember({ ...member, token_status: "expired" });
+      onChanged();
+    } catch { /* ignore */ }
+    setRevoking(false);
   }
 
-  async function handleRevoke(memberId: string) {
+  async function handleReenviar() {
+    setGenerating(true);
+    setError("");
     try {
-      await revokeInvitation(memberId);
-      await loadMembers();
+      const res = await inviteFromNode(orgId, nodeId, { name: nodeName });
+      setMember({
+        member_id: res.member_id,
+        interview_token: res.token,
+        token_status: res.status,
+        submitted_at: null,
+        reminder_count: 0,
+      });
       onChanged();
     } catch (err) {
       if (err instanceof ApiError) setError(err.message);
+      else setError("No se pudo reenviar el link");
     }
+    setGenerating(false);
   }
 
   function copyLink(token: string) {
-    const url = `${window.location.origin}/interview/${token}`;
-    navigator.clipboard.writeText(url);
-    setCopiedToken(token);
-    setTimeout(() => setCopiedToken(null), 2000);
+    const url = interviewUrl(token);
+    navigator.clipboard.writeText(url).catch(() => {
+      const input = document.createElement("input");
+      input.value = url;
+      document.body.appendChild(input);
+      input.select();
+      document.execCommand("copy");
+      document.body.removeChild(input);
+    });
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
-  const statusLabel: Record<string, { text: string; color: string }> = {
-    pending: { text: "Invitado", color: "text-blue-600 bg-blue-50" },
-    in_progress: { text: "En progreso", color: "text-blue-700 bg-blue-100" },
-    completed: { text: "Completada", color: "text-emerald-700 bg-emerald-50" },
-    expired: { text: "Vencida", color: "text-orange-700 bg-orange-50" },
-  };
+  // Determine active state
+  const effectiveStatus = member?.token_status ?? interviewStatus;
+  const hasEmail = nodeEmail && nodeEmail.trim() !== "";
 
   return (
     <div className="absolute top-0 right-0 h-full w-80 bg-warm-50 border-l border-warm-200 shadow-warm-md z-10 flex flex-col">
+      {/* Header */}
       <div className="flex items-start justify-between px-5 py-4 border-b border-warm-200 bg-white">
         <div className="flex-1 min-w-0 pr-2">
-          <h3 className="font-display italic text-lg text-warm-900 leading-tight truncate">{nodeName}</h3>
+          <h3 className="font-display italic text-lg text-warm-900 leading-tight truncate">
+            {nodeName}
+          </h3>
           <p className="text-xs text-warm-500 mt-0.5">Recolección</p>
         </div>
         <button onClick={onClose} className="text-warm-400 hover:text-warm-700 flex-shrink-0 mt-0.5">
@@ -124,124 +180,199 @@ export default function CollectionPanel({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto px-5 py-5">
         {error && (
-          <div className="p-2 text-xs text-red-700 bg-red-50 rounded-lg">{error}</div>
+          <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+            {error}
+          </div>
         )}
 
         {loading ? (
-          <p className="text-sm text-gray-400">Cargando...</p>
+          <div className="flex items-center justify-center py-12">
+            <RefreshCw className="w-4 h-4 animate-spin text-warm-400" />
+          </div>
         ) : (
           <>
-            {members.length === 0 && !showInviteForm && (
-              <p className="text-sm text-gray-500 text-center py-4">
-                No hay miembros invitados en este nodo.
-              </p>
-            )}
-
-            {members.map((m) => {
-              const st = statusLabel[m.token_status] || statusLabel.pending;
-              return (
-                <div key={m.member_id} className="p-3 bg-gray-50 rounded-lg space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">{m.name}</p>
-                      {m.role_label && (
-                        <p className="text-xs text-gray-500">{m.role_label}</p>
-                      )}
-                    </div>
-                    <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${st.color}`}>
-                      {st.text}
-                    </span>
-                  </div>
-
-                  <div className="flex gap-1.5">
-                    {m.token_status !== "completed" && m.token_status !== "expired" && (
-                      <>
-                        <button
-                          onClick={() => copyLink(m.interview_token)}
-                          className="flex items-center gap-1 px-2 py-1 text-[10px] border border-gray-200 rounded hover:bg-white"
-                        >
-                          {copiedToken === m.interview_token ? (
-                            <><Check className="w-3 h-3 text-emerald-500" /> Copiado</>
-                          ) : (
-                            <><Copy className="w-3 h-3" /> Enlace</>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => handleRemind(m.member_id)}
-                          disabled={m.reminder_count >= 3}
-                          className="flex items-center gap-1 px-2 py-1 text-[10px] border border-gray-200 rounded hover:bg-white disabled:opacity-40"
-                          title={m.reminder_count >= 3 ? "Máximo 3 recordatorios" : "Enviar recordatorio"}
-                        >
-                          <Bell className="w-3 h-3" /> ({m.reminder_count}/3)
-                        </button>
-                        <button
-                          onClick={() => handleRevoke(m.member_id)}
-                          className="flex items-center gap-1 px-2 py-1 text-[10px] text-red-600 border border-red-200 rounded hover:bg-red-50"
-                        >
-                          <XCircle className="w-3 h-3" /> Revocar
-                        </button>
-                      </>
-                    )}
+            {/* ── STATE A: No email ── */}
+            {!hasEmail && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+                <div className="flex items-start gap-3 mb-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">Sin email asignado</p>
+                    <p className="text-xs text-amber-700 mt-1 leading-relaxed">
+                      Para invitar a un miembro, asigna un email en la capa Estructura.
+                    </p>
                   </div>
                 </div>
-              );
-            })}
+                <button
+                  onClick={onSwitchToEstructura}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-800 hover:text-amber-900 transition-colors"
+                >
+                  <ArrowLeft className="w-3 h-3" />
+                  Ir a Estructura
+                </button>
+              </div>
+            )}
 
-            {showInviteForm && (
-              <div className="p-3 border border-gray-200 rounded-lg space-y-2">
-                <input
-                  type="text"
-                  placeholder="Nombre"
-                  value={inviteName}
-                  onChange={(e) => setInviteName(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:border-gray-900"
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:border-gray-900"
-                />
-                <input
-                  type="text"
-                  placeholder="Rol (opcional)"
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value)}
-                  className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-lg outline-none focus:border-gray-900"
-                />
+            {/* ── STATE B: Has email, not invited ── */}
+            {hasEmail && (effectiveStatus === "none" || !member) && !generating && (
+              <div className="space-y-4">
+                <div className="rounded-md border border-warm-200 bg-white px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-warm-400 mb-1">
+                    Email asignado
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Mail className="w-3.5 h-3.5 text-warm-400 flex-shrink-0" />
+                    <span className="text-sm text-warm-700 truncate">{nodeEmail}</span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-warm-500 leading-relaxed">
+                  Al generar el link, se crea un enlace único y anónimo para esta persona. Tú decides cómo compartirlo.
+                </p>
+
+                <button
+                  onClick={handleGenerateLink}
+                  disabled={generating}
+                  className="w-full py-2.5 bg-accent text-white text-sm font-semibold rounded-md hover:bg-accent-hover disabled:opacity-50 flex items-center justify-center gap-2 transition-colors"
+                >
+                  <Link2 className="w-4 h-4" />
+                  Generar link de entrevista
+                </button>
+              </div>
+            )}
+
+            {/* Generating spinner */}
+            {generating && (
+              <div className="flex items-center justify-center py-12">
+                <RefreshCw className="w-4 h-4 animate-spin text-accent" />
+              </div>
+            )}
+
+            {/* ── STATES C / E: Invited, In Progress, Expired ── */}
+            {member && (effectiveStatus === "pending" || effectiveStatus === "in_progress" || effectiveStatus === "expired") && (
+              <div className="space-y-4">
+                {/* Status badge */}
+                <div className="flex items-center gap-2">
+                  {effectiveStatus === "pending" && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                      Invitado
+                    </span>
+                  )}
+                  {effectiveStatus === "in_progress" && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100 border border-blue-300 text-xs font-semibold text-blue-800">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      En progreso
+                    </span>
+                  )}
+                  {effectiveStatus === "expired" && (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 border border-orange-200 text-xs font-semibold text-orange-700">
+                      <Clock className="w-3 h-3" />
+                      Vencido
+                    </span>
+                  )}
+                </div>
+
+                {/* Email chip */}
+                <div className="flex items-center gap-2 text-xs text-warm-500">
+                  <Mail className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{nodeEmail}</span>
+                </div>
+
+                {/* Link copy area */}
+                <div className="rounded-md border border-warm-200 bg-white overflow-hidden">
+                  <div className="px-3 py-2 bg-warm-50 border-b border-warm-200">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-warm-400">
+                      Link de entrevista
+                    </p>
+                  </div>
+                  <div className="px-3 py-2">
+                    <p className="font-mono text-[10px] text-warm-500 break-all leading-relaxed">
+                      {interviewUrl(member.interview_token)}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actions */}
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setShowInviteForm(false)}
-                    className="flex-1 py-1.5 text-xs border border-gray-300 rounded-lg hover:bg-gray-50"
+                    onClick={() => copyLink(member.interview_token)}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-md border border-warm-300 bg-white text-xs font-semibold text-warm-700 hover:bg-warm-50 transition-colors"
                   >
-                    Cancelar
+                    {copied ? (
+                      <><Check className="w-3.5 h-3.5 text-green-600" /> Copiado</>
+                    ) : (
+                      <><Copy className="w-3.5 h-3.5" /> Copiar link</>
+                    )}
                   </button>
-                  <button
-                    onClick={handleInvite}
-                    disabled={!inviteName.trim() || !inviteEmail.trim()}
-                    className="flex-1 py-1.5 text-xs bg-gray-900 text-white rounded-lg hover:bg-gray-800 disabled:opacity-50"
+                  <a
+                    href={whatsappUrl(nodeName, member.interview_token)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 py-2 rounded-md bg-green-600 text-xs font-semibold text-white hover:bg-green-700 transition-colors"
                   >
-                    Invitar
-                  </button>
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    WhatsApp
+                  </a>
+                </div>
+
+                {/* Reenviar / Revocar */}
+                <div className="flex gap-2 pt-1">
+                  {effectiveStatus === "expired" && (
+                    <button
+                      onClick={handleReenviar}
+                      disabled={generating}
+                      className="flex-1 py-2 text-xs font-semibold rounded-md bg-accent text-white hover:bg-accent-hover disabled:opacity-50 transition-colors"
+                    >
+                      Reenviar link
+                    </button>
+                  )}
+                  {(effectiveStatus === "pending" || effectiveStatus === "in_progress") && (
+                    <button
+                      onClick={handleRevoke}
+                      disabled={revoking}
+                      className="text-xs text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
+                    >
+                      {revoking ? "Revocando…" : "Revocar"}
+                    </button>
+                  )}
                 </div>
               </div>
             )}
-          </>
-        )}
-      </div>
 
-      <div className="px-5 py-4 border-t border-warm-200 bg-white">
-        {!showInviteForm && (
-          <button
-            onClick={() => setShowInviteForm(true)}
-            className="w-full inline-flex items-center justify-center gap-1.5 py-2.5 bg-accent text-white text-sm font-semibold rounded-md hover:bg-accent-hover transition-colors"
-          >
-            <Send className="w-3.5 h-3.5" />
-            Invitar miembro
-          </button>
+            {/* ── STATE D: Completed ── */}
+            {member && effectiveStatus === "completed" && (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-green-200 bg-green-50 p-4">
+                  <div className="flex items-center gap-3 mb-1">
+                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <p className="text-sm font-semibold text-green-900">Entrevista respondida</p>
+                  </div>
+                  {member.submitted_at && (
+                    <p className="text-xs text-green-700 ml-8">
+                      Respondió el {formatDate(member.submitted_at)}
+                    </p>
+                  )}
+                </div>
+
+                {/* Email chip */}
+                <div className="flex items-center gap-2 text-xs text-warm-500">
+                  <Mail className="w-3 h-3 flex-shrink-0" />
+                  <span className="truncate">{nodeEmail}</span>
+                </div>
+
+                <button
+                  disabled
+                  className="w-full py-2.5 text-sm font-semibold rounded-md border border-warm-200 text-warm-400 cursor-not-allowed"
+                >
+                  Ver respuestas (próximamente)
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

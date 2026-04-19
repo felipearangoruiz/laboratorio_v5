@@ -332,9 +332,15 @@ export async function importCsv(
 export async function inviteFromNode(
   orgId: string,
   nodeId: string,
-  data: { email: string; name: string; role_label?: string }
+  data: { name: string; role_label?: string }
 ) {
-  return request<{ member_id: string; interview_token: string; token_status: string }>(
+  return request<{
+    member_id: string;
+    token: string;
+    interview_link: string;
+    status: string;
+    email: string;
+  }>(
     `/organizations/${orgId}/nodes/${nodeId}/invite`,
     { method: "POST", body: JSON.stringify(data) }
   );
@@ -381,6 +387,47 @@ export async function getNodeInterviews(orgId: string, nodeId: string) {
 
 export async function getPremiumQuestions() {
   return request<any>("/interview/premium/questions");
+}
+
+// ── Documents (institutional files) ─────────────────
+export async function getDocuments(orgId: string) {
+  return request<{
+    id: string;
+    organization_id: string;
+    label: string;
+    doc_type: string;
+    filename: string;
+    created_at: string;
+  }[]>(`/organizations/${orgId}/documents`);
+}
+
+export async function uploadDocument(
+  orgId: string,
+  file: File,
+  label: string,
+  docType: string = "institutional"
+) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("label", label);
+  formData.append("doc_type", docType);
+
+  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+  const res = await fetch(`${API_BASE}/organizations/${orgId}/documents`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || res.statusText);
+  }
+  return res.json();
+}
+
+export async function deleteDocument(orgId: string, docId: string) {
+  return request<void>(`/organizations/${orgId}/documents/${docId}`, { method: "DELETE" });
 }
 
 // ── Diagnosis (Fase 3) ──────────────────────────────
