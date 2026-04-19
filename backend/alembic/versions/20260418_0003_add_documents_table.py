@@ -30,7 +30,6 @@ def upgrade() -> None:
             postgresql.UUID(as_uuid=True),
             sa.ForeignKey("organizations.id", ondelete="CASCADE"),
             nullable=False,
-            index=True,
         ),
         sa.Column("label", sa.String(255), nullable=False),
         sa.Column("doc_type", sa.String(50), nullable=False, server_default="institutional"),
