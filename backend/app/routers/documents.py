@@ -5,7 +5,7 @@ import os
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from sqlmodel import Session, select
 
 from app.core.dependencies import get_current_user
@@ -127,7 +127,7 @@ def delete_document(
     doc_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
-) -> None:
+):
     if not _can_access_org(current_user, org_id):
         raise HTTPException(status_code=403, detail="Not authorized")
 
@@ -144,3 +144,4 @@ def delete_document(
 
     session.delete(doc)
     session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
