@@ -15,8 +15,13 @@ export interface OrgNodeData {
   contextNotes?: string | null;
   interviewStatus?: "none" | "invited" | "in_progress" | "completed" | "expired" | "pending";
   activeLayer?: string;
-  tensionScore?: number;   // 0–100 (100 = max tension), used in análisis layer
-  isHighlighted?: boolean; // false → 0.35 opacity; undefined/true → full opacity
+  // Análisis layer
+  tensionScore?: number;    // 0–100 (100 = max tension)
+  isHighlighted?: boolean;  // false → 0.35 opacity; undefined/true → full opacity
+  // Resultados layer
+  findingCount?: number;    // total findings for this node
+  topFindingTitle?: string; // tooltip text for the badge
+  isRingHighlighted?: boolean; // true → animated accent ring (bidirectional nav)
 }
 
 // Dot color for interview status (shown only in recoleccion layer)
@@ -28,7 +33,6 @@ const STATUS_DOT: Record<string, string> = {
   expired:     "bg-orange-400",
 };
 
-// Border accent for status (replaces default gray border)
 const STATUS_BORDER: Record<string, string> = {
   pending:     "border-blue-300",
   invited:     "border-blue-300 border-dashed",
@@ -45,14 +49,17 @@ function tensionColor(score: number): { hex: string; dot: string } {
 }
 
 function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
-  const showStatus   = data.activeLayer === "recoleccion";
-  const showAnalysis = data.activeLayer === "analisis";
-  const status       = data.interviewStatus || "none";
-  const isPerson     = data.nodeType === "person";
+  const showStatus    = data.activeLayer === "recoleccion";
+  const showAnalysis  = data.activeLayer === "analisis";
+  const showResultados = data.activeLayer === "resultados";
+  const status        = data.interviewStatus || "none";
+  const isPerson      = data.nodeType === "person";
 
-  const hasTension = showAnalysis && data.tensionScore !== undefined;
-  const tc         = hasTension ? tensionColor(data.tensionScore!) : null;
-  const opacity    = data.isHighlighted === false ? 0.35 : 1;
+  const hasTension        = showAnalysis && data.tensionScore !== undefined;
+  const tc                = hasTension ? tensionColor(data.tensionScore!) : null;
+  const hasBadge          = showResultados && (data.findingCount ?? 0) > 0;
+  const hasRing           = showResultados && data.isRingHighlighted === true;
+  const opacity           = data.isHighlighted === false ? 0.35 : 1;
 
   const borderClass = selected
     ? "border-[#C2410C] border-2 shadow-[0_0_0_3px_rgba(194,65,12,0.15)]"
@@ -64,76 +71,109 @@ function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
 
   return (
     <div
-      className={`bg-white rounded-[6px] px-4 py-3 min-w-[160px] transition-all ${borderClass}`}
-      style={{
-        boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
-        borderColor: tc ? tc.hex : undefined,
-        opacity,
-        transition: "opacity 0.2s ease, border-color 0.2s ease",
-      }}
+      className="relative min-w-[160px]"
+      style={{ opacity, transition: "opacity 0.2s ease" }}
     >
+      {/* Animated ring for bidirectional finding navigation */}
+      {hasRing && (
+        <div
+          className="absolute pointer-events-none animate-ping rounded-[8px]"
+          style={{
+            inset: "-3px",
+            border: "2px solid #C2410C",
+            borderRadius: "8px",
+          }}
+        />
+      )}
+
+      {/* Finding count badge (top-right corner) */}
+      {hasBadge && (
+        <div
+          className="absolute -top-2 -right-2 z-10 flex items-center justify-center rounded-full pointer-events-none"
+          style={{
+            width: "18px",
+            height: "18px",
+            background: "#C2410C",
+          }}
+          title={data.topFindingTitle}
+        >
+          <span className="text-[9px] font-bold text-white leading-none">
+            {data.findingCount! > 9 ? "9+" : data.findingCount}
+          </span>
+        </div>
+      )}
+
       <Handle
         type="target"
         position={Position.Top}
         className="!w-2.5 !h-2.5 !bg-[#6b7280] !border-2 !border-[#0D0D14]"
       />
 
-      <div className="flex items-center gap-2.5">
-        {/* Icon */}
-        <div className="flex-shrink-0">
-          {isPerson ? (
-            <div className="w-7 h-7 rounded-full bg-warm-100 flex items-center justify-center">
-              <User className="w-3.5 h-3.5 text-warm-500" strokeWidth={1.5} />
-            </div>
-          ) : (
-            <div className="w-7 h-7 rounded-md bg-accent/10 flex items-center justify-center">
-              <Users className="w-3.5 h-3.5 text-accent" strokeWidth={1.5} />
-            </div>
-          )}
-        </div>
-
-        {/* Content */}
-        <div className="flex-1 min-w-0">
-          <div className="text-sm font-semibold text-warm-900 truncate leading-tight">
-            {data.label}
+      <div
+        className={`bg-white rounded-[6px] px-4 py-3 transition-all ${borderClass}`}
+        style={{
+          boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+          borderColor: tc ? tc.hex : undefined,
+          transition: "border-color 0.2s ease",
+        }}
+      >
+        <div className="flex items-center gap-2.5">
+          {/* Icon */}
+          <div className="flex-shrink-0">
+            {isPerson ? (
+              <div className="w-7 h-7 rounded-full bg-warm-100 flex items-center justify-center">
+                <User className="w-3.5 h-3.5 text-warm-500" strokeWidth={1.5} />
+              </div>
+            ) : (
+              <div className="w-7 h-7 rounded-md bg-accent/10 flex items-center justify-center">
+                <Users className="w-3.5 h-3.5 text-accent" strokeWidth={1.5} />
+              </div>
+            )}
           </div>
-          {isPerson && data.role && (
-            <div className="text-[11px] text-warm-500 truncate mt-0.5 leading-tight">
-              {data.role}
+
+          {/* Content */}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-warm-900 truncate leading-tight">
+              {data.label}
             </div>
+            {isPerson && data.role && (
+              <div className="text-[11px] text-warm-500 truncate mt-0.5 leading-tight">
+                {data.role}
+              </div>
+            )}
+          </div>
+
+          {/* Tension dot — análisis layer */}
+          {hasTension && tc && (
+            <div className={`w-2 h-2 rounded-full flex-shrink-0 ${tc.dot}`} />
+          )}
+
+          {/* Status dot — recoleccion layer */}
+          {!hasTension && showStatus && status !== "none" && (
+            <div
+              className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[status] ?? "bg-warm-400"}`}
+            />
           )}
         </div>
 
-        {/* Tension dot — análisis layer */}
-        {hasTension && tc && (
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${tc.dot}`} />
+        {/* Area badge */}
+        {!isPerson && data.area && (
+          <div className="mt-2">
+            <span className="inline-block px-2 py-0.5 text-[10px] font-medium bg-accent/8 text-accent rounded-full">
+              {data.area}
+            </span>
+          </div>
         )}
 
-        {/* Status dot — recoleccion layer */}
-        {!hasTension && showStatus && status !== "none" && (
-          <div
-            className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[status] ?? "bg-warm-400"}`}
-          />
+        {/* Member count pill */}
+        {!isPerson && data.memberCount > 0 && (
+          <div className="mt-1.5 flex items-center gap-1">
+            <span className="text-[10px] text-warm-400">
+              {data.memberCount} miembro{data.memberCount !== 1 ? "s" : ""}
+            </span>
+          </div>
         )}
       </div>
-
-      {/* Area badge */}
-      {!isPerson && data.area && (
-        <div className="mt-2">
-          <span className="inline-block px-2 py-0.5 text-[10px] font-medium bg-accent/8 text-accent rounded-full">
-            {data.area}
-          </span>
-        </div>
-      )}
-
-      {/* Member count pill */}
-      {!isPerson && data.memberCount > 0 && (
-        <div className="mt-1.5 flex items-center gap-1">
-          <span className="text-[10px] text-warm-400">
-            {data.memberCount} miembro{data.memberCount !== 1 ? "s" : ""}
-          </span>
-        </div>
-      )}
 
       <Handle
         type="source"

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactFlow, {
   Background,
   Controls,
@@ -37,6 +37,8 @@ import AnalysisLayer from "./AnalysisLayer";
 import AnalysisNodePanel from "./AnalysisNodePanel";
 import DimensionFilter from "./DimensionFilter";
 import NarrativePanel from "./NarrativePanel";
+import ResultsNodePanel from "./ResultsNodePanel";
+import DiagnosisGate from "./DiagnosisGate";
 import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import LayerSelector from "./LayerSelector";
@@ -171,6 +173,29 @@ export default function CanvasPage() {
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rawGroupsRef = useRef<GroupData[]>([]);
 
+  // ── Per-node finding counts (for resultados badges) ───────────────
+  const nodeFindingCounts = useMemo<Record<string, number>>(() => {
+    if (!diagnosis?.findings) return {};
+    const counts: Record<string, number> = {};
+    for (const f of diagnosis.findings) {
+      for (const nodeId of f.node_ids || []) {
+        counts[nodeId] = (counts[nodeId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [diagnosis]);
+
+  const nodeTopFinding = useMemo<Record<string, string>>(() => {
+    if (!diagnosis?.findings) return {};
+    const tops: Record<string, string> = {};
+    for (const f of diagnosis.findings) {
+      for (const nodeId of f.node_ids || []) {
+        if (!tops[nodeId]) tops[nodeId] = f.title; // first = highest priority
+      }
+    }
+    return tops;
+  }, [diagnosis]);
+
   // Load org structure type
   useEffect(() => {
     if (!orgId) return;
@@ -225,12 +250,13 @@ export default function CanvasPage() {
   useEffect(() => { loadGroups(); }, [loadGroups]);
   useEffect(() => { loadMeta(); }, [loadMeta]);
 
-  // Re-render nodes when layer or analysis state changes
+  // Re-render nodes when layer or analysis/results state changes
   useEffect(() => {
     if (rawGroupsRef.current.length > 0) {
       const { nodes: n, edges: e } = treeToFlow(rawGroupsRef.current, activeLayer, nodeStatuses);
 
       if (activeLayer === "analisis" && diagnosis?.status === "ready") {
+        // Enrich with tension scores + highlighting for análisis layer
         const enriched = n.map((node) => {
           const tension = computeNodeTension(node.id, diagnosis.scores, activeDimension);
           let isHighlighted: boolean | undefined = undefined;
@@ -238,7 +264,6 @@ export default function CanvasPage() {
           if (highlightedNodeIds !== null) {
             isHighlighted = highlightedNodeIds.has(node.id);
           } else if (activeDimension !== null && tension !== undefined) {
-            // Dim filter: highlight (full opacity) problem nodes, dim healthy ones
             isHighlighted = tension > 40;
           }
 
@@ -248,12 +273,45 @@ export default function CanvasPage() {
           };
         });
         setNodes(enriched);
+
+      } else if (activeLayer === "resultados" && diagnosis?.status === "ready") {
+        // Enrich with finding badges + ring highlighting for resultados layer
+        const enriched = n.map((node) => {
+          const fc           = nodeFindingCounts[node.id] ?? 0;
+          const topTitle     = nodeTopFinding[node.id];
+          let isHighlighted: boolean | undefined  = undefined;
+          let isRingHighlighted: boolean | undefined = undefined;
+
+          if (highlightedNodeIds !== null) {
+            const inSet       = highlightedNodeIds.has(node.id);
+            isHighlighted     = inSet;
+            isRingHighlighted = inSet;
+          }
+
+          return {
+            ...node,
+            data: {
+              ...node.data,
+              findingCount:    fc,
+              topFindingTitle: topTitle,
+              isHighlighted,
+              isRingHighlighted,
+            },
+          };
+        });
+        setNodes(enriched);
+
       } else {
         setNodes(n);
       }
       setEdges(e);
     }
-  }, [activeLayer, nodeStatuses, diagnosis, activeDimension, highlightedNodeIds, setNodes, setEdges]);
+  }, [
+    activeLayer, nodeStatuses, diagnosis,
+    activeDimension, highlightedNodeIds,
+    nodeFindingCounts, nodeTopFinding,
+    setNodes, setEdges,
+  ]);
 
   const onConnect = useCallback(
     async (connection: Connection) => {
@@ -302,11 +360,18 @@ export default function CanvasPage() {
     setHighlightedNodeIds(null); // Clear any finding-based highlighting
   }, []);
 
-  /** Called from NarrativePanel when user clicks "Ver nodos en canvas" on a finding. */
+  /** Called from NarrativePanel triggered by análisis layer — switches to análisis. */
   const handleHighlightNodes = useCallback((nodeIds: string[]) => {
     setHighlightedNodeIds(new Set(nodeIds));
     setShowNarrative(false);
     setActiveLayer("analisis");
+  }, []);
+
+  /** Called from NarrativePanel triggered by resultados layer — stays in resultados. */
+  const handleHighlightNodesInMap = useCallback((nodeIds: string[]) => {
+    setHighlightedNodeIds(new Set(nodeIds));
+    setShowNarrative(false);
+    // Layer stays as "resultados" — ring animation on relevant nodes
   }, []);
 
   async function handleStructureTypeSelected(type: StructureType) {
@@ -581,7 +646,33 @@ export default function CanvasPage() {
             />
           )}
 
-          {/* Narrative panel — resultados layer OR triggered from análisis */}
+          {/* Resultados layer — no diagnosis yet: show progress gate */}
+          {activeLayer === "resultados" && !diagnosis && (
+            <DiagnosisGate
+              orgId={orgId}
+              completedNodes={Object.values(nodeStatuses).filter((s) => s === "completed").length}
+              totalNodes={nodes.length}
+              thresholdMet={thresholdMet}
+              onInitiated={() => {
+                loadMeta();
+              }}
+            />
+          )}
+
+          {/* Resultados layer — diagnosis ready: node panel on click */}
+          {selectedNodeData && activeLayer === "resultados" && diagnosis?.status === "ready" && (
+            <ResultsNodePanel
+              nodeId={selectedNode!}
+              nodeName={selectedNodeData.data.label}
+              diagnosis={diagnosis}
+              onClose={() => setSelectedNode(null)}
+              onViewNarrative={() => setShowNarrative(true)}
+            />
+          )}
+
+          {/* Narrative panel — full-width diagnosis view.
+              Triggered from resultados layer (onHighlightNodes stays in resultados)
+              or from análisis layer via showNarrative (onHighlightNodes switches to análisis). */}
           {(activeLayer === "resultados" || showNarrative) && diagnosis && (
             <NarrativePanel
               diagnosis={diagnosis}
@@ -592,7 +683,9 @@ export default function CanvasPage() {
                   setActiveLayer("estructura");
                 }
               }}
-              onHighlightNodes={handleHighlightNodes}
+              onHighlightNodes={
+                showNarrative ? handleHighlightNodes : handleHighlightNodesInMap
+              }
             />
           )}
         </div>
