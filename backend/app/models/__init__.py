@@ -1,5 +1,31 @@
 from sqlmodel import SQLModel
 
+from .analysis import (
+    AnalysisRun,
+    AnalysisRunCreate,
+    AnalysisRunRead,
+    DocumentExtraction,
+    DocumentExtractionCreate,
+    DocumentExtractionRead,
+    EvidenceLink,
+    EvidenceLinkCreate,
+    EvidenceLinkRead,
+    Finding,
+    FindingCreate,
+    FindingRead,
+    GroupAnalysis,
+    GroupAnalysisCreate,
+    GroupAnalysisRead,
+    NodeAnalysis,
+    NodeAnalysisCreate,
+    NodeAnalysisRead,
+    OrgAnalysis,
+    OrgAnalysisCreate,
+    OrgAnalysisRead,
+    Recommendation,
+    RecommendationCreate,
+    RecommendationRead,
+)
 from .diagnosis import DiagnosisCreate, DiagnosisResult, DiagnosisResultRead
 from .document import Document, DocumentRead, DocType
 from .group import Group, GroupRead
@@ -37,6 +63,31 @@ from .user import User, UserRead, UserRole
 
 __all__ = [
     "SQLModel",
+    # Motor de análisis (pipeline 4 pasos)
+    "AnalysisRun",
+    "AnalysisRunCreate",
+    "AnalysisRunRead",
+    "NodeAnalysis",
+    "NodeAnalysisCreate",
+    "NodeAnalysisRead",
+    "GroupAnalysis",
+    "GroupAnalysisCreate",
+    "GroupAnalysisRead",
+    "OrgAnalysis",
+    "OrgAnalysisCreate",
+    "OrgAnalysisRead",
+    "DocumentExtraction",
+    "DocumentExtractionCreate",
+    "DocumentExtractionRead",
+    "Finding",
+    "FindingCreate",
+    "FindingRead",
+    "Recommendation",
+    "RecommendationCreate",
+    "RecommendationRead",
+    "EvidenceLink",
+    "EvidenceLinkCreate",
+    "EvidenceLinkRead",
     # User
     "User",
     "UserRead",
