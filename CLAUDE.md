@@ -78,13 +78,33 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 - El sistema usa el email guardado en Estructura para generar el token automáticamente — no se pide email de nuevo.
 - Los nodos sin email asignado muestran un aviso "Asigna un email en Estructura para invitar".
 
+**CAPA ANÁLISIS:**
+- Objetivo: comprensión rápida y situada del estado de la organización.
+- Canvas con nodos coloreados por nivel de tensión (verde ≥ 3.8 / amarillo 2.5–3.8 / rojo < 2.5).
+- Filtros por dimensión: al activar una dimensión → canvas actualiza colores para reflejar solo esa dimensión.
+- Panel lateral (clic en nodo): score por dimensión, comparación con promedio org, resumen de percepciones agregadas.
+- Coordinación visual obligatoria: al filtrar una dimensión → canvas resalta nodos afectados; al cerrar panel → canvas vuelve a vista general.
+- Navegación: clic en nodo → análisis contextual de ese nodo; "Ver hallazgos relacionados" → navega a Capa Resultados.
+
+**CAPA RESULTADOS:**
+- Objetivo: exploración de hallazgos y recomendaciones.
+- Nodos con badges de insights (íconos que indican cuántos hallazgos están asociados al nodo).
+- Panel lateral (clic en nodo): hallazgos del nodo con score de confianza, recomendaciones asociadas.
+- Navegación bidireccional obligatoria: clic en nodo → panel con hallazgos; clic en hallazgo → canvas resalta nodos relevantes.
+- Panel narrativo expandido (60–70% viewport) con canvas visible y reactivo en segundo plano.
+- Modo lectura ampliado disponible para gráficas complejas; siempre con botón "Volver al canvas".
+- Ver `docs/ARQUITECTURA_ANALISIS_RESULTADOS.md` para especificación completa.
+
 ### Antipatrones prohibidos
 
 - ❌ Sidebar con secciones "Grupos", "Miembros", "Entrevistas", "Resultados"
 - ❌ Páginas separadas para gestión de entrevistas o resultados
 - ❌ Dashboard genérico post-login
-- ❌ Rutas tipo /admin/members, /admin/interviews, /admin/results
+- ❌ Rutas tipo /admin/members, /admin/interviews, /admin/results, /analysis, /dashboard
 - ❌ Settings, billing o documentos como páginas full-screen
+- ❌ Reportes o hallazgos sin contexto estructural (toda información debe ser trazable a nodo(s) específicos)
+- ❌ Narrativa separada del canvas (el panel narrativo siempre tiene el canvas visible detrás)
+- ❌ Canvas decorativo en capas Análisis/Resultados (si el canvas no reacciona al contenido del panel, algo está mal)
 
 ### Estructura de rutas permitida
 
