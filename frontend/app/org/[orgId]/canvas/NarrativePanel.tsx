@@ -173,7 +173,7 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
           <div>
             <h3 className="text-sm font-semibold text-warm-900 mb-1">Hallazgos</h3>
             <p className="text-xs text-warm-400 mb-3">
-              Haz clic en "Ver nodos en canvas" para resaltar los nodos relacionados.
+              Usa "Ver en el mapa →" para resaltar los nodos relacionados en el canvas.
             </p>
             <div className="space-y-2">
               {findings.map((f) => {
@@ -183,43 +183,50 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
 
                 return (
                   <div key={f.id} className="border border-warm-200 rounded-lg overflow-hidden bg-white">
-                    <button
-                      onClick={() => setExpandedFinding(isOpen ? null : f.id)}
-                      className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors"
-                    >
-                      {isStrength ? (
-                        <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <TrendingDown className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-warm-900 leading-snug">{f.title}</p>
-                        <div className="flex items-center gap-2 mt-0.5">
-                          <span className="text-[10px] text-warm-400 capitalize">{dimLabel(f.dimension)}</span>
-                          <ConfidenceBadge confidence={f.confidence} />
-                          {hasNodes && (
-                            <span className="text-[10px] text-warm-400">
-                              {f.node_ids.length} nodo{f.node_ids.length !== 1 ? "s" : ""}
-                            </span>
-                          )}
+                    {/* Header row — uses div to allow sibling buttons without nesting */}
+                    <div className="flex items-stretch">
+                      {/* Expand toggle (takes up most of the row) */}
+                      <button
+                        onClick={() => setExpandedFinding(isOpen ? null : f.id)}
+                        className="flex-1 flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors min-w-0"
+                      >
+                        {isStrength ? (
+                          <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <TrendingDown className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-warm-900 leading-snug">{f.title}</p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] text-warm-400 capitalize">{dimLabel(f.dimension)}</span>
+                            <ConfidenceBadge confidence={f.confidence} />
+                            {hasNodes && (
+                              <span className="text-[10px] text-warm-400">
+                                {f.node_ids.length} nodo{f.node_ids.length !== 1 ? "s" : ""}
+                              </span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                      {isOpen
-                        ? <ChevronDown className="w-4 h-4 text-warm-400 flex-shrink-0 mt-0.5" />
-                        : <ChevronRight className="w-4 h-4 text-warm-400 flex-shrink-0 mt-0.5" />}
-                    </button>
+                        {isOpen
+                          ? <ChevronDown className="w-4 h-4 text-warm-400 flex-shrink-0 mt-0.5" />
+                          : <ChevronRight className="w-4 h-4 text-warm-400 flex-shrink-0 mt-0.5" />}
+                      </button>
+
+                      {/* "Ver en el mapa →" — always visible when finding has nodes */}
+                      {hasNodes && (
+                        <button
+                          onClick={() => handleFindingNodeClick(f)}
+                          className="flex-shrink-0 flex items-center px-3 text-[11px] font-semibold text-accent hover:text-accent/70 hover:bg-warm-50 border-l border-warm-100 transition-colors whitespace-nowrap"
+                          title={`Ver ${f.node_ids.length} nodo${f.node_ids.length !== 1 ? "s" : ""} en el canvas`}
+                        >
+                          Ver en el mapa →
+                        </button>
+                      )}
+                    </div>
 
                     {isOpen && (
-                      <div className="px-4 pb-3 pt-2 border-t border-warm-100 space-y-2">
+                      <div className="px-4 pb-3 pt-2 border-t border-warm-100">
                         <p className="text-sm text-warm-700 leading-relaxed">{f.description}</p>
-                        {hasNodes && (
-                          <button
-                            onClick={() => handleFindingNodeClick(f)}
-                            className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent/80 transition-colors"
-                          >
-                            Ver nodos en canvas →
-                          </button>
-                        )}
                       </div>
                     )}
                   </div>
