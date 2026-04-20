@@ -9,7 +9,7 @@ import {
   Minus,
   AlertCircle,
 } from "lucide-react";
-import type { DiagnosisResult } from "@/lib/api";
+import type { DiagnosisResult, DiagnosisFinding } from "@/lib/api";
 
 interface Props {
   nodeId: string;
@@ -21,14 +21,20 @@ interface Props {
 
 // ── Helpers ───────────────────────────────────────────────────────
 const DIM_LABELS: Record<string, string> = {
-  liderazgo:    "Liderazgo",
-  comunicacion: "Comunicación",
-  cultura:      "Cultura",
-  procesos:     "Procesos",
-  poder:        "Poder",
-  economia:     "Economía",
-  operacion:    "Operación",
-  mision:       "Misión",
+  liderazgo:       "Liderazgo",
+  comunicacion:    "Comunicación",
+  cultura:         "Cultura",
+  procesos:        "Procesos",
+  poder:           "Poder",
+  economia:        "Economía",
+  operacion:       "Operación",
+  mision:          "Misión",
+  centralizacion:  "Centralización",
+  cuellos_botella: "Cuellos de botella",
+  alineacion:      "Alineación",
+  bienestar:       "Bienestar",
+  recursos:        "Recursos",
+  vision:          "Visión",
 };
 
 const DIM_COLORS: Record<string, string> = {
@@ -50,13 +56,45 @@ function dimColor(key: string): string {
   return DIM_COLORS[key.toLowerCase()] ?? "bg-warm-100 text-warm-600";
 }
 
-function ConfidenceBadge({ confidence }: { confidence: string }) {
+/** Normalize confidence from string or float to "high"|"medium"|"low" */
+function normalizeConfidence(c: string | number): "high" | "medium" | "low" {
+  if (typeof c === "number") {
+    if (c >= 0.7) return "high";
+    if (c >= 0.45) return "medium";
+    return "low";
+  }
+  const lower = c.toLowerCase();
+  if (lower === "high" || lower === "alta") return "high";
+  if (lower === "low" || lower === "baja") return "low";
+  return "medium";
+}
+
+/** Get the primary dimension for a finding (supports both formats) */
+function findingPrimaryDim(f: DiagnosisFinding): string {
+  if (f.dimensions && f.dimensions.length > 0) return f.dimensions[0];
+  return f.dimension ?? "";
+}
+
+/** Labels for new motor finding types */
+const TYPE_LABELS: Record<string, string> = {
+  observacion: "Observación",
+  patron:      "Patrón",
+  inferencia:  "Inferencia",
+  hipotesis:   "Hipótesis",
+  strength:    "Fortaleza",
+  fortaleza:   "Fortaleza",
+  risk:        "Riesgo",
+  riesgo:      "Riesgo",
+};
+
+function ConfidenceBadge({ confidence }: { confidence: string | number }) {
+  const norm = normalizeConfidence(confidence);
   const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
     high:   { label: "Alta",  cls: "bg-green-50 text-green-700 border-green-200",  icon: <CheckCircle2 className="w-3 h-3" /> },
     medium: { label: "Media", cls: "bg-amber-50 text-amber-700 border-amber-200",  icon: <Minus className="w-3 h-3" /> },
     low:    { label: "Baja",  cls: "bg-red-50 text-red-700 border-red-200",        icon: <AlertCircle className="w-3 h-3" /> },
   };
-  const c = map[confidence] ?? map.medium;
+  const c = map[norm];
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${c.cls}`}>
       {c.icon}{c.label}
@@ -116,6 +154,9 @@ export default function ResultsNodePanel({
             <div className="space-y-2">
               {nodeFindings.map((f) => {
                 const isStrength = f.type === "strength" || f.type === "fortaleza";
+                const primaryDim = findingPrimaryDim(f);
+                const typeLabel  = TYPE_LABELS[f.type] ?? f.type;
+
                 return (
                   <div
                     key={f.id}
@@ -135,12 +176,29 @@ export default function ResultsNodePanel({
                           {f.description}
                         </p>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span
-                            className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${dimColor(f.dimension)}`}
-                          >
-                            {dimLabel(f.dimension)}
-                          </span>
+                          {primaryDim && (
+                            <span
+                              className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${dimColor(primaryDim)}`}
+                            >
+                              {dimLabel(primaryDim)}
+                            </span>
+                          )}
+                          {/* All dimensions (new motor) */}
+                          {f.dimensions && f.dimensions.length > 1 && f.dimensions.slice(1).map((d, i) => (
+                            <span
+                              key={i}
+                              className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium capitalize bg-warm-100 text-warm-600"
+                            >
+                              {dimLabel(d)}
+                            </span>
+                          ))}
                           <ConfidenceBadge confidence={f.confidence} />
+                          {/* Type label for new motor types */}
+                          {typeLabel && !["strength", "fortaleza", "risk", "riesgo"].includes(f.type) && (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-accent/10 text-accent capitalize">
+                              {typeLabel}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -179,6 +237,19 @@ export default function ResultsNodePanel({
                       <p className="text-[11px] text-warm-600 mt-0.5 leading-relaxed">
                         {r.description}
                       </p>
+                      {(r.horizon || r.impact || r.effort) && (
+                        <div className="flex items-center gap-3 mt-1.5 text-[10px] text-warm-400">
+                          {r.horizon && (
+                            <span>Horizonte: <span className="font-medium text-warm-600 capitalize">{r.horizon}</span></span>
+                          )}
+                          {r.impact && (
+                            <span>Impacto: <span className="font-medium text-warm-600 capitalize">{r.impact}</span></span>
+                          )}
+                          {r.effort && (
+                            <span>Esfuerzo: <span className="font-medium text-warm-600 capitalize">{r.effort}</span></span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

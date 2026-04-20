@@ -47,13 +47,25 @@ function ScoreBar({ label, score, avg }: { label: string; score: number; avg?: n
 }
 
 // ── Confidence badge ──────────────────────────────────────────────
-function ConfidenceBadge({ confidence }: { confidence: string }) {
+function normalizeConfidence(c: string | number): "high" | "medium" | "low" {
+  if (typeof c === "number") {
+    if (c >= 0.7) return "high";
+    if (c >= 0.45) return "medium";
+    return "low";
+  }
+  const lower = c.toLowerCase();
+  if (lower === "high" || lower === "alta") return "high";
+  if (lower === "low" || lower === "baja") return "low";
+  return "medium";
+}
+
+function ConfidenceBadge({ confidence }: { confidence: string | number }) {
   const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
     high:   { label: "Alta", cls: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="w-3 h-3" /> },
     medium: { label: "Media", cls: "bg-amber-50 text-amber-700 border-amber-200",  icon: <Minus className="w-3 h-3" /> },
     low:    { label: "Baja", cls: "bg-red-50 text-red-700 border-red-200",         icon: <AlertCircle className="w-3 h-3" /> },
   };
-  const c = map[confidence] ?? map.medium;
+  const c = map[normalizeConfidence(confidence)];
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${c.cls}`}>
       {c.icon}{c.label}

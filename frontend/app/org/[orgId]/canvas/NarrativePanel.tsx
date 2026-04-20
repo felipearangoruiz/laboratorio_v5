@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   X,
   FileDown,
@@ -13,39 +13,67 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import type { DiagnosisResult } from "@/lib/api";
+import type { DiagnosisResult, DiagnosisFinding } from "@/lib/api";
 
 interface Props {
   diagnosis: DiagnosisResult;
   onClose: () => void;
-  /** Called when the user clicks "Ver nodos en canvas" on a finding.
-   *  The parent should highlight those nodes and close this panel. */
+  /** Hard highlight: closes panel and switches layer to highlight nodes */
   onHighlightNodes: (nodeIds: string[]) => void;
+  /** Soft highlight: highlights nodes in canvas without closing panel */
+  onSoftHighlightNodes?: (nodeIds: string[]) => void;
 }
 
 const DIM_LABELS: Record<string, string> = {
-  liderazgo:    "Liderazgo",
-  comunicacion: "Comunicación",
-  cultura:      "Cultura",
-  procesos:     "Procesos",
-  poder:        "Poder",
-  economia:     "Economía",
-  operacion:    "Operación",
-  mision:       "Misión",
+  liderazgo:       "Liderazgo",
+  comunicacion:    "Comunicación",
+  cultura:         "Cultura",
+  procesos:        "Procesos",
+  poder:           "Poder",
+  economia:        "Economía",
+  operacion:       "Operación",
+  mision:          "Misión",
+  centralizacion:  "Centralización",
+  cuellos_botella: "Cuellos de botella",
+  alineacion:      "Alineación",
+  bienestar:       "Bienestar",
+  recursos:        "Recursos",
+  vision:          "Visión",
 };
 
 function dimLabel(key: string): string {
   return DIM_LABELS[key.toLowerCase()] ?? key;
 }
 
+/** Normalize confidence from string or float to "high"|"medium"|"low" */
+function normalizeConfidence(c: string | number): "high" | "medium" | "low" {
+  if (typeof c === "number") {
+    if (c >= 0.7) return "high";
+    if (c >= 0.45) return "medium";
+    return "low";
+  }
+  const lower = c.toLowerCase();
+  if (lower === "high" || lower === "alta") return "high";
+  if (lower === "low" || lower === "baja") return "low";
+  return "medium";
+}
+
+/** Get the best dimension label for a finding (supports both formats) */
+function findingDimLabel(f: DiagnosisFinding): string {
+  if (f.dimensions && f.dimensions.length > 0) return dimLabel(f.dimensions[0]);
+  if (f.dimension) return dimLabel(f.dimension);
+  return "";
+}
+
 // ── Confidence badge ──────────────────────────────────────────────
-function ConfidenceBadge({ confidence }: { confidence: string }) {
+function ConfidenceBadge({ confidence }: { confidence: string | number }) {
+  const norm = normalizeConfidence(confidence);
   const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
     high:   { label: "Alta",  cls: "bg-green-50 text-green-700 border-green-200",  icon: <CheckCircle2 className="w-3 h-3" /> },
     medium: { label: "Media", cls: "bg-amber-50 text-amber-700 border-amber-200",  icon: <Minus className="w-3 h-3" /> },
     low:    { label: "Baja",  cls: "bg-red-50 text-red-700 border-red-200",        icon: <AlertCircle className="w-3 h-3" /> },
   };
-  const c = map[confidence] ?? map.medium;
+  const c = map[norm];
   return (
     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${c.cls}`}>
       {c.icon}{c.label}
@@ -53,9 +81,139 @@ function ConfidenceBadge({ confidence }: { confidence: string }) {
   );
 }
 
+// ── Simple markdown renderer ──────────────────────────────────────
+// Handles: ## headings, **bold**, *italic*, - bullet lists, blank lines
+function SimpleMarkdown({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let listBuffer: string[] = [];
+
+  function flushList() {
+    if (listBuffer.length === 0) return;
+    elements.push(
+      <ul key={`ul-${elements.length}`} className="list-disc list-inside space-y-1 text-sm text-warm-700 leading-relaxed mb-3">
+        {listBuffer.map((item, i) => (
+          <li key={i}>{renderInline(item)}</li>
+        ))}
+      </ul>
+    );
+    listBuffer = [];
+  }
+
+  function renderInline(s: string): React.ReactNode {
+    // Bold + italic combined
+    const parts = s.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return <strong key={i} className="font-semibold text-warm-900">{part.slice(2, -2)}</strong>;
+      }
+      if (part.startsWith("*") && part.endsWith("*")) {
+        return <em key={i}>{part.slice(1, -1)}</em>;
+      }
+      return part;
+    });
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    if (line.startsWith("## ")) {
+      flushList();
+      elements.push(
+        <h3 key={i} className="text-sm font-semibold text-warm-900 mt-5 mb-2 first:mt-0">
+          {line.slice(3)}
+        </h3>
+      );
+    } else if (line.startsWith("# ")) {
+      flushList();
+      elements.push(
+        <h2 key={i} className="text-base font-bold text-warm-900 mt-6 mb-3 first:mt-0">
+          {line.slice(2)}
+        </h2>
+      );
+    } else if (line.startsWith("### ")) {
+      flushList();
+      elements.push(
+        <h4 key={i} className="text-xs font-semibold text-warm-700 uppercase tracking-wide mt-4 mb-1.5 first:mt-0">
+          {line.slice(4)}
+        </h4>
+      );
+    } else if (/^[-*] /.test(line)) {
+      listBuffer.push(line.slice(2));
+    } else if (line.trim() === "") {
+      flushList();
+      // blank line — visual spacer handled by parent spacing
+    } else {
+      flushList();
+      elements.push(
+        <p key={i} className="text-sm text-warm-700 leading-relaxed mb-2">
+          {renderInline(line)}
+        </p>
+      );
+    }
+  }
+  flushList();
+  return <>{elements}</>;
+}
+
 // ── Main panel ────────────────────────────────────────────────────
-export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }: Props) {
+export default function NarrativePanel({
+  diagnosis,
+  onClose,
+  onHighlightNodes,
+  onSoftHighlightNodes,
+}: Props) {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
+  const findingRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // Escape key to close
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  // IntersectionObserver: soft-highlight nodes when finding scrolls into view
+  const setupObserver = useCallback(() => {
+    if (!onSoftHighlightNodes) return;
+    observerRef.current?.disconnect();
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const findingId = (entry.target as HTMLElement).dataset.findingId;
+            if (!findingId) continue;
+            const finding = findings.find((f) => f.id === findingId);
+            if (finding?.node_ids?.length) {
+              onSoftHighlightNodes(finding.node_ids);
+            }
+          }
+        }
+      },
+      { threshold: 0.6 }
+    );
+
+    findingRefs.current.forEach((el) => {
+      if (el) observerRef.current?.observe(el);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onSoftHighlightNodes]);
+
+  useEffect(() => {
+    setupObserver();
+    return () => observerRef.current?.disconnect();
+  }, [setupObserver]);
+
+  // Clear soft highlight when panel unmounts
+  useEffect(() => {
+    return () => {
+      onSoftHighlightNodes?.([]);
+    };
+  }, [onSoftHighlightNodes]);
 
   const scoreEntries    = Object.entries(diagnosis.scores || {});
   const findings        = diagnosis.findings || [];
@@ -67,10 +225,18 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
       ? scoreEntries.reduce((sum, [, d]) => sum + (d.score ?? 0), 0) / scoreEntries.length
       : 0;
 
-  function handleFindingNodeClick(f: DiagnosisResult["findings"][number]) {
+  function handleFindingNodeClick(f: DiagnosisFinding) {
     if (f.node_ids?.length > 0) {
       onHighlightNodes(f.node_ids);
-      // Parent will close panel and switch layer
+    }
+  }
+
+  function setFindingRef(el: HTMLDivElement | null, findingId: string) {
+    if (el) {
+      findingRefs.current.set(findingId, el);
+      observerRef.current?.observe(el);
+    } else {
+      findingRefs.current.delete(findingId);
     }
   }
 
@@ -102,18 +268,20 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-8">
 
         {/* Score global */}
-        <div className="text-center p-5 bg-white rounded-xl border border-warm-200">
-          <p className="text-xs font-semibold text-warm-400 uppercase tracking-widest mb-1">
-            Score Global
-          </p>
-          <p className="text-5xl font-bold text-warm-900 tabular-nums">
-            {overallScore.toFixed(1)}
-            <span className="text-xl text-warm-400 font-normal">/5</span>
-          </p>
-          <p className="text-xs text-warm-400 mt-1">
-            {overallScore >= 3.8 ? "Saludable" : overallScore >= 2.5 ? "Atención recomendada" : "Intervención urgente"}
-          </p>
-        </div>
+        {overallScore > 0 && (
+          <div className="text-center p-5 bg-white rounded-xl border border-warm-200">
+            <p className="text-xs font-semibold text-warm-400 uppercase tracking-widest mb-1">
+              Score Global
+            </p>
+            <p className="text-5xl font-bold text-warm-900 tabular-nums">
+              {overallScore.toFixed(1)}
+              <span className="text-xl text-warm-400 font-normal">/5</span>
+            </p>
+            <p className="text-xs text-warm-400 mt-1">
+              {overallScore >= 3.8 ? "Saludable" : overallScore >= 2.5 ? "Atención recomendada" : "Intervención urgente"}
+            </p>
+          </div>
+        )}
 
         {/* Scores por dimensión */}
         {scoreEntries.length > 0 && (
@@ -155,20 +323,17 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
           </div>
         )}
 
-        {/* Narrative / Resumen ejecutivo */}
+        {/* Narrative / Resumen ejecutivo — full markdown render */}
         {hasNarrative && (
           <div>
             <h3 className="text-sm font-semibold text-warm-900 mb-3">Resumen Ejecutivo</h3>
-            <div className="text-sm text-warm-700 leading-relaxed whitespace-pre-line bg-white border border-warm-200 rounded-lg px-4 py-3">
-              {diagnosis.narrative_md.slice(0, 800)}
-              {diagnosis.narrative_md.length > 800 && (
-                <span className="text-warm-400">…</span>
-              )}
+            <div className="bg-white border border-warm-200 rounded-lg px-5 py-4">
+              <SimpleMarkdown text={diagnosis.narrative_md} />
             </div>
           </div>
         )}
 
-        {/* Hallazgos — clickable to highlight nodes in canvas */}
+        {/* Hallazgos */}
         {findings.length > 0 && (
           <div>
             <h3 className="text-sm font-semibold text-warm-900 mb-1">Hallazgos</h3>
@@ -180,12 +345,16 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
                 const isOpen     = expandedFinding === f.id;
                 const isStrength = f.type === "strength" || f.type === "fortaleza";
                 const hasNodes   = f.node_ids?.length > 0;
+                const dimStr     = findingDimLabel(f);
 
                 return (
-                  <div key={f.id} className="border border-warm-200 rounded-lg overflow-hidden bg-white">
-                    {/* Header row — uses div to allow sibling buttons without nesting */}
+                  <div
+                    key={f.id}
+                    ref={(el) => setFindingRef(el, f.id)}
+                    data-finding-id={f.id}
+                    className="border border-warm-200 rounded-lg overflow-hidden bg-white"
+                  >
                     <div className="flex items-stretch">
-                      {/* Expand toggle (takes up most of the row) */}
                       <button
                         onClick={() => setExpandedFinding(isOpen ? null : f.id)}
                         className="flex-1 flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors min-w-0"
@@ -197,8 +366,10 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-warm-900 leading-snug">{f.title}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-warm-400 capitalize">{dimLabel(f.dimension)}</span>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {dimStr && (
+                              <span className="text-[10px] text-warm-400 capitalize">{dimStr}</span>
+                            )}
                             <ConfidenceBadge confidence={f.confidence} />
                             {hasNodes && (
                               <span className="text-[10px] text-warm-400">
@@ -212,7 +383,6 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
                           : <ChevronRight className="w-4 h-4 text-warm-400 flex-shrink-0 mt-0.5" />}
                       </button>
 
-                      {/* "Ver en el mapa →" — always visible when finding has nodes */}
                       {hasNodes && (
                         <button
                           onClick={() => handleFindingNodeClick(f)}
@@ -227,6 +397,22 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
                     {isOpen && (
                       <div className="px-4 pb-3 pt-2 border-t border-warm-100">
                         <p className="text-sm text-warm-700 leading-relaxed">{f.description}</p>
+                        {f.confidence_rationale && (
+                          <p className="text-[11px] text-warm-400 mt-2 italic">{f.confidence_rationale}</p>
+                        )}
+                        {/* All dimensions (new motor) */}
+                        {f.dimensions && f.dimensions.length > 1 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {f.dimensions.map((d, i) => (
+                              <span
+                                key={i}
+                                className="px-1.5 py-0.5 bg-warm-100 text-warm-600 text-[10px] rounded capitalize"
+                              >
+                                {dimLabel(d)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -252,9 +438,23 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
                       <span className="text-xs font-bold text-accent bg-accent/10 rounded w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
                         {r.priority ?? i + 1}
                       </span>
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-warm-900">{r.title}</p>
                         <p className="text-sm text-warm-600 mt-0.5 leading-relaxed">{r.description}</p>
+                        {/* Horizon / impact / effort metadata */}
+                        {(r.horizon || r.impact || r.effort) && (
+                          <div className="flex items-center gap-3 mt-2 text-[10px] text-warm-400">
+                            {r.horizon && (
+                              <span>Horizonte: <span className="font-medium text-warm-600 capitalize">{r.horizon}</span></span>
+                            )}
+                            {r.impact && (
+                              <span>Impacto: <span className="font-medium text-warm-600 capitalize">{r.impact}</span></span>
+                            )}
+                            {r.effort && (
+                              <span>Esfuerzo: <span className="font-medium text-warm-600 capitalize">{r.effort}</span></span>
+                            )}
+                          </div>
+                        )}
                         {r.node_ids?.length > 0 && (
                           <p className="text-[10px] text-warm-400 mt-1.5">
                             Aplica a {r.node_ids.length} nodo{r.node_ids.length !== 1 ? "s" : ""}
@@ -280,6 +480,7 @@ export default function NarrativePanel({ diagnosis, onClose, onHighlightNodes }:
               })}
             </p>
           )}
+          <p className="mt-1">Presiona <kbd className="px-1 py-0.5 bg-warm-100 rounded text-warm-500">Esc</kbd> para cerrar</p>
         </div>
       </div>
     </div>
