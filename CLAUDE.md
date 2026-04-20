@@ -9,9 +9,11 @@
 
 Una plataforma web que permite a líderes organizacionales (CEOs, directores, gerentes de ONG) diagnosticar cómo funciona su organización internamente, combinando estructura organizacional + entrevistas a miembros + análisis con IA.
 
-**Fuente de verdad:** `docs/PRD_v2_Diagnostico_Organizacional.docx` — este PRD gobierna todas las decisiones. Si hay conflicto entre este archivo, el código existente o cualquier otro documento, el PRD v2 gana.
+**Fuente de verdad:** `docs/PRD_v2.1_Diagnostico_Organizacional.docx` — este PRD gobierna todas las decisiones. Si hay conflicto entre este archivo, el código existente o cualquier otro documento, el PRD v2.1 gana.
 
-**Documento secundario (referencia técnica):** Eliminado (`docs/ARCHITECTURE_V1_FINAL.md`). El PRD v2 es la única fuente de verdad.
+**Documento de arquitectura UI:** `docs/ARQUITECTURA_ANALISIS_RESULTADOS.md` — especificación completa de las capas Análisis y Resultados del canvas.
+
+**Documento secundario (referencia técnica):** Eliminado (`docs/ARCHITECTURE_V1_FINAL.md`). El PRD v2.1 es la única fuente de verdad de producto.
 
 ---
 
@@ -399,8 +401,8 @@ docker-compose up --build
 
 ## 11. Reglas para Claude Code
 
-1. **Siempre lee el PRD v2 antes de tomar decisiones de producto.** Si no estás seguro de cómo debe funcionar algo, búscalo ahí.
-2. **No construyas nada que viole la sección 7 del PRD (arquitectura de interacción).** Si una feature requiere navegar fuera del canvas, rediseña hasta que pueda vivir como panel, overlay o capa.
+1. **Siempre lee el PRD v2.1 antes de tomar decisiones de producto.** Si no estás seguro de cómo debe funcionar algo, búscalo ahí.
+2. **No construyas nada que viole la sección 7 del PRD v2.1 (arquitectura de interacción).** Si una feature requiere navegar fuera del canvas, rediseña hasta que pueda vivir como panel, overlay o capa.
 3. **Ejecuta una fase a la vez.** No saltes a Fase 2 sin terminar Fase 0 y 1.
 4. **Siempre genera migraciones Alembic al modificar modelos.**
 5. **Siempre verifica que el frontend compile sin errores antes de hacer commit.**

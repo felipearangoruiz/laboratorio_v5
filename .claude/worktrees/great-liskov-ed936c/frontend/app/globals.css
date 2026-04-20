@@ -1,0 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design system tokens ─────────────────────────────── */
+:root {
+  --bg-primary:    #FAF9F6;
+  --bg-secondary:  #F3F1ED;
+  --bg-canvas:     #0D0D14;
+  --bg-node:       #FFFFFF;
+  --text-primary:  #1C1917;
+  --text-secondary:#78716C;
+  --text-muted:    #A8A29E;
+  --accent:        #C2410C;
+  --accent-light:  #FED7AA;
+  --success:       #15803D;
+  --warning:       #B45309;
+  --border:        #E7E5E0;
+  --border-strong: #D4D0C8;
+  --shadow-sm:     0 1px 3px rgba(28,25,23,0.08);
+  --shadow-md:     0 4px 16px rgba(28,25,23,0.10);
+}
+
+/* ── Base styles ─────────────────────────────────────── */
+@layer base {
+  html {
+    font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    @apply antialiased;
+  }
+
+  /* Instrument Serif utility — use font-display class */
+  .font-display {
+    font-family: "Instrument Serif", Georgia, serif;
+  }
+}
+
+/* ── ReactFlow overrides — keep handles visible on dark canvas ── */
+.react-flow__handle {
+  background: #4b5563 !important;
+  border-color: var(--bg-canvas) !important;
+}
+
+.react-flow__controls button {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.1) !important;
+  color: #fff;
+}
+
+.react-flow__controls button:hover {
+  background: rgba(255,255,255,0.12);
+}
+
+.react-flow__minimap {
+  display: none;
+}
