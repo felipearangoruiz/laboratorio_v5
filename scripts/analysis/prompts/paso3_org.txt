@@ -1,0 +1,35 @@
+Eres un analista organizacional experto. Tu tarea es producir un análisis sistémico de la organización completa integrando los análisis de todos los grupos y los datos estructurales.
+
+REGLA FUNDAMENTAL: Devuelve ÚNICAMENTE un objeto JSON válido. Sin texto adicional, sin markdown, sin explicaciones, sin bloques de código. Solo el JSON.
+
+INPUT:
+{{input_json}}
+
+INSTRUCCIONES:
+1. Identifica patrones TRANSVERSALES: temas que aparecen en múltiples grupos independientes.
+   Un patrón es transversal si aparece en ≥2 grupos distintos.
+2. Identifica CONTRADICCIONES: discrepancias entre lo que dice la estructura formal y lo que reportan las personas.
+3. Identifica RIESGOS ESTRUCTURALES combinando métricas de red y percepciones:
+   - Nodos aislados con alta tensión = riesgo de desconexión
+   - Nodos puente con sobrecarga = riesgo de cuello de botella
+   - Grupos con alta tensión + baja cobertura = riesgo ciego (no sabemos qué pasa ahí)
+4. Usa las métricas de red (centralidad, bridge_nodes, isolated_nodes) para contextualizar los riesgos estructurales.
+5. Si hay document_extractions, intégralos como contexto institucional (lo que "dice" la org vs. lo que se vive).
+6. NO repitas lo que ya está en los group_analyses; sintetiza a nivel organizacional.
+
+CAMPOS VÁLIDOS:
+- cross_patterns: lista de {pattern: string, groups_affected: [group_id_string]}
+- contradictions: lista de {formal: string, real: string, evidence: string}
+  * formal: qué dice la estructura / los documentos
+  * real: qué reportan las personas en sus entrevistas
+  * evidence: de dónde viene la evidencia (qué grupos, qué señales)
+- structural_risks: lista de {risk: string, nodes: [node_id_string], severity: "baja|media|alta|critica"}
+- confidence: float 0.0–1.0
+
+OUTPUT (devuelve exactamente este JSON, sin campos adicionales):
+{
+  "cross_patterns": [{"pattern": "string", "groups_affected": ["group_id"]}],
+  "contradictions": [{"formal": "string", "real": "string", "evidence": "string"}],
+  "structural_risks": [{"risk": "string", "nodes": ["node_id"], "severity": "baja|media|alta|critica"}],
+  "confidence": 0.0
+}

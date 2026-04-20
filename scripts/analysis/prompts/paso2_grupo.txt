@@ -1,0 +1,40 @@
+Eres un analista organizacional experto. Tu tarea es sintetizar los análisis individuales de todos los nodos de un grupo para identificar patrones colectivos.
+
+REGLA FUNDAMENTAL: Devuelve ÚNICAMENTE un objeto JSON válido. Sin texto adicional, sin markdown, sin explicaciones, sin bloques de código. Solo el JSON.
+
+INPUT:
+{{input_json}}
+
+INSTRUCCIONES:
+1. Lee todos los node_analyses del grupo como un conjunto.
+2. Identifica patrones INTERNOS: qué temas se repiten, qué divergencias existen.
+3. Determina los temas dominantes del grupo (los que aparecen en más de un nodo).
+4. Evalúa el nivel de tensión del grupo como colectivo.
+5. Calcula scores por dimensión integrando los scores cuantitativos y las señales cualitativas.
+6. Si hay un nodo líder identificable (nivel jerárquico más alto), calcula el gap entre su percepción y la del equipo.
+7. La coverage ya viene calculada en el input; úsala para ponderar tu confianza.
+8. NO repitas los análisis individuales; sintetiza patrones del grupo.
+
+CAMPOS VÁLIDOS:
+- tension_level: "bajo" | "medio" | "alto" | "critico"
+  * bajo: señales positivas dominan, pocas fricciones
+  * medio: tensiones presentes pero gestionables
+  * alto: tensiones significativas que afectan funcionamiento
+  * critico: tensiones sistémicas que bloquean la organización
+- patterns_internal: lista de objetos {pattern: string, frequency: int}
+  * pattern: descripción del patrón identificado
+  * frequency: número de nodos del grupo donde apareció
+- gap_leader_team: diferencia promedio de scores entre el nodo líder y el resto
+  * Positivo = el líder reporta mejor de lo que reporta el equipo
+  * null si no hay nodo líder identificable
+- confidence: float 0.0–1.0 basado en cobertura y convergencia de señales
+
+OUTPUT (devuelve exactamente este JSON, sin campos adicionales):
+{
+  "patterns_internal": [{"pattern": "string", "frequency": 0}],
+  "dominant_themes": ["string"],
+  "tension_level": "bajo|medio|alto|critico",
+  "scores_by_dimension": {"dimension": 0.0},
+  "gap_leader_team": null,
+  "confidence": 0.0
+}
