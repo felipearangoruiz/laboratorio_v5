@@ -21,3 +21,4 @@ frontend/tsconfig.tsbuildinfo
 .ruff_cache/
 .turbo/
 .swc/
+.claude/
