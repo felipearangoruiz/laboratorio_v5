@@ -2,6 +2,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.routers.analysis import router as analysis_router
 from app.routers.auth import router as auth_router
 from app.routers.canvas import router as canvas_router
 from app.routers.collection import router as collection_router
@@ -54,8 +55,11 @@ app.include_router(collection_router, tags=["collection"])
 # Documentos institucionales
 app.include_router(documents_router, tags=["documents"])
 
-# Motor de diagnóstico IA
+# Motor de diagnóstico IA (legacy — Codex externo)
 app.include_router(diagnosis_router, tags=["diagnosis"])
+
+# Motor de análisis — pipeline de 4 pasos
+app.include_router(analysis_router, tags=["analysis"])
 
 # Flujo Free (quick assessment) — prefix necesario para que coincida con el
 # API client del frontend, que llama /api/quick-assessment/...
