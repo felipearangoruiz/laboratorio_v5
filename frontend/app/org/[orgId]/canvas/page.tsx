@@ -23,9 +23,11 @@ import {
   updatePositions,
   getCollectionStatus,
   getLatestDiagnosis,
+  getAnalysisStatus,
   getOrganization,
   updateOrganization,
   type DiagnosisResult,
+  type AnalysisRunStatus,
 } from "@/lib/api";
 import DocumentsOverlay from "./DocumentsOverlay";
 import { useAuth } from "@/hooks/useAuth";
@@ -163,6 +165,7 @@ export default function CanvasPage() {
   const [collectionRefreshKey, setCollectionRefreshKey] = useState(0);
   const [thresholdMet, setThresholdMet] = useState(false);
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisRunStatus | null>(null);
   const [structureType, setStructureType] = useState<StructureType>("areas");
   const [showNodeTypeSelector, setShowNodeTypeSelector] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
@@ -233,9 +236,10 @@ export default function CanvasPage() {
   const loadMeta = useCallback(async () => {
     if (!orgId) return;
     try {
-      const [collStatus, diag] = await Promise.allSettled([
+      const [collStatus, diag, runStatus] = await Promise.allSettled([
         getCollectionStatus(orgId),
         getLatestDiagnosis(orgId),
+        getAnalysisStatus(orgId),
       ]);
       if (collStatus.status === "fulfilled") {
         setThresholdMet(collStatus.value.threshold_met);
@@ -243,6 +247,9 @@ export default function CanvasPage() {
       }
       if (diag.status === "fulfilled" && diag.value && diag.value.status === "ready") {
         setDiagnosis(diag.value);
+      }
+      if (runStatus.status === "fulfilled") {
+        setAnalysisStatus(runStatus.value);
       }
     } catch { /* ignore */ }
   }, [orgId]);
@@ -372,6 +379,15 @@ export default function CanvasPage() {
     setHighlightedNodeIds(new Set(nodeIds));
     setShowNarrative(false);
     // Layer stays as "resultados" — ring animation on relevant nodes
+  }, []);
+
+  /**
+   * Soft highlight — called by IntersectionObserver in NarrativePanel as the
+   * user scrolls through findings. Does NOT close the panel or change layer.
+   * Clears itself when nodeIds is empty.
+   */
+  const handleSoftHighlightNodes = useCallback((nodeIds: string[]) => {
+    setHighlightedNodeIds(nodeIds.length > 0 ? new Set(nodeIds) : null);
   }, []);
 
   async function handleStructureTypeSelected(type: StructureType) {
@@ -611,8 +627,9 @@ export default function CanvasPage() {
             />
           )}
 
-          {/* Analysis layer — no diagnosis yet: show verify-data prompt */}
-          {activeLayer === "analisis" && !diagnosis && (
+          {/* Analysis layer — no diagnosis, no run: show verify-data prompt */}
+          {activeLayer === "analisis" && !diagnosis &&
+            analysisStatus?.status !== "running" && analysisStatus?.status !== "pending" && (
             <AnalysisLayer
               orgId={orgId}
               onDiagnosisGenerated={() => {
@@ -622,15 +639,23 @@ export default function CanvasPage() {
             />
           )}
 
-          {/* Analysis layer — diagnosis processing */}
-          {activeLayer === "analisis" && diagnosis?.status === "processing" && (
+          {/* Analysis layer — script running externally */}
+          {activeLayer === "analisis" && !diagnosis &&
+            (analysisStatus?.status === "running" || analysisStatus?.status === "pending" ||
+             diagnosis?.status === "processing") && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-50/80 backdrop-blur-sm z-5">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-500 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-700">Diagnóstico en proceso…</p>
+                <p className="text-sm font-medium text-gray-700">Análisis en progreso…</p>
                 <p className="text-xs text-gray-400 mt-1">
-                  El procesador externo está analizando los datos. Esto puede tomar unos minutos.
+                  El script externo está procesando los datos. Esto puede tardar unos minutos.
                 </p>
+                <button
+                  onClick={loadMeta}
+                  className="mt-4 text-xs text-gray-500 underline hover:text-gray-700"
+                >
+                  Actualizar estado
+                </button>
               </div>
             </div>
           )}
@@ -638,6 +663,7 @@ export default function CanvasPage() {
           {/* Analysis layer — ready: node panel on click */}
           {selectedNodeData && activeLayer === "analisis" && diagnosis?.status === "ready" && (
             <AnalysisNodePanel
+              orgId={orgId}
               nodeId={selectedNode!}
               nodeName={selectedNodeData.data.label}
               diagnosis={diagnosis}
@@ -682,10 +708,12 @@ export default function CanvasPage() {
                 } else {
                   setActiveLayer("estructura");
                 }
+                setHighlightedNodeIds(null);
               }}
               onHighlightNodes={
                 showNarrative ? handleHighlightNodes : handleHighlightNodesInMap
               }
+              onSoftHighlightNodes={handleSoftHighlightNodes}
             />
           )}
         </div>

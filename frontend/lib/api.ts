@@ -433,13 +433,48 @@ export async function deleteDocument(orgId: string, docId: string) {
 // ── Diagnosis ────────────────────────────────────────
 // Status lifecycle: 'processing' → 'ready' | 'failed'
 
+// ── Shared finding / recommendation types ────────────────────────
+// Supports both the legacy Codex format and the new motor de análisis.
+//
+// Legacy Codex:  confidence="high"|"medium"|"low", dimension=string
+// Motor nuevo:   confidence=float (0–1), dimensions=string[], type="observacion"|"patron"|...
+
+export interface DiagnosisFinding {
+  id: string;
+  title: string;
+  description: string;
+  type: string; // "observacion"|"patron"|"inferencia"|"hipotesis" OR legacy "strength"|"fortaleza"
+  /** Legacy: "high"|"medium"|"low". New motor: float 0–1. */
+  confidence: string | number;
+  node_ids: string[];
+  /** Legacy single dimension */
+  dimension?: string;
+  /** New motor: list of dimensions */
+  dimensions?: string[];
+  /** New motor fields */
+  severity?: string;
+  confidence_rationale?: string;
+}
+
+export interface DiagnosisRecommendation {
+  id: string;
+  priority: number;
+  title: string;
+  description: string;
+  node_ids: string[];
+  /** New motor fields */
+  impact?: string;
+  effort?: string;
+  horizon?: string;
+}
+
 export interface DiagnosisResult {
   id: string;
   organization_id: string;
   status: "processing" | "ready" | "failed";
   scores: Record<string, { score: number; avg: number; std: number; node_scores: Record<string, number> }>;
-  findings: Array<{ id: string; title: string; description: string; dimension: string; confidence: string; node_ids: string[]; type: string }>;
-  recommendations: Array<{ id: string; priority: number; title: string; description: string; node_ids: string[] }>;
+  findings: DiagnosisFinding[];
+  recommendations: DiagnosisRecommendation[];
   narrative_md: string;
   structure_snapshot: Record<string, unknown>;
   error: string | null;
@@ -469,6 +504,64 @@ export async function getNodeDiagnosis(orgId: string, diagnosisId: string, nodeI
 
 export async function getDiagnosisInput(orgId: string) {
   return request<Record<string, unknown>>(`/organizations/${orgId}/diagnosis/input`);
+}
+
+// ── Analysis Motor (pipeline 4 pasos) ────────────────────────────
+
+/** Resultado completo del análisis de un nodo individual (Paso 1). */
+export interface NodeAnalysisRead {
+  id: string;
+  run_id: string;
+  org_id: string;
+  group_id: string;
+  signals_positive: string[];
+  signals_tension: string[];
+  themes: string[];
+  dimensions_touched: string[];
+  evidence_type: string | null;    // "observacion"|"juicio"|"hipotesis"
+  emotional_intensity: string | null; // "baja"|"media"|"alta"
+  key_quotes: string[];
+  context_notes_used: boolean;
+  confidence: number;              // 0.0 – 1.0
+  created_at: string;
+}
+
+/** Estado del analysis_run más reciente de la organización. */
+export interface AnalysisRunStatus {
+  status: "none" | "pending" | "running" | "completed" | "failed";
+  run_id?: string;
+  started_at?: string;
+  completed_at?: string;
+  total_nodes: number;
+  total_groups: number;
+  error_message?: string | null;
+}
+
+/** Estado del último analysis_run de la organización.
+ *  Devuelve { status: "none" } si no hay ninguna corrida. */
+export async function getAnalysisStatus(orgId: string) {
+  return request<AnalysisRunStatus>(`/organizations/${orgId}/analysis/status`);
+}
+
+/** node_analysis más reciente para un nodo (null si no existe). */
+export async function getNodeAnalysis(orgId: string, groupId: string) {
+  return request<NodeAnalysisRead | null>(
+    `/organizations/${orgId}/analysis/latest/nodes/${groupId}`
+  );
+}
+
+/** Abre una nueva corrida de análisis (para botón "Generar diagnóstico"). */
+export async function triggerAnalysisRun(
+  orgId: string,
+  opts?: { model_used?: string; total_nodes?: number; total_groups?: number }
+) {
+  return request<{ run_id: string; status: string }>(
+    `/organizations/${orgId}/analysis/runs`,
+    {
+      method: "POST",
+      body: JSON.stringify(opts ?? {}),
+    }
+  );
 }
 
 // ── Organizations ────────────────────────────────────
