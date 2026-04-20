@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateDiagnosis, ApiError } from "@/lib/api";
+import { getDiagnosisInput, ApiError } from "@/lib/api";
 import { Sparkles, Loader2, AlertCircle } from "lucide-react";
 
 interface Props {
@@ -17,13 +17,17 @@ export default function AnalysisLayer({ orgId, onDiagnosisGenerated }: Props) {
     setGenerating(true);
     setError("");
     try {
-      await generateDiagnosis(orgId);
+      // Fetch input bundle — verifies auth and data availability.
+      // The actual analysis runs in the external Codex processor, which
+      // calls GET /diagnosis/input and then POST /diagnosis when done.
+      await getDiagnosisInput(orgId);
+      // Nothing more to do here: poll loadMeta() until status === 'ready'
       onDiagnosisGenerated();
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message);
       } else {
-        setError("Error al generar diagnóstico.");
+        setError("Error al preparar los datos para el diagnóstico.");
       }
     } finally {
       setGenerating(false);
@@ -47,8 +51,8 @@ export default function AnalysisLayer({ orgId, onDiagnosisGenerated }: Props) {
 
         <p className="mt-2 text-sm text-gray-500 max-w-sm mx-auto">
           {generating
-            ? "El motor de IA está analizando las entrevistas, la estructura organizacional y cruzando datos entre dimensiones. Esto puede tomar 30-60 segundos."
-            : "Has alcanzado el umbral de recolección. Genera un diagnóstico completo con scoring cuantitativo, análisis de red y recomendaciones con IA."}
+            ? "Preparando los datos para el procesador externo…"
+            : "Has alcanzado el umbral de recolección. El diagnóstico se procesa externamente — cuando esté listo aparecerá aquí automáticamente."}
         </p>
 
         {error && (
@@ -64,7 +68,7 @@ export default function AnalysisLayer({ orgId, onDiagnosisGenerated }: Props) {
             className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800"
           >
             <Sparkles className="w-4 h-4" />
-            Generar diagnóstico
+            Verificar datos
           </button>
         )}
 

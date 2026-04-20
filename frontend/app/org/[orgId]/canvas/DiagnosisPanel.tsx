@@ -8,79 +8,93 @@ import {
   ChevronRight,
   TrendingUp,
   TrendingDown,
-  ArrowRight,
   Lightbulb,
-  Network,
+  AlertCircle,
+  CheckCircle2,
+  Minus,
 } from "lucide-react";
+import type { DiagnosisResult } from "@/lib/api";
 
 interface Props {
-  diagnosis: any;
+  diagnosis: DiagnosisResult;
   onClose: () => void;
 }
 
-function ScoreBar({ label, score }: { label: string; score: number }) {
+// ── Score bar ──────────────────────────────────────────────────────
+function ScoreBar({ label, score, avg }: { label: string; score: number; avg?: number }) {
+  const pct = Math.round(Math.min(100, Math.max(0, score * 20))); // 0-5 → 0-100%
   const color =
-    score >= 70
-      ? "bg-emerald-500"
-      : score >= 50
-      ? "bg-amber-500"
-      : "bg-red-500";
+    score >= 3.8 ? "bg-emerald-500" : score >= 2.5 ? "bg-amber-500" : "bg-red-500";
 
   return (
     <div className="flex items-center gap-3">
-      <span className="text-sm text-gray-700 w-36 truncate">{label}</span>
-      <div className="flex-1 h-2.5 bg-gray-100 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${color}`}
-          style={{ width: `${score}%` }}
-        />
+      <span className="text-sm text-warm-700 w-36 truncate capitalize">{label}</span>
+      <div className="flex-1 h-2 bg-warm-100 rounded-full overflow-hidden relative">
+        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+        {avg !== undefined && (
+          <div
+            className="absolute top-0 bottom-0 w-px bg-warm-400/60"
+            style={{ left: `${Math.round(avg * 20)}%` }}
+            title={`Promedio org: ${avg.toFixed(1)}`}
+          />
+        )}
       </div>
-      <span className="text-sm font-semibold text-gray-900 w-12 text-right">
-        {score}
+      <span className="text-sm font-semibold text-warm-900 w-8 text-right tabular-nums">
+        {score.toFixed(1)}
       </span>
     </div>
   );
 }
 
-export default function DiagnosisPanel({ diagnosis, onClose }: Props) {
-  const [expandedDim, setExpandedDim] = useState<string | null>(null);
-
-  const scores = diagnosis.scores || {};
-  const narrative = diagnosis.narrative || {};
-  const network = diagnosis.network_metrics || {};
-  const dims = scores.dimensions || [];
-  const hallazgos = narrative.hallazgos || [];
-  const patrones = narrative.patrones_cruzados || [];
-  const recos = narrative.recomendaciones || [];
-
-  const prioLabels: Record<string, { label: string; color: string }> = {
-    corto_plazo: { label: "Corto plazo", color: "bg-red-50 text-red-700" },
-    mediano_plazo: { label: "Mediano plazo", color: "bg-amber-50 text-amber-700" },
-    largo_plazo: { label: "Largo plazo", color: "bg-blue-50 text-blue-700" },
+// ── Confidence badge ──────────────────────────────────────────────
+function ConfidenceBadge({ confidence }: { confidence: string }) {
+  const map: Record<string, { label: string; cls: string; icon: React.ReactNode }> = {
+    high:   { label: "Alta", cls: "bg-green-50 text-green-700 border-green-200", icon: <CheckCircle2 className="w-3 h-3" /> },
+    medium: { label: "Media", cls: "bg-amber-50 text-amber-700 border-amber-200",  icon: <Minus className="w-3 h-3" /> },
+    low:    { label: "Baja", cls: "bg-red-50 text-red-700 border-red-200",         icon: <AlertCircle className="w-3 h-3" /> },
   };
+  const c = map[confidence] ?? map.medium;
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border ${c.cls}`}>
+      {c.icon}{c.label}
+    </span>
+  );
+}
+
+// ── Main panel ────────────────────────────────────────────────────
+export default function DiagnosisPanel({ diagnosis, onClose }: Props) {
+  const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
+
+  const scoreEntries = Object.entries(diagnosis.scores || {});
+  const findings      = diagnosis.findings || [];
+  const recommendations = diagnosis.recommendations || [];
+  const hasNarrative  = diagnosis.narrative_md && diagnosis.narrative_md.trim().length > 0;
+
+  // Overall score: average of dimension scores
+  const overallScore =
+    scoreEntries.length > 0
+      ? scoreEntries.reduce((sum, [, d]) => sum + (d.score ?? 0), 0) / scoreEntries.length
+      : 0;
 
   return (
-    <div className="absolute top-0 right-0 h-full bg-white border-l border-gray-200 shadow-xl z-20 flex flex-col"
-      style={{ width: "clamp(400px, 65%, 800px)" }}
+    <div
+      className="absolute top-0 right-0 h-full bg-warm-50 border-l border-warm-200 shadow-warm-md z-20 flex flex-col"
+      style={{ width: "clamp(380px, 62%, 760px)" }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-warm-200 bg-white flex-shrink-0">
         <div>
-          <h2 className="text-lg font-bold text-gray-900">
-            Diagnóstico Organizacional
-          </h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            {scores.total_responses || 0} entrevistas analizadas
+          <h2 className="font-display italic text-xl text-warm-900">Diagnóstico Organizacional</h2>
+          <p className="text-xs text-warm-500 mt-0.5">
+            {findings.length} hallazgos · {recommendations.length} recomendaciones
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs border border-gray-200 rounded-lg hover:bg-gray-50"
-          >
+          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-warm-300 rounded-md hover:bg-warm-100 text-warm-600 transition-colors">
             <FileDown className="w-3.5 h-3.5" />
             Exportar PDF
           </button>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="text-warm-400 hover:text-warm-700 transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -88,81 +102,90 @@ export default function DiagnosisPanel({ diagnosis, onClose }: Props) {
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto px-6 py-5 space-y-8">
+
         {/* Score global */}
-        <div className="text-center p-5 bg-gray-50 rounded-xl">
-          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+        <div className="text-center p-5 bg-white rounded-xl border border-warm-200">
+          <p className="text-xs font-semibold text-warm-400 uppercase tracking-widest mb-1">
             Score Global
           </p>
-          <p className="text-4xl font-bold text-gray-900 mt-1">
-            {scores.overall || 0}
-            <span className="text-lg text-gray-400">/100</span>
+          <p className="text-5xl font-bold text-warm-900 tabular-nums">
+            {overallScore.toFixed(1)}
+            <span className="text-xl text-warm-400 font-normal">/5</span>
+          </p>
+          <p className="text-xs text-warm-400 mt-1">
+            {overallScore >= 3.8 ? "Saludable" : overallScore >= 2.5 ? "Atención recomendada" : "Intervención urgente"}
           </p>
         </div>
 
-        {/* Resumen ejecutivo */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">
-            Resumen Ejecutivo
-          </h3>
-          <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
-            {narrative.resumen_ejecutivo || "Sin resumen disponible."}
-          </p>
-        </div>
+        {/* Narrative (markdown rendered as pre-formatted text) */}
+        {hasNarrative && (
+          <div>
+            <h3 className="text-sm font-semibold text-warm-900 mb-3">Resumen Ejecutivo</h3>
+            <div className="text-sm text-warm-700 leading-relaxed whitespace-pre-line bg-white border border-warm-200 rounded-lg px-4 py-3">
+              {/* Extract first ~400 chars as executive summary until full markdown renderer is added */}
+              {diagnosis.narrative_md.slice(0, 600)}
+              {diagnosis.narrative_md.length > 600 && (
+                <span className="text-warm-400">… (ver diagnóstico completo)</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Scores por dimensión */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">
-            Scores por Dimensión
-          </h3>
-          <div className="space-y-2.5">
-            {dims.map((d: any) => (
-              <ScoreBar key={d.id} label={d.label} score={d.score} />
-            ))}
-          </div>
-        </div>
-
-        {/* Hallazgos por dimensión */}
-        {hallazgos.length > 0 && (
+        {scoreEntries.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">
-              Hallazgos por Dimensión
-            </h3>
+            <h3 className="text-sm font-semibold text-warm-900 mb-3">Scores por Dimensión</h3>
+            <div className="space-y-2.5">
+              {scoreEntries.map(([dim, data]) => (
+                <ScoreBar
+                  key={dim}
+                  label={dim}
+                  score={data.score ?? 0}
+                  avg={data.avg}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Hallazgos */}
+        {findings.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-warm-900 mb-3">Hallazgos</h3>
             <div className="space-y-2">
-              {hallazgos.map((h: any, i: number) => {
-                const isExpanded = expandedDim === `h-${i}`;
+              {findings.map((f) => {
+                const isOpen = expandedFinding === f.id;
+                const isStrength = f.type === "strength" || f.type === "fortaleza";
                 return (
-                  <div
-                    key={i}
-                    className="border border-gray-200 rounded-lg overflow-hidden"
-                  >
+                  <div key={f.id} className="border border-warm-200 rounded-lg overflow-hidden bg-white">
                     <button
-                      onClick={() =>
-                        setExpandedDim(isExpanded ? null : `h-${i}`)
-                      }
-                      className="w-full flex items-center gap-2 px-3 py-2.5 text-left hover:bg-gray-50"
+                      onClick={() => setExpandedFinding(isOpen ? null : f.id)}
+                      className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left hover:bg-warm-50 transition-colors"
                     >
-                      {h.tipo === "fortaleza" ? (
-                        <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                      {isStrength ? (
+                        <TrendingUp className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
                       ) : (
-                        <TrendingDown className="w-4 h-4 text-red-500 flex-shrink-0" />
+                        <TrendingDown className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {h.titulo}
-                        </p>
-                        <p className="text-[10px] text-gray-500">
-                          {h.dimension}
-                        </p>
+                        <p className="text-sm font-medium text-warm-900 leading-snug">{f.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className="text-[10px] text-warm-400 capitalize">{f.dimension}</span>
+                          <ConfidenceBadge confidence={f.confidence} />
+                        </div>
                       </div>
-                      {isExpanded ? (
-                        <ChevronDown className="w-4 h-4 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="w-4 h-4 text-gray-400" />
-                      )}
+                      {isOpen
+                        ? <ChevronDown className="w-4 h-4 text-warm-400 flex-shrink-0 mt-0.5" />
+                        : <ChevronRight className="w-4 h-4 text-warm-400 flex-shrink-0 mt-0.5" />}
                     </button>
-                    {isExpanded && (
-                      <div className="px-3 pb-3 text-sm text-gray-600 border-t border-gray-100 pt-2">
-                        {h.descripcion}
+                    {isOpen && (
+                      <div className="px-4 pb-3 pt-2 text-sm text-warm-700 border-t border-warm-100 leading-relaxed">
+                        {f.description}
+                        {f.node_ids?.length > 0 && (
+                          <p className="text-[10px] text-warm-400 mt-2">
+                            Nodos afectados: {f.node_ids.length}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -172,94 +195,50 @@ export default function DiagnosisPanel({ diagnosis, onClose }: Props) {
           </div>
         )}
 
-        {/* Patrones cruzados */}
-        {patrones.length > 0 && (
-          <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
-              <Network className="w-4 h-4" />
-              Patrones Cruzados
-            </h3>
-            <div className="space-y-3">
-              {patrones.map((p: any, i: number) => (
-                <div
-                  key={i}
-                  className="p-3 bg-purple-50 border border-purple-100 rounded-lg"
-                >
-                  <p className="text-sm font-medium text-purple-900">
-                    {p.titulo}
-                  </p>
-                  <p className="text-xs text-purple-700 mt-0.5">
-                    {(p.dimensiones_involucradas || []).join(" + ")}
-                  </p>
-                  <p className="text-sm text-purple-800 mt-1.5">
-                    {p.descripcion}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Recomendaciones */}
-        {recos.length > 0 && (
+        {recommendations.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5">
-              <Lightbulb className="w-4 h-4" />
+            <h3 className="text-sm font-semibold text-warm-900 mb-3 flex items-center gap-1.5">
+              <Lightbulb className="w-4 h-4 text-accent" />
               Recomendaciones
             </h3>
-            <div className="space-y-3">
-              {recos.map((r: any, i: number) => {
-                const prio = prioLabels[r.prioridad] || prioLabels.mediano_plazo;
-                return (
-                  <div
-                    key={i}
-                    className="p-3 border border-gray-200 rounded-lg"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm font-medium text-gray-900">
-                        {r.titulo}
-                      </p>
-                      <span
-                        className={`px-2 py-0.5 text-[10px] font-medium rounded-full flex-shrink-0 ${prio.color}`}
-                      >
-                        {prio.label}
+            <div className="space-y-2.5">
+              {[...recommendations]
+                .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99))
+                .map((r, i) => (
+                  <div key={r.id ?? i} className="p-3 border border-warm-200 rounded-lg bg-white">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-bold text-accent bg-accent/10 rounded w-5 h-5 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        {r.priority ?? i + 1}
                       </span>
+                      <div>
+                        <p className="text-sm font-medium text-warm-900">{r.title}</p>
+                        <p className="text-sm text-warm-600 mt-0.5 leading-relaxed">{r.description}</p>
+                        {r.node_ids?.length > 0 && (
+                          <p className="text-[10px] text-warm-400 mt-1.5">
+                            Aplica a {r.node_ids.length} nodo{r.node_ids.length !== 1 ? "s" : ""}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {r.descripcion}
-                    </p>
                   </div>
-                );
-              })}
+                ))}
             </div>
           </div>
         )}
 
-        {/* Network metrics */}
-        <div>
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">
-            Métricas de Red
-          </h3>
-          <div className="grid grid-cols-3 gap-3">
-            <div className="p-3 bg-gray-50 rounded-lg text-center">
-              <p className="text-lg font-bold text-gray-900">
-                {network.total_nodes || 0}
-              </p>
-              <p className="text-[10px] text-gray-500">Nodos</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg text-center">
-              <p className="text-lg font-bold text-gray-900">
-                {network.depth || 0}
-              </p>
-              <p className="text-[10px] text-gray-500">Profundidad</p>
-            </div>
-            <div className="p-3 bg-gray-50 rounded-lg text-center">
-              <p className="text-lg font-bold text-gray-900">
-                {network.isolated || 0}
-              </p>
-              <p className="text-[10px] text-gray-500">Aislados</p>
-            </div>
-          </div>
+        {/* Metadata */}
+        <div className="text-xs text-warm-400 border-t border-warm-200 pt-4">
+          {diagnosis.completed_at && (
+            <p>
+              Generado el{" "}
+              {new Date(diagnosis.completed_at).toLocaleDateString("es-ES", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+            </p>
+          )}
         </div>
       </div>
     </div>

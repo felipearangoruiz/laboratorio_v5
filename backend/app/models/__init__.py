@@ -1,6 +1,6 @@
 from sqlmodel import SQLModel
 
-from .diagnosis import DiagnosisResult, DiagnosisResultRead
+from .diagnosis import DiagnosisCreate, DiagnosisResult, DiagnosisResultRead
 from .document import Document, DocumentRead, DocType
 from .group import Group, GroupRead
 from .interview import Interview, InterviewRead
@@ -67,9 +67,10 @@ __all__ = [
     # Membership (user ↔ org with role)
     "Membership",
     "MembershipRead",
-    # Diagnosis (IA pipeline result)
+    # Diagnosis (external Codex processor result)
     "DiagnosisResult",
     "DiagnosisResultRead",
+    "DiagnosisCreate",
     # Legacy processing + jobs
     "ProcessingResult",
     "ProcessingResultRead",

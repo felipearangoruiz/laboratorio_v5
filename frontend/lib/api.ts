@@ -430,15 +430,45 @@ export async function deleteDocument(orgId: string, docId: string) {
   return request<void>(`/organizations/${orgId}/documents/${docId}`, { method: "DELETE" });
 }
 
-// ── Diagnosis (Fase 3) ──────────────────────────────
-export async function generateDiagnosis(orgId: string) {
-  return request<any>(`/organizations/${orgId}/diagnosis/generate`, {
-    method: "POST",
-  });
+// ── Diagnosis ────────────────────────────────────────
+// Status lifecycle: 'processing' → 'ready' | 'failed'
+
+export interface DiagnosisResult {
+  id: string;
+  organization_id: string;
+  status: "processing" | "ready" | "failed";
+  scores: Record<string, { score: number; avg: number; std: number; node_scores: Record<string, number> }>;
+  findings: Array<{ id: string; title: string; description: string; dimension: string; confidence: string; node_ids: string[]; type: string }>;
+  recommendations: Array<{ id: string; priority: number; title: string; description: string; node_ids: string[] }>;
+  narrative_md: string;
+  structure_snapshot: Record<string, unknown>;
+  error: string | null;
+  created_at: string;
+  completed_at: string | null;
 }
 
 export async function getLatestDiagnosis(orgId: string) {
-  return request<any | null>(`/organizations/${orgId}/diagnosis/latest`);
+  return request<DiagnosisResult | null>(`/organizations/${orgId}/diagnosis/latest`);
+}
+
+export async function createDiagnosis(orgId: string, data: Omit<DiagnosisResult, "id" | "organization_id" | "status" | "error" | "created_at" | "completed_at">) {
+  return request<DiagnosisResult>(`/organizations/${orgId}/diagnosis`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getNodeDiagnosis(orgId: string, diagnosisId: string, nodeId: string) {
+  return request<{
+    node_id: string;
+    scores: Record<string, { score: number; avg: number; std: number }>;
+    findings: DiagnosisResult["findings"];
+    recommendations: DiagnosisResult["recommendations"];
+  }>(`/organizations/${orgId}/diagnosis/${diagnosisId}/node/${nodeId}`);
+}
+
+export async function getDiagnosisInput(orgId: string) {
+  return request<Record<string, unknown>>(`/organizations/${orgId}/diagnosis/input`);
 }
 
 // ── Organizations ────────────────────────────────────

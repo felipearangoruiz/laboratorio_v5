@@ -177,7 +177,7 @@ export default function CanvasPage() {
         setThresholdMet(collStatus.value.threshold_met);
         setNodeStatuses(collStatus.value.node_statuses ?? {});
       }
-      if (diag.status === "fulfilled" && diag.value && diag.value.status === "completed") {
+      if (diag.status === "fulfilled" && diag.value && diag.value.status === "ready") {
         setDiagnosis(diag.value);
       }
     } catch { /* ignore */ }
