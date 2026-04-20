@@ -409,3 +409,44 @@ docker-compose up --build
 6. **Conserva el backend existente.** Extiende, no reescribas.
 7. **El frontend se reconstruye desde cero.** No intentes adaptar el código actual.
 8. **Pregunta antes de asumir** si algo no está claro en el PRD.
+
+---
+
+## 12. Motor de Análisis
+
+El motor de análisis es el pipeline que convierte respuestas de entrevistas + documentos + estructura organizacional en hallazgos, recomendaciones y narrativa. Se ejecuta externamente (Codex/LLM API) y entrega resultados al backend via `POST /organizations/{org_id}/diagnosis`.
+
+### Pipeline de 4 pasos (NO negociable)
+
+El motor **nunca envía datos crudos al LLM**. Siempre construye representaciones intermedias primero.
+
+**PASO 1 — Extracción por nodo** (un prompt por persona/nodo)
+- Input: respuestas cuantitativas + texto libre + rol + nivel jerárquico + context_notes del admin + documentos del nodo si los hay
+- Output: `node_analysis` (objeto estructurado, NO narrativa)
+- Guardado en: tabla `node_analyses`
+
+**PASO 2 — Síntesis por grupo** (un prompt por grupo)
+- Input: todos los `node_analyses` del grupo + scores cuantitativos + notas del admin + documentos del grupo
+- Output: `group_analysis` con patrones internos identificados
+- Guardado en: tabla `group_analyses`
+
+**PASO 3 — Análisis organizacional** (un prompt)
+- Input: todos los `group_analyses` + estructura del organigrama + métricas de red + documentos institucionales ya procesados
+- Output: `org_analysis` con patrones transversales y contradicciones
+- Guardado en: tabla `org_analyses`
+
+**PASO 4 — Síntesis ejecutiva** (un prompt)
+- Input: outputs de pasos 2 y 3 (ya estructurados, **NO datos crudos**)
+- Output: `findings` + `recommendations` + `narrative_md`
+- **Regla:** el LLM NO puede introducir hallazgos que no vengan de pasos anteriores
+
+### Tablas del motor
+
+```
+analysis_runs, node_analyses, group_analyses, org_analyses,
+document_extractions, findings, recommendations, evidence_links
+```
+
+### Regla de oro
+
+> Si un prompt del motor recibe datos crudos de entrevistas sin transformación previa, hay un **bug de arquitectura**.

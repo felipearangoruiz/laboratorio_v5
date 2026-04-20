@@ -57,7 +57,8 @@ laboratorio_v5/
 │   ├── lib/                 # API client y tipos
 │   └── Dockerfile
 ├── docs/
-│   └── PRD_v2_Diagnostico_Organizacional.docx  # Fuente de verdad del producto
+│   ├── PRD_v2.1_Diagnostico_Organizacional.docx     # Fuente de verdad del producto
+│   └── ARQUITECTURA_ANALISIS_RESULTADOS.md          # Arquitectura UI capas Análisis/Resultados
 ├── docker-compose.yml
 └── CLAUDE.md               # Guía para Claude Code
 ```
@@ -72,5 +73,6 @@ Canvas organizacional interactivo, 8 dimensiones, entrevistas profundas, motor I
 
 ## Documentación
 
-- **PRD v2:** `docs/PRD_v2_Diagnostico_Organizacional.docx` — fuente de verdad del producto
-- **CLAUDE.md:** guía de desarrollo, arquitectura, roadmap de fases
+- **PRD v2.1:** `docs/PRD_v2.1_Diagnostico_Organizacional.docx` — fuente de verdad del producto
+- **Arquitectura UI:** `docs/ARQUITECTURA_ANALISIS_RESULTADOS.md` — especificación de capas Análisis/Resultados
+- **CLAUDE.md:** guía de desarrollo, arquitectura, roadmap de fases, motor de análisis
