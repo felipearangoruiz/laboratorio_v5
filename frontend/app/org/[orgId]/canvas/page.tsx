@@ -25,6 +25,7 @@ import {
   getLatestDiagnosis,
   getOrganization,
   updateOrganization,
+  type DiagnosisResult,
 } from "@/lib/api";
 import DocumentsOverlay from "./DocumentsOverlay";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,13 +34,47 @@ import SidePanel from "./SidePanel";
 import CollectionPanel from "./CollectionPanel";
 import CollectionProgress from "./CollectionProgress";
 import AnalysisLayer from "./AnalysisLayer";
-import DiagnosisPanel from "./DiagnosisPanel";
+import AnalysisNodePanel from "./AnalysisNodePanel";
+import DimensionFilter from "./DimensionFilter";
+import NarrativePanel from "./NarrativePanel";
 import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import LayerSelector from "./LayerSelector";
-import { Plus, User, Users } from "lucide-react";
+import { Loader2, Plus, User, Users } from "lucide-react";
 
 const nodeTypes = { orgNode: OrgNode };
+
+// ── Tension helpers ───────────────────────────────────────────────
+/**
+ * Convert a 0–5 score to a 0–100 tension value.
+ * High tension = problem. Low tension = healthy.
+ * If dimension is specified, uses node_scores for that dimension.
+ * If null, averages tension across all dimensions.
+ */
+function computeNodeTension(
+  nodeId: string,
+  scores: DiagnosisResult["scores"],
+  dimension: string | null,
+): number | undefined {
+  if (!scores || Object.keys(scores).length === 0) return undefined;
+
+  if (dimension) {
+    const s = scores[dimension]?.node_scores?.[nodeId];
+    if (s === undefined) return undefined;
+    return Math.round((1 - Math.min(s, 5) / 5) * 100);
+  }
+
+  const tensionValues = Object.values(scores)
+    .map((d) => {
+      const s = d.node_scores?.[nodeId];
+      if (s === undefined) return null;
+      return Math.round((1 - Math.min(s, 5) / 5) * 100);
+    })
+    .filter((t): t is number => t !== null);
+
+  if (tensionValues.length === 0) return undefined;
+  return Math.round(tensionValues.reduce((a, b) => a + b, 0) / tensionValues.length);
+}
 
 type StructureType = "people" | "areas" | "mixed";
 
@@ -125,10 +160,14 @@ export default function CanvasPage() {
   const [nodeStatuses, setNodeStatuses] = useState<Record<string, string>>({});
   const [collectionRefreshKey, setCollectionRefreshKey] = useState(0);
   const [thresholdMet, setThresholdMet] = useState(false);
-  const [diagnosis, setDiagnosis] = useState<any>(null);
+  const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
   const [structureType, setStructureType] = useState<StructureType>("areas");
   const [showNodeTypeSelector, setShowNodeTypeSelector] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
+  // Analysis layer state
+  const [activeDimension,   setActiveDimension]   = useState<string | null>(null);
+  const [showNarrative,     setShowNarrative]     = useState(false);
+  const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string> | null>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rawGroupsRef = useRef<GroupData[]>([]);
 
@@ -186,14 +225,35 @@ export default function CanvasPage() {
   useEffect(() => { loadGroups(); }, [loadGroups]);
   useEffect(() => { loadMeta(); }, [loadMeta]);
 
-  // Re-render nodes when layer changes
+  // Re-render nodes when layer or analysis state changes
   useEffect(() => {
     if (rawGroupsRef.current.length > 0) {
       const { nodes: n, edges: e } = treeToFlow(rawGroupsRef.current, activeLayer, nodeStatuses);
-      setNodes(n);
+
+      if (activeLayer === "analisis" && diagnosis?.status === "ready") {
+        const enriched = n.map((node) => {
+          const tension = computeNodeTension(node.id, diagnosis.scores, activeDimension);
+          let isHighlighted: boolean | undefined = undefined;
+
+          if (highlightedNodeIds !== null) {
+            isHighlighted = highlightedNodeIds.has(node.id);
+          } else if (activeDimension !== null && tension !== undefined) {
+            // Dim filter: highlight (full opacity) problem nodes, dim healthy ones
+            isHighlighted = tension > 40;
+          }
+
+          return {
+            ...node,
+            data: { ...node.data, tensionScore: tension, isHighlighted },
+          };
+        });
+        setNodes(enriched);
+      } else {
+        setNodes(n);
+      }
       setEdges(e);
     }
-  }, [activeLayer, nodeStatuses, setNodes, setEdges]);
+  }, [activeLayer, nodeStatuses, diagnosis, activeDimension, highlightedNodeIds, setNodes, setEdges]);
 
   const onConnect = useCallback(
     async (connection: Connection) => {
@@ -239,6 +299,14 @@ export default function CanvasPage() {
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
     setShowNodeTypeSelector(false);
+    setHighlightedNodeIds(null); // Clear any finding-based highlighting
+  }, []);
+
+  /** Called from NarrativePanel when user clicks "Ver nodos en canvas" on a finding. */
+  const handleHighlightNodes = useCallback((nodeIds: string[]) => {
+    setHighlightedNodeIds(new Set(nodeIds));
+    setShowNarrative(false);
+    setActiveLayer("analisis");
   }, []);
 
   async function handleStructureTypeSelected(type: StructureType) {
@@ -374,6 +442,18 @@ export default function CanvasPage() {
           <CollectionProgress orgId={orgId} refreshKey={collectionRefreshKey} />
         )}
 
+        {/* Dimension filter — análisis layer with ready diagnosis */}
+        {activeLayer === "analisis" && diagnosis?.status === "ready" && (
+          <DimensionFilter
+            diagnosis={diagnosis}
+            active={activeDimension}
+            onChange={(dim) => {
+              setActiveDimension(dim);
+              setHighlightedNodeIds(null);
+            }}
+          />
+        )}
+
         <div className="flex-1 relative">
           {isEmpty ? (
             <EmptyState
@@ -466,7 +546,7 @@ export default function CanvasPage() {
             />
           )}
 
-          {/* Analysis layer overlay */}
+          {/* Analysis layer — no diagnosis yet: show verify-data prompt */}
           {activeLayer === "analisis" && !diagnosis && (
             <AnalysisLayer
               orgId={orgId}
@@ -477,11 +557,42 @@ export default function CanvasPage() {
             />
           )}
 
-          {/* Results panel */}
-          {activeLayer === "resultados" && diagnosis && (
-            <DiagnosisPanel
+          {/* Analysis layer — diagnosis processing */}
+          {activeLayer === "analisis" && diagnosis?.status === "processing" && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-50/80 backdrop-blur-sm z-5">
+              <div className="text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-500 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-700">Diagnóstico en proceso…</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  El procesador externo está analizando los datos. Esto puede tomar unos minutos.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Analysis layer — ready: node panel on click */}
+          {selectedNodeData && activeLayer === "analisis" && diagnosis?.status === "ready" && (
+            <AnalysisNodePanel
+              nodeId={selectedNode!}
+              nodeName={selectedNodeData.data.label}
               diagnosis={diagnosis}
-              onClose={() => setActiveLayer("estructura")}
+              onClose={() => setSelectedNode(null)}
+              onViewNarrative={() => setShowNarrative(true)}
+            />
+          )}
+
+          {/* Narrative panel — resultados layer OR triggered from análisis */}
+          {(activeLayer === "resultados" || showNarrative) && diagnosis && (
+            <NarrativePanel
+              diagnosis={diagnosis}
+              onClose={() => {
+                if (showNarrative) {
+                  setShowNarrative(false);
+                } else {
+                  setActiveLayer("estructura");
+                }
+              }}
+              onHighlightNodes={handleHighlightNodes}
             />
           )}
         </div>

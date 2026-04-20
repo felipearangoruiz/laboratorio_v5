@@ -15,6 +15,8 @@ export interface OrgNodeData {
   contextNotes?: string | null;
   interviewStatus?: "none" | "invited" | "in_progress" | "completed" | "expired" | "pending";
   activeLayer?: string;
+  tensionScore?: number;   // 0–100 (100 = max tension), used in análisis layer
+  isHighlighted?: boolean; // false → 0.35 opacity; undefined/true → full opacity
 }
 
 // Dot color for interview status (shown only in recoleccion layer)
@@ -35,13 +37,27 @@ const STATUS_BORDER: Record<string, string> = {
   expired:     "border-orange-300",
 };
 
+// Tension colors: 0–40 healthy, 41–70 caution, 71–100 critical
+function tensionColor(score: number): { hex: string; dot: string } {
+  if (score <= 40) return { hex: "#15803D", dot: "bg-emerald-600" };
+  if (score <= 70) return { hex: "#B45309", dot: "bg-amber-600" };
+  return { hex: "#DC2626", dot: "bg-red-600" };
+}
+
 function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
-  const showStatus = data.activeLayer === "recoleccion";
-  const status = data.interviewStatus || "none";
-  const isPerson = data.nodeType === "person";
+  const showStatus   = data.activeLayer === "recoleccion";
+  const showAnalysis = data.activeLayer === "analisis";
+  const status       = data.interviewStatus || "none";
+  const isPerson     = data.nodeType === "person";
+
+  const hasTension = showAnalysis && data.tensionScore !== undefined;
+  const tc         = hasTension ? tensionColor(data.tensionScore!) : null;
+  const opacity    = data.isHighlighted === false ? 0.35 : 1;
 
   const borderClass = selected
     ? "border-[#C2410C] border-2 shadow-[0_0_0_3px_rgba(194,65,12,0.15)]"
+    : hasTension
+    ? "border-[1.5px]"
     : showStatus && status !== "none"
     ? `${STATUS_BORDER[status]} border-[1.5px]`
     : "border-[#D4D0C8] border-[1.5px] hover:border-[#A8A29E]";
@@ -49,7 +65,12 @@ function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
   return (
     <div
       className={`bg-white rounded-[6px] px-4 py-3 min-w-[160px] transition-all ${borderClass}`}
-      style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.18)" }}
+      style={{
+        boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
+        borderColor: tc ? tc.hex : undefined,
+        opacity,
+        transition: "opacity 0.2s ease, border-color 0.2s ease",
+      }}
     >
       <Handle
         type="target"
@@ -83,8 +104,13 @@ function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
           )}
         </div>
 
-        {/* Status dot — top-right, only in recoleccion */}
-        {showStatus && status !== "none" && (
+        {/* Tension dot — análisis layer */}
+        {hasTension && tc && (
+          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${tc.dot}`} />
+        )}
+
+        {/* Status dot — recoleccion layer */}
+        {!hasTension && showStatus && status !== "none" && (
           <div
             className={`w-2 h-2 rounded-full flex-shrink-0 ${STATUS_DOT[status] ?? "bg-warm-400"}`}
           />
