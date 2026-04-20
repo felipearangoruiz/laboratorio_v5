@@ -641,8 +641,7 @@ export default function CanvasPage() {
 
           {/* Analysis layer — script running externally */}
           {activeLayer === "analisis" && !diagnosis &&
-            (analysisStatus?.status === "running" || analysisStatus?.status === "pending" ||
-             diagnosis?.status === "processing") && (
+            (analysisStatus?.status === "running" || analysisStatus?.status === "pending") && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-50/80 backdrop-blur-sm z-5">
               <div className="text-center">
                 <Loader2 className="w-8 h-8 animate-spin text-gray-500 mx-auto mb-3" />
