@@ -4,6 +4,8 @@
 > Complementa el PRD v2.1 y CLAUDE.md sección 12.
 > En caso de conflicto, este documento gana para decisiones de implementación del motor.
 
+> **Nota sobre el término "node" (disclaimer):** en este documento "node" se refiere conceptualmente a un respondiente individual (en el nuevo modelo: un `Node` con `type = "person"`). Las tablas `node_analyses` y `group_analyses` mantienen la columna `group_id UUID FK groups.id` por compatibilidad durante el sprint de refactor Node + Edge; los UUIDs se preservan en la migración para que los FKs sigan resolviéndose. Ver `docs/MODEL_PHILOSOPHY.md` §3 para la resolución completa de la ambigüedad de nomenclatura, y `docs/DEUDA_DOCUMENTAL.md` para la deuda técnica de renombrar estos FKs a `node_id` en un sprint posterior.
+
 ---
 
 ## 1. Pipeline

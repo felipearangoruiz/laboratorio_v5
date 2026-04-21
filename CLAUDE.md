@@ -25,7 +25,7 @@ El backend tiene una base funcional que debe mantenerse y extenderse:
 
 - **Stack:** FastAPI + SQLModel + PostgreSQL + Alembic (migraciones) + Docker
 - **Auth:** JWT con access + refresh token. Login, logout, /me. Funciona.
-- **Modelos existentes:** User, Organization, Group, Member, Interview, AnalysisJob. Necesitan ajustes (ver sección 5) pero la estructura es sólida.
+- **Modelos existentes:** User, Organization, Group, Member, Interview, AnalysisJob. Necesitan ajustes (ver sección 6) pero la estructura es sólida. *(Nota del refactor Node+Edge — Sprint 1: `Group` se absorbe como `Node type=unit`; `Member` como `Node type=person`; `LateralRelation` se reemplaza por `Edge` con enum cerrado `{lateral, process}`. Ver `docs/MODEL_PHILOSOPHY.md` para el modelo nuevo.)*
 - **Routers existentes:** auth, organizations, groups, members, interviews, interview_public. Funcionan.
 - **Docker Compose:** PostgreSQL 16 + backend + frontend. Funciona.
 - **Seed:** Crea organización default + superadmin.
@@ -59,26 +59,24 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 
 1. **El canvas organizacional es la pantalla principal.** No es un módulo. Es la home del usuario premium.
 2. **El usuario nunca pierde el contexto del canvas.** Toda funcionalidad se abre como panel lateral, overlay o capa. Nunca como navegación a otra página.
-3. **4 capas sobre el mismo canvas:** Estructura → Recolección → Análisis → Resultados. Cambiar de capa no cambia de pantalla.
+3. **3 capas sobre el mismo canvas:** Estructura+Captura → Análisis → Resultados. Cambiar de capa no cambia de pantalla. *(La antigua capa "Recolección" se fusionó en "Estructura+Captura" por decisión del 21 de abril de 2026 — ver `docs/MODEL_PHILOSOPHY.md`.)*
 4. **Panel lateral contextual derecho:** se abre al hacer clic en un nodo. Su contenido cambia según la capa activa.
 5. **Sidebar mínimo izquierdo (colapsable):** solo para settings, billing, documentos, selector de org, cuenta.
 6. **Diagnóstico narrativo:** panel expandido lateral derecho (60-70% viewport), canvas visible en segundo plano.
 
 ### Comportamiento por capa (fuente de verdad)
 
-**CAPA ESTRUCTURA:**
-- El admin construye el mapa organizacional y caracteriza cada nodo.
-- Cada nodo tiene: nombre, rol/cargo, área, email del miembro asignado, contexto libre, descripción.
-- El email se ingresa **UNA SOLA VEZ aquí** — es la persona que responderá la entrevista por ese nodo.
-- También desde esta capa el admin puede subir documentos institucionales (estatutos, misión, manuales) que alimentarán el análisis de IA.
-- El panel lateral en esta capa muestra: formulario de edición completo del nodo + campo de email + campo de contexto.
-
-**CAPA RECOLECCIÓN:**
-- Muestra el **MISMO grafo de Estructura** pero en modo lectura de estado.
-- El admin **NO recaracteriza nada aquí** — la estructura ya está definida.
-- El panel lateral muestra: estado de la entrevista (sin invitar / invitado / en progreso / completado / vencido), el link copiable para compartir, botón WhatsApp, fecha de respuesta si aplica.
-- El sistema usa el email guardado en Estructura para generar el token automáticamente — no se pide email de nuevo.
-- Los nodos sin email asignado muestran un aviso "Asigna un email en Estructura para invitar".
+**CAPA ESTRUCTURA+CAPTURA:** *(unificada — antes eran dos capas separadas)*
+- El admin construye el mapa organizacional, caracteriza cada nodo y gestiona las invitaciones desde la misma vista.
+- Cada nodo tiene: nombre, tipo (`unit` | `person`), posición jerárquica vía `parent_node_id`, área, contexto libre, descripción. Para nodos `person`: email del respondiente y `role_label` del estado de campaña activa.
+- El email se ingresa **UNA SOLA VEZ** en el panel lateral del nodo `person` — es la persona que responderá la entrevista.
+- También desde esta capa el admin puede subir documentos institucionales (estatutos, misión, manuales) que alimentarán el análisis de IA. Los documentos pueden ser permanentes (transversales a campañas) o asociados a la campaña activa.
+- El panel lateral en esta capa muestra pestañas contextuales:
+  - **Identidad** — formulario de edición del nodo (nombre, tipo, padre jerárquico, descripción).
+  - **Estado de campaña** — email asignado, `role_label`, `context_notes`, estado de la entrevista (sin invitar / invitado / en progreso / completado / vencido), link copiable, botón WhatsApp, fecha de respuesta.
+  - **Documentos** — adjuntos al nodo si aplica.
+- Los nodos `person` sin email asignado muestran un aviso "Asigna un email en este panel para invitar".
+- Ver `docs/MODEL_PHILOSOPHY.md` §7 para la convención visual completa.
 
 **CAPA ANÁLISIS:**
 - Objetivo: comprensión rápida y situada del estado de la organización.
@@ -174,6 +172,17 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 
 ## 6. Modelo de datos
 
+> **Fuente de verdad del modelo estructural:** `docs/MODEL_PHILOSOPHY.md`.
+> Esta sección es un resumen de las decisiones que gobiernan el refactor Node + Edge del Sprint 1. En caso de conflicto con MODEL_PHILOSOPHY.md, ese documento gana (y a su vez cede ante el PRD v2.1).
+
+### Refactor Node + Edge (decisión del 21 de abril de 2026)
+
+El modelo estructural se unifica. Las tablas separadas `groups` y `members` se colapsan en una única tabla `nodes` con un campo discriminador `type`:
+
+- `Group` → `Node { type = "unit" }`.
+- `Member` → `Node { type = "person" }`.
+- `LateralRelation` → `Edge` con enum cerrado `edge_type ∈ { "lateral", "process" }`. **No existe el valor `"otro"`.** No existe `"hierarchical"` (la jerarquía vive en `parent_node_id`).
+
 ### Modelos existentes que necesitan ajustes
 
 **User** — Agregar:
@@ -183,61 +192,91 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 **Organization** — Agregar:
 - `type: str` (empresa, ong, equipo, otro)
 - `size_range: str` (1-10, 11-50, 51-200, 200+)
-- `unit_type: str` (persona, grupo)
 - `plan: str` (free, premium)
 - Eliminar `admin_id` → reemplazar con Membership
 
-**Group** → Renombrar conceptualmente a **Node** en el PRD, pero puede mantenerse como `Group` en DB si se agregan:
-- `area: str`
-- `level: int` (nivel jerárquico)
-- `position_x: float, position_y: float` (posición en canvas)
-
-**Member** — Sin cambios mayores. Revisar que `token_status` incluya todos los estados del PRD.
-
 **Interview** — Agregar:
 - `dimension: str` (para asociar respuestas a dimensión)
+- `campaign_id: UUID` (FK a `assessment_campaigns`)
 - Revisar `schema_version`
 
-### Modelos nuevos requeridos
+### Modelos nuevos del refactor
 
 ```python
-# Membership (reemplaza relación directa User-Organization)
+# Node — reemplaza Group y Member. Identidad permanente.
+class Node:
+    id: UUID
+    organization_id: UUID
+    parent_node_id: UUID | None
+    type: str              # "unit" | "person"
+    name: str
+    position_x: float
+    position_y: float
+    created_at: datetime
+    # Invariantes clave (ver MODEL_PHILOSOPHY.md §8):
+    #  - person requiere parent_node_id no nulo y el padre es type=unit
+    #  - unit puede tener parent nulo (raíz) o apuntar a otro unit
+    #  - la relación parent_node_id es acíclica
+
+# Edge — reemplaza LateralRelation. Relación funcional horizontal entre units.
+class Edge:
+    id: UUID
+    organization_id: UUID
+    source_node_id: UUID   # debe ser type=unit
+    target_node_id: UUID   # debe ser type=unit
+    edge_type: str         # enum cerrado: "lateral" | "process"
+    created_at: datetime
+    # Invariantes: no self-loop, no duplicado (source, target, edge_type),
+    # no edges que toquen persons, no edges "hierarchical".
+
+# NodeState — estado por campaña. Lo que cambia entre diagnósticos.
+class NodeState:
+    id: UUID
+    node_id: UUID
+    campaign_id: UUID
+    email_assigned: str | None    # solo persons
+    role_label: str
+    context_notes: str | None
+    interview_token: str | None   # regenerado por campaña
+    interview_status: str         # pending | in_progress | completed | expired
+    invited_at: datetime | None
+    completed_at: datetime | None
+    # UNIQUE (node_id, campaign_id)
+
+# AssessmentCampaign — longitudinalidad de primera clase.
+class AssessmentCampaign:
+    id: UUID
+    organization_id: UUID
+    name: str                     # ej. "Diagnóstico Inicial"
+    status: str                   # draft | active | closed
+    started_at: datetime
+    closed_at: datetime | None
+    created_by_user_id: UUID
+    # A lo sumo UNA campaign active por organization simultáneamente.
+    # Schema existe desde Sprint 1; UI de múltiples campañas hasta Sprint 3.
+
+# Membership — reemplaza relación directa User-Organization.
 class Membership:
     user_id: UUID
     org_id: UUID
     role: str  # owner, admin, viewer
 
-# LateralRelation
-class LateralRelation:
-    source_node_id: UUID
-    target_node_id: UUID
-    type: str  # colaboración, dependencia, otro
-
-# QuickAssessment (plan free)
+# QuickAssessment (plan free — sin cambios respecto al modelo previo)
 class QuickAssessment:
     org_id: UUID
-    leader_responses: dict  # JSON con respuestas del líder
+    leader_responses: dict
     member_count: int
-    scores: dict  # JSON con scores por dimensión
+    scores: dict
     created_at: datetime
 
-# Finding
-class Finding:
-    diagnostic_id: UUID
-    dimension: str
-    title: str
-    description: str
-    confidence: str  # high, medium, low
-    sources: list  # JSON
-
-# Recommendation
-class Recommendation:
-    diagnostic_id: UUID
-    priority: int
-    title: str
-    description: str
-    justification: str
+# Finding y Recommendation — definidos en docs/MOTOR_ANALISIS.md §2.
+# NO se modifican en este sprint. Sus FKs a groups.id siguen siendo válidos
+# porque la migración preserva UUIDs. Ver MODEL_PHILOSOPHY.md §9 para deuda.
 ```
+
+### Coexistencia con el motor de análisis
+
+Las tablas del motor (`analysis_runs`, `node_analyses`, `group_analyses`, `org_analyses`, `findings`, `recommendations`, `evidence_links`, `document_extractions`) **no se modifican** en este refactor. La migración conserva UUIDs al crear `nodes`, así que `node_analyses.group_id` y `group_analyses.group_id` siguen resolviéndose contra los UUIDs preservados. Ver `docs/MODEL_PHILOSOPHY.md` §9 y `docs/DEUDA_DOCUMENTAL.md` para la deuda técnica conocida.
 
 ---
 
@@ -286,9 +325,11 @@ El PRD v2 define **8 dimensiones** para premium y **4 dimensiones** para free.
 
 ### Fase 1 — Canvas y estructura
 
-**Backend:**
-- [ ] Migrar modelo Group para soportar posiciones x,y (canvas)
-- [ ] Modelo LateralRelation
+**Backend:** *(refactor Node+Edge — ver `docs/MODEL_PHILOSOPHY.md`)*
+- [ ] Crear modelo unificado `Node` (absorbe `Group` como `type=unit` y `Member` como `type=person`) con posiciones x,y en canvas
+- [ ] Crear modelo `Edge` (reemplaza `LateralRelation`) con `edge_type ∈ {lateral, process}`
+- [ ] Crear modelo `NodeState` (estado por campaña: email, role_label, context_notes, interview_status/token)
+- [ ] Crear modelo `AssessmentCampaign` (schema Sprint 1, UI de múltiples campañas hasta Sprint 3)
 - [ ] Modelo Membership
 - [ ] Endpoints CRUD de nodos con posición
 - [ ] Endpoint de importación CSV
