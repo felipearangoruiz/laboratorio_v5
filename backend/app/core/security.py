@@ -33,7 +33,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 def create_access_token(
     data: dict,
-    expires_delta: timedelta = timedelta(minutes=15),
+    expires_delta: timedelta = timedelta(hours=24),
 ) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + expires_delta
