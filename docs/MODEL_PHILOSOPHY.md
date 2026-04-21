@@ -105,10 +105,11 @@ El modelo distingue dos mecanismos de relación estructural, **que no se pueden 
 
 ### 4.2 Relación tipada → `edges`
 
-- Vive en tabla separada `edges` con `source_node_id`, `target_node_id`, `type`, `edge_metadata`, `organization_id`, `created_at`.
+- Vive en tabla separada `edges` con `source_node_id`, `target_node_id`, `edge_type`, `edge_metadata`, `organization_id`, `created_at`, `deleted_at`.
 - Representa **relaciones funcionales horizontales** entre units: colaboración, dependencia, flujo de información, etc.
-- Los valores permitidos de `type` son un enum cerrado: **`lateral`** y **`process`**. No existe un valor de escape tipo `"other"` / `"otro"`: si aparece un caso real que no cabe, es señal para agregar un tipo nuevo con semántica explícita, no para abrir un cajón de sastre. Lo inmutable además es que **no existe el tipo `hierarchical`** (la jerarquía vive en `parent_node_id`, ver §4.3).
-- `edge_metadata`: jsonb NOT NULL DEFAULT '{}'. Metadata libre del edge. Uso principal: edges de tipo "process" almacenan aquí el campo "order" (entero positivo) exigido por la invariante correspondiente. Futuros tipos de edge pueden agregar campos sin cambiar schema.
+- Los valores permitidos de `edge_type` son un enum cerrado: **`lateral`** y **`process`**. No existe un valor de escape tipo `"other"` / `"otro"`: si aparece un caso real que no cabe, es señal para agregar un tipo nuevo con semántica explícita, no para abrir un cajón de sastre. Lo inmutable además es que **no existe el tipo `hierarchical`** (la jerarquía vive en `parent_node_id`, ver §4.3).
+- `edge_metadata`: jsonb NOT NULL DEFAULT '{}'. Metadata libre del edge. Uso principal: edges de tipo "process" almacenan aquí el campo "order" (entero positivo) exigido por la invariante 13 de §8. Futuros tipos de edge pueden agregar campos sin cambiar schema.
+- `deleted_at`: timestamptz nullable, default null. Marca de soft-delete para preservar integridad referencial con `evidence_links` del motor.
 - Se dibuja en el canvas con estilos visuales distintos del connector jerárquico (línea punteada, color accent según tipo, etiqueta opcional).
 
 ### 4.3 Regla explícita
@@ -140,7 +141,9 @@ Información que define qué/quién es el nodo, independiente de cualquier campa
 - `type` — `unit` o `person`.
 - `name` — nombre canónico del unit o de la persona.
 - `position_x`, `position_y` — posición visual en el canvas de Estructura/Captura (ver nota en §5.3).
-- `created_at`, `deleted_at` (soft delete).
+- `attrs` (columna `Node.attrs`): jsonb NOT NULL DEFAULT '{}'. Metadata libre del nodo. No debe contener campos que deban ser queryables o indexables (esos se promocionan a columnas dedicadas). Tampoco debe contener secrets ni PII no necesaria.
+- `created_at`: timestamptz NOT NULL.
+- `deleted_at`: timestamptz nullable, default null. Marca de soft-delete. Los queries del canvas filtran `WHERE deleted_at IS NULL`. Preserva integridad referencial con tablas del motor de análisis que referencian `Node` por UUID.
 
 ### 5.2 Tabla `node_states` — estado por campaña
 
@@ -152,7 +155,7 @@ Información que cambia entre diagnósticos y debe ser recuperable históricamen
 - `email_assigned` — email del respondiente (solo aplica a persons).
 - `role_label` — cargo/rol reportado en esta campaña (puede evolucionar).
 - `context_notes` — contexto libre del admin específico a esta campaña.
-- `interview_token` — token regenerado por campaña (solo persons).
+- `respondent_token` — token regenerado por campaña para identificar al respondiente en la URL pública (solo persons). Nombre sin prefijo `interview_` por consistencia con `status`: `NodeState` puede contener estado de otras evaluaciones en el futuro.
 - `status` — enum cerrado `{invited, in_progress, completed, skipped}` (ver semántica en §5.2.1). El nombre `status` (sin prefijo) es canónico porque `NodeState` puede contener estado de otras evaluaciones además de entrevistas en el futuro.
 - `invited_at`, `completed_at`.
 
@@ -223,7 +226,7 @@ Esta distinción es la que hoy usa implícitamente `document_extractions.run_id`
 ### 7.2 Relaciones
 
 - **Composición (`parent_node_id`)**: línea sólida gris clara, vertical/curva estándar React Flow. No tiene etiqueta.
-- **Edge tipado**: línea punteada, color según `type` (`lateral` / `process`), con etiqueta opcional al hover.
+- **Edge tipado**: línea punteada, color según `edge_type` (`lateral` / `process`), con etiqueta opcional al hover.
 
 ### 7.3 Panel lateral contextual (único para ambas capas antes unificadas)
 
@@ -241,7 +244,7 @@ Esta unificación en un solo panel reemplaza la dualidad *Estructura (edición) 
 
 ## 8. Invariantes del modelo
 
-Lista numerada de las **12 invariantes** que se enforzan en validación server-side. Estas invariantes son la referencia para los tests del Sprint 1.
+Lista numerada de las **13 invariantes** que se enforzan en validación server-side. Estas invariantes son la referencia para los tests del Sprint 1.
 
 1. **Scope organizacional**. Todo `Node`, `Edge`, `NodeState`, `AssessmentCampaign` y `Document` tiene exactamente una `organization_id`. Ninguna FK cruza organizaciones: si una FK apunta a un recurso, ese recurso debe pertenecer a la misma organización.
 
@@ -255,9 +258,9 @@ Lista numerada de las **12 invariantes** que se enforzan en validación server-s
 
 6. **Edges inter-unit exclusivos**. `Edge.source_node_id` y `Edge.target_node_id` apuntan ambos a nodos con `type = "unit"`. No existen edges que toquen persons.
 
-7. **No self-loop, unicidad dirigida**. Un `Edge` cumple `source_node_id != target_node_id`. No se admiten dos edges con la misma tripleta `(source_node_id, target_node_id, type)`.
+7. **No self-loop, unicidad dirigida**. Un `Edge` cumple `source_node_id != target_node_id`. No se admiten dos edges con la misma tripleta `(source_node_id, target_node_id, edge_type)`.
 
-8. **Enum cerrado de `Edge.type`**. Los únicos valores válidos son `"lateral"` y `"process"`. No existe `"hierarchical"` (la jerarquía vive en `parent_node_id`) ni valores fallback tipo `"other"` / `"otro"`. Cualquier intento de crear un edge con un tipo fuera del enum es rechazado server-side.
+8. **Enum cerrado de `Edge.edge_type`**. Los únicos valores válidos son `"lateral"` y `"process"`. No existe `"hierarchical"` (la jerarquía vive en `parent_node_id`) ni valores fallback tipo `"other"` / `"otro"`. Cualquier intento de crear un edge con un tipo fuera del enum es rechazado server-side.
 
 9. **Identidad inmutable por campaña**. Los campos `id`, `type`, `organization_id` de `nodes` no se modifican vía UPDATE en el ciclo normal de una campaña. Cualquier atributo que cambie entre diagnósticos (email asignado, role_label operativo, context_notes) vive en `node_states`, nunca en `nodes`.
 
@@ -266,6 +269,8 @@ Lista numerada de las **12 invariantes** que se enforzan en validación server-s
 11. **Campaña activa única**. Por cada `organization_id`, existe a lo sumo UNA `AssessmentCampaign` con `status = "active"` simultáneamente. `draft` y `closed` pueden coexistir sin restricción.
 
 12. **Documentos consistentes**. Un `Document` pertenece a una organización. Si tiene `campaign_id` no nulo, ese campaign debe pertenecer a la misma organización (`documents.organization_id = campaigns.organization_id`). Un documento con `campaign_id NULL` es permanente y participa en todas las campañas posteriores a su `created_at`.
+
+13. **Orden requerido en edges `process`**. Edges con `edge_type='process'` deben tener un campo `'order'` entero positivo en `edge_metadata`. Edges con `edge_type='lateral'` pueden tener `edge_metadata` vacío (`{}`). La validación se ejecuta server-side antes de persistir el edge.
 
 ---
 
