@@ -469,7 +469,12 @@ export default function CanvasPage() {
   }
 
   async function handleDeleteNode(nodeId: string) {
-    await deleteGroup(nodeId);
+    try {
+      await deleteGroup(nodeId);
+    } catch (err: any) {
+      alert(err?.message || "No se pudo eliminar el nodo");
+      return;
+    }
     setNodes((nds) => nds.filter((n) => n.id !== nodeId));
     setEdges((eds) =>
       eds.filter((e) => e.source !== nodeId && e.target !== nodeId)

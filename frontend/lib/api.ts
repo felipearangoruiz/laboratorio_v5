@@ -69,6 +69,11 @@ async function request<T>(
     throw new ApiError(res.status, body.detail || res.statusText);
   }
 
+  // 204 No Content — successful but no body to parse (DELETE endpoints)
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
   return res.json();
 }
 
