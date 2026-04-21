@@ -27,6 +27,7 @@ services:
       - ./backend/alembic:/app/alembic
       - ./backend/alembic.ini:/app/alembic.ini
       - ./backend/seed.py:/app/seed.py
+      - ./backend/scripts:/app/scripts
       - /app/.venv
     depends_on:
       postgres:
