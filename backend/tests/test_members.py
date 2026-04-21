@@ -1,43 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Generator
-
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine, select
+from sqlmodel import Session, select
 
-import app.models
 from app.core.security import create_access_token, hash_password
-from app.db import get_session
-from app.main import app
 from app.models.group import Group
 from app.models.member import Member
 from app.models.organization import Organization
 from app.models.user import User, UserRole
-
-
-@pytest.fixture
-def session() -> Generator[Session, None, None]:
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    SQLModel.metadata.create_all(engine)
-    with Session(engine) as db_session:
-        yield db_session
-
-
-@pytest.fixture
-def client(session: Session) -> Generator[TestClient, None, None]:
-    def override_get_session() -> Generator[Session, None, None]:
-        yield session
-
-    app.dependency_overrides[get_session] = override_get_session
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
 
 
 @pytest.fixture
