@@ -33,11 +33,28 @@ import requests
 from dotenv import load_dotenv
 from openai import OpenAI
 
-# ── Cargar .env desde el directorio del script ─────────────────────────────
-load_dotenv(Path(__file__).parent / ".env")
+# ── Cargar variables de entorno ───────────────────────────────────────────
+# Orden de prioridad:
+#   1. .env.test  (generado por seed_mock_org.py — contiene ORG_ID y ADMIN_TOKEN)
+#   2. .env       (configuración manual del usuario)
+#   3. Variables del sistema (export DIAGNOSIS_API_TOKEN=...)
+_env_test    = Path(__file__).parent / ".env.test"
+_env_default = Path(__file__).parent / ".env"
+
+if _env_test.exists():
+    load_dotenv(dotenv_path=_env_test, override=False)
+if _env_default.exists():
+    load_dotenv(dotenv_path=_env_default, override=False)
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
-DIAGNOSIS_API_TOKEN = os.environ.get("DIAGNOSIS_API_TOKEN", "")
+
+# Acepta tanto DIAGNOSIS_API_TOKEN (nombre canónico) como ADMIN_TOKEN
+# (nombre que escribe seed_mock_org.py en .env.test)
+DIAGNOSIS_API_TOKEN = (
+    os.environ.get("DIAGNOSIS_API_TOKEN")
+    or os.environ.get("ADMIN_TOKEN")
+    or ""
+)
 
 # ── Modelos según contrato MOTOR_ANALISIS.md sección 3 ────────────────────
 MODEL_PASO1 = "gpt-4o-mini"

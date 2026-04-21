@@ -587,6 +587,7 @@ def run(base_url: str) -> None:
     env_content = (
         f'ORG_ID="{org_id}"\n'
         f'ADMIN_TOKEN="{token}"\n'
+        f'DIAGNOSIS_API_TOKEN="{token}"\n'   # alias para run_analysis.py
         f'ADMIN_EMAIL="{ADMIN_EMAIL}"\n'
         f'ADMIN_PASSWORD="{ADMIN_PASSWORD}"\n'
     )
