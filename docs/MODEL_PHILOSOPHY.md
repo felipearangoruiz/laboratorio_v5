@@ -186,8 +186,8 @@ El producto soporta múltiples diagnósticos sobre la misma organización a lo l
 - `organization_id` — FK.
 - `name` — etiqueta humana (ej: *"Diagnóstico Q1 2026"*).
 - `status` — `draft | active | closed`.
-- `started_at`, `closed_at`.
-- `created_by_user_id`.
+- `started_at`, `closed_at` — `closed_at` alinea con el estado terminal `status='closed'` del enum `CampaignStatus`; no hay estado `'ended'`.
+- `created_by_user_id` — UUID, FK a `users.id`, nullable (SET NULL). Usuario que creó la campaña. Auditoría de quién lanzó cada diagnóstico; útil para reportes longitudinales y para filtrar campañas por creador en dashboards internos.
 
 > **Schema desde Sprint 1, UI desde Sprint 3 (decisión del 21 de abril de 2026).** El schema de `Campaign` existe desde Sprint 1 (tabla, endpoints mínimos, migración inicial). La UI NO expone la noción de campañas múltiples hasta Sprint 3: durante Sprint 1–2 el admin ve una única "Diagnóstico Inicial" implícita. La migración inicial crea automáticamente una `AssessmentCampaign` por organización con `status = "active"` y `name = "Diagnóstico Inicial"`, y asocia todos los `node_states`, entrevistas y runs existentes a esa campaña. Esto preserva opcionalidad de longitudinalidad sin adelantar funcionalidad visible.
 
