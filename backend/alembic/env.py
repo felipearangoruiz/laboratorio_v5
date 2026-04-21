@@ -1,9 +1,14 @@
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import create_engine, pool, text
+from sqlalchemy import create_engine, pool
+from sqlmodel import SQLModel
 
 from app.core.config import settings
+
+# Import all models so their tables are registered in SQLModel.metadata
+# before Alembic generates the diff.
+import app.models  # noqa: F401
 
 config = context.config
 
@@ -18,12 +23,14 @@ naming_convention = {
     "pk": "pk_%(table_name)s",
 }
 
+target_metadata = SQLModel.metadata
+
 
 def run_migrations_offline() -> None:
     url = settings.DATABASE_URL
     context.configure(
         url=url,
-        target_metadata=None,
+        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -36,7 +43,7 @@ def run_migrations_online() -> None:
     with engine.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=None,
+            target_metadata=target_metadata,
         )
         with context.begin_transaction():
             context.run_migrations()

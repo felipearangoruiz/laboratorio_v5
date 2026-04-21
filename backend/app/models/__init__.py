@@ -26,9 +26,13 @@ from .analysis import (
     RecommendationCreate,
     RecommendationRead,
 )
+from .campaign import AssessmentCampaign, AssessmentCampaignRead, CampaignStatus
 from .diagnosis import DiagnosisCreate, DiagnosisResult, DiagnosisResultRead
 from .document import Document, DocumentRead, DocType
+from .edge import Edge, EdgeRead, EdgeType
 from .group import Group, GroupRead
+from .node import Node, NodeRead, NodeType
+from .node_state import NodeState, NodeStateRead, NodeStateStatus
 from .interview import Interview, InterviewRead
 from .job import JobState, JobStatus, JobStatusRead
 from .lateral_relation import (
@@ -63,6 +67,19 @@ from .user import User, UserRead, UserRole
 
 __all__ = [
     "SQLModel",
+    # Nuevo modelo Node + Edge (Sprint 1)
+    "Node",
+    "NodeRead",
+    "NodeType",
+    "Edge",
+    "EdgeRead",
+    "EdgeType",
+    "AssessmentCampaign",
+    "AssessmentCampaignRead",
+    "CampaignStatus",
+    "NodeState",
+    "NodeStateRead",
+    "NodeStateStatus",
     # Motor de análisis (pipeline 4 pasos)
     "AnalysisRun",
     "AnalysisRunCreate",
