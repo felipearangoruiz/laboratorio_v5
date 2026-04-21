@@ -22,3 +22,11 @@ frontend/tsconfig.tsbuildinfo
 .turbo/
 .swc/
 .claude/
+
+# Higiene del repo — Sprint 0
+*.zip
+.env.test
+.env.local
+.env.*.local
+scripts/analysis/.env*
+scripts/analysis/.state_*.json
