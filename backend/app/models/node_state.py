@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import Column, DateTime, Enum as SAEnum, ForeignKey, String, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlmodel import Field, SQLModel
 
 
@@ -70,6 +71,13 @@ class NodeState(SQLModel, table=True):
             server_default=NodeStateStatus.INVITED.value,
         ),
     )
+    # Datos de respuesta del respondiente. NULL mientras status=invited o skipped;
+    # parcial mientras status=in_progress; completo cuando status=completed.
+    # Preserva el JSON exacto de interviews.data para trazabilidad histórica.
+    interview_data: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
     invited_at: datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), nullable=True),
@@ -93,6 +101,7 @@ class NodeStateRead(SQLModel):
     context_notes: str | None
     respondent_token: str | None
     status: NodeStateStatus
+    interview_data: dict[str, Any] | None
     invited_at: datetime | None
     completed_at: datetime | None
     created_at: datetime
