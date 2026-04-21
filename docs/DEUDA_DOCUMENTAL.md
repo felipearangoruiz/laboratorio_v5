@@ -41,6 +41,7 @@
 |---|---|---|
 | 2026-04-21 | #1, #2, #3, #14, #13 (parcial) | Commit del sprint "decisiones A1–A4 aplicadas". Introducción del refactor Node + Edge en documentación. |
 | 2026-04-21 | #11, #12 | El PRD se actualizó a **v2.2** incorporando las cuatro decisiones A1–A4 del Sprint 0. El changelog completo (incluyendo A1: tres capas; A2: AssessmentCampaign en schema Sprint 1; A3: enum cerrado de Edge a `lateral`/`process`; A4: Member absorbido en Node con `type=person`) vive dentro del propio PRD en la sección "Changelog v2.1 → v2.2". El archivo mantiene el nombre `docs/PRD_v2_1.md` en disco por compatibilidad con referencias existentes en `MODEL_PHILOSOPHY.md` y otros documentos; la versión interna es v2.2. |
+| 2026-04-21 | Alineación post-dry-run | Alineación PRD ↔ MODEL_PHILOSOPHY post-dry-run: (1) `Edge.edge_metadata` confirmada como columna canónica (jsonb NOT NULL DEFAULT '{}'). Vive el campo "order" de los edges tipo "process". (2) `NodeState.status` canonizado (se descarta `interview_status` como nombre). (3) `NodeState.status` enum cerrado a `{invited, in_progress, completed, skipped}` con semántica documentada. Ambos puntos quedan reflejados en `docs/MODEL_PHILOSOPHY.md` (§4.2 y §5.2.1) y en `docs/PRD_v2_1.md` (v2.2 interno, §12 tabla de modelo de datos). Sin deuda residual sobre este tema. |
 
 ---
 

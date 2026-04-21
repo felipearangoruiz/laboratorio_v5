@@ -105,9 +105,10 @@ El modelo distingue dos mecanismos de relación estructural, **que no se pueden 
 
 ### 4.2 Relación tipada → `edges`
 
-- Vive en tabla separada `edges` con `source_node_id`, `target_node_id`, `type`, `organization_id`, `created_at`.
+- Vive en tabla separada `edges` con `source_node_id`, `target_node_id`, `type`, `edge_metadata`, `organization_id`, `created_at`.
 - Representa **relaciones funcionales horizontales** entre units: colaboración, dependencia, flujo de información, etc.
 - Los valores permitidos de `type` son un enum cerrado: **`lateral`** y **`process`**. No existe un valor de escape tipo `"other"` / `"otro"`: si aparece un caso real que no cabe, es señal para agregar un tipo nuevo con semántica explícita, no para abrir un cajón de sastre. Lo inmutable además es que **no existe el tipo `hierarchical`** (la jerarquía vive en `parent_node_id`, ver §4.3).
+- `edge_metadata`: jsonb NOT NULL DEFAULT '{}'. Metadata libre del edge. Uso principal: edges de tipo "process" almacenan aquí el campo "order" (entero positivo) exigido por la invariante correspondiente. Futuros tipos de edge pueden agregar campos sin cambiar schema.
 - Se dibuja en el canvas con estilos visuales distintos del connector jerárquico (línea punteada, color accent según tipo, etiqueta opcional).
 
 ### 4.3 Regla explícita
@@ -152,10 +153,17 @@ Información que cambia entre diagnósticos y debe ser recuperable históricamen
 - `role_label` — cargo/rol reportado en esta campaña (puede evolucionar).
 - `context_notes` — contexto libre del admin específico a esta campaña.
 - `interview_token` — token regenerado por campaña (solo persons).
-- `interview_status` — `pending | in_progress | completed | expired`.
+- `status` — enum cerrado `{invited, in_progress, completed, skipped}` (ver semántica en §5.2.1). El nombre `status` (sin prefijo) es canónico porque `NodeState` puede contener estado de otras evaluaciones además de entrevistas en el futuro.
 - `invited_at`, `completed_at`.
 
 `UNIQUE (node_id, campaign_id)` — un nodo tiene a lo sumo un estado por campaña.
+
+#### 5.2.1 Semántica del enum `NodeState.status`
+
+- **`invited`**: NodeState creado, respondiente no entró todavía.
+- **`in_progress`**: respondiente entró y hay `interview_data` parcial.
+- **`completed`**: respondiente submitteó (`completed_at` no null).
+- **`skipped`**: admin excluyó explícitamente este node de la campaña (ej: persona en vacaciones, rol sin respondiente asignado).
 
 ### 5.3 Casos frontera y decisiones
 
@@ -222,7 +230,7 @@ Esta distinción es la que hoy usa implícitamente `document_extractions.run_id`
 Al hacer clic en un nodo, el panel lateral muestra pestañas:
 
 - **Identidad** — `name`, `type`, `parent_node_id`.
-- **Estado de campaña** — campos de `node_states` de la campaña activa: `email_assigned`, `role_label`, `context_notes`, `interview_status`, token copiable, botón WhatsApp (solo persons).
+- **Estado de campaña** — campos de `node_states` de la campaña activa: `email_assigned`, `role_label`, `context_notes`, `status` (ver §5.2.1), token copiable, botón WhatsApp (solo persons).
 - **Documentos** — adjuntos al nodo (si aplica en el roadmap).
 
 Esta unificación en un solo panel reemplaza la dualidad *Estructura (edición) / Recolección (lectura de estado)* del PRD v2.1 sección 7.
