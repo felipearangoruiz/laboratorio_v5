@@ -49,6 +49,15 @@ class Document(SQLModel, table=True):
             index=True,
         ),
     )
+    node_id: UUID | None = Field(
+        default=None,
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            ForeignKey("nodes.id", ondelete="SET NULL"),
+            nullable=True,
+            index=True,
+        ),
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(DateTime(timezone=True), nullable=False),
@@ -59,6 +68,7 @@ class DocumentRead(SQLModel):
     id: UUID
     organization_id: UUID
     campaign_id: UUID | None
+    node_id: UUID | None
     label: str
     doc_type: str
     filename: str

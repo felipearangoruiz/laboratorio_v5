@@ -469,6 +469,50 @@ export async function deleteDocument(orgId: string, docId: string) {
   return request<void>(`/organizations/${orgId}/documents/${docId}`, { method: "DELETE" });
 }
 
+// ── Documents scoped per Node (Sprint 2.B Commit 6a) ─────
+export interface NodeDocument {
+  id: string;
+  organization_id: string;
+  node_id: string | null;
+  campaign_id: string | null;
+  label: string;
+  doc_type: string;
+  filename: string;
+  created_at: string;
+}
+
+export async function listNodeDocuments(nodeId: string) {
+  return request<NodeDocument[]>(`/nodes/${nodeId}/documents`);
+}
+
+export async function uploadNodeDocument(
+  nodeId: string,
+  file: File,
+  label: string,
+  docType: string = "other",
+) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("label", label);
+  formData.append("doc_type", docType);
+
+  const res = await fetch(`${API_BASE}/nodes/${nodeId}/documents`, {
+    method: "POST",
+    headers: { ...authHeader() },
+    body: formData,
+    credentials: "include",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, body.detail || res.statusText);
+  }
+  return res.json() as Promise<NodeDocument>;
+}
+
+export async function deleteNodeDocument(nodeId: string, docId: string) {
+  return request<void>(`/nodes/${nodeId}/documents/${docId}`, { method: "DELETE" });
+}
+
 // ── Diagnosis ────────────────────────────────────────
 // Status lifecycle: 'processing' → 'ready' | 'failed'
 
