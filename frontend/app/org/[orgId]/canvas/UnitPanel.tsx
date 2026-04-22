@@ -19,12 +19,14 @@ import {
 import { mapNodeStateToLegacyStatus } from "@/lib/view-models/legacyOrgNodeAdapter";
 import { computeAreaStatus } from "@/lib/view-models/areaStatus";
 import type { Node as ModelNode, NodeState } from "@/lib/types";
+import NodeFilesSection from "./NodeFilesSection";
 
 interface UnitPanelProps {
   node: ModelNode;
   childPersons: ModelNode[];
   nodeStates: NodeState[];
   activeCampaignId: string | null;
+  orgId: string;
   onClose: () => void;
   onSelectNode: (nodeId: string) => void;
   onDelete?: (nodeId: string) => void | Promise<void>;
@@ -95,6 +97,7 @@ export default function UnitPanel({
   childPersons,
   nodeStates,
   activeCampaignId,
+  orgId,
   onClose,
   onSelectNode,
   onDelete,
@@ -305,14 +308,7 @@ export default function UnitPanel({
         </section>
 
         {/* Archivos del nodo */}
-        <section>
-          <h3 className="text-xs uppercase tracking-wide text-warm-500 mb-2">
-            Archivos del nodo
-          </h3>
-          <div className="text-sm text-gray-500 italic">
-            Archivos disponibles en el próximo sprint.
-          </div>
-        </section>
+        <NodeFilesSection nodeId={node.id} orgId={orgId} />
 
         {/* Miembros */}
         <section>

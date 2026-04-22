@@ -20,6 +20,7 @@ import {
 } from "@/lib/api";
 import { mapNodeStateToLegacyStatus } from "@/lib/view-models/legacyOrgNodeAdapter";
 import type { Node as ModelNode, NodeState } from "@/lib/types";
+import NodeFilesSection from "./NodeFilesSection";
 
 interface PersonPanelProps {
   node: ModelNode;
@@ -395,14 +396,7 @@ export default function PersonPanel({
         </section>
 
         {/* Archivos del nodo */}
-        <section>
-          <h3 className="text-xs uppercase tracking-wide text-warm-500 mb-2">
-            Archivos del nodo
-          </h3>
-          <div className="text-sm text-gray-500 italic">
-            Archivos disponibles en el próximo sprint.
-          </div>
-        </section>
+        <NodeFilesSection nodeId={node.id} orgId={orgId} />
 
         {/* Notas del admin */}
         <section>

@@ -614,6 +614,7 @@ export default function CanvasPage() {
               )}
               nodeStates={nodeStates}
               activeCampaignId={activeCampaign?.id ?? null}
+              orgId={orgId}
               onClose={() => setSelectedNode(null)}
               onSelectNode={setSelectedNode}
               onDelete={handleDeleteNode}
