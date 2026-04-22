@@ -1,18 +1,55 @@
+"""COMPATIBILITY LAYER — Sprint 1.4
+
+Este router es legacy. Cada operación de escritura se espeja sobre la
+tabla nueva (`nodes` con `type="person"`) dentro de la misma transacción
+para mantener los datos sincronizados durante la coexistencia del viejo
+y el nuevo modelo.
+
+Los endpoints están marcados `deprecated=True`. Los consumidores deben
+migrar a /nodes, /edges, /node-states, /campaigns.
+
+Eliminar este router cuando:
+  - El frontend no llame a ningún endpoint legacy.
+  - El motor de análisis haya migrado sus FKs de
+    node_analyses.group_id → node_analyses.node_id
+    (deuda en DEUDA_DOCUMENTAL.md).
+
+Política de espejado:
+  - POST /members           → INSERT Member + INSERT Node (mismo UUID, person).
+  - PATCH /members/{id}     → UPDATE Member + UPDATE Node (fallback: crea).
+  - PATCH /members/{id}/group → mover parent_node_id en el Node espejo.
+  - DELETE /members/{id}    → proteger contra NodeAnalyses referenciando
+                              el UUID (409), luego DELETE Member +
+                              soft-delete Node.
+
+Nota de invariantes: invariante 3 de MODEL_PHILOSOPHY.md §8 exige que
+person tenga parent_node_id NOT NULL. La API legacy permite `group_id=None`
+para Members huérfanos. En ese caso creamos el Node person con
+parent_node_id=None — el DB lo acepta (columna nullable) y documentamos
+la excepción legacy en log. Un backfill futuro adoptará la unit default
+de la organización.
+"""
 from __future__ import annotations
 
+import logging
 import secrets
-from typing import Annotated
+from datetime import datetime, timezone
+from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlmodel import Session, select
 
 from app.core.dependencies import get_current_user
 from app.db import get_session
 from app.models.group import Group
 from app.models.member import Member, MemberRead, MemberTokenStatus
+from app.models.node import Node, NodeType
 from app.models.user import User, UserRole
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -72,7 +109,128 @@ def _generate_unique_token(session: Session) -> str:
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not generate token")
 
 
-@router.post("/members", response_model=MemberRead, status_code=status.HTTP_201_CREATED)
+# ────────────── Mirror helpers (Member ↔ Node type=person) ──────────────
+
+def _build_person_attrs(member: Member) -> dict[str, Any]:
+    """Metadata del Member sin columna directa en Node queda en attrs."""
+    attrs: dict[str, Any] = {
+        "role_label": member.role_label or "",
+        "interview_token": member.interview_token,
+        "token_status": member.token_status.value,
+    }
+    # Member no tiene columna `email` en el modelo actual; si se agrega en
+    # el futuro, aquí quedaría mapeado automáticamente.
+    email = getattr(member, "email", None)
+    if email:
+        attrs["email"] = email
+    return attrs
+
+
+def _resolve_person_parent_node_id(
+    session: Session,
+    member: Member,
+) -> UUID | None:
+    """Devuelve el id del Node unit parent (garantizado por espejado de Groups).
+
+    Si el Group referenciado no tiene Node espejo vivo (inconsistencia
+    pre-1.4), loggea warning y retorna None; el Node person queda huérfano
+    en lugar de rechazar la operación legacy.
+    """
+    if member.group_id is None:
+        logger.info(
+            "Member %s sin group_id; Node espejo queda con parent_node_id=None "
+            "(permitido por compat legacy; invariante 3 se relaja).",
+            member.id,
+        )
+        return None
+    parent_node = session.get(Node, member.group_id)
+    if parent_node is None or parent_node.deleted_at is not None:
+        logger.warning(
+            "Member %s apunta a group_id=%s sin Node espejo vivo; "
+            "Node person queda huérfano.",
+            member.id,
+            member.group_id,
+        )
+        return None
+    return parent_node.id
+
+
+def _mirror_member_to_node_on_create(session: Session, member: Member) -> None:
+    parent_node_id = _resolve_person_parent_node_id(session, member)
+    node = Node(
+        id=member.id,
+        organization_id=member.organization_id,
+        parent_node_id=parent_node_id,
+        type=NodeType.PERSON,
+        name=member.name,
+        position_x=0.0,
+        position_y=0.0,
+        attrs=_build_person_attrs(member),
+        created_at=member.created_at,
+    )
+    session.add(node)
+
+
+def _mirror_member_to_node_on_update(session: Session, member: Member) -> None:
+    node = session.get(Node, member.id)
+    if node is None:
+        logger.error(
+            "Member %s no tiene Node espejo durante PATCH (estado inconsistente). "
+            "Creando Node on-the-fly.",
+            member.id,
+        )
+        _mirror_member_to_node_on_create(session, member)
+        return
+
+    node.deleted_at = None
+    node.name = member.name
+    node.parent_node_id = _resolve_person_parent_node_id(session, member)
+    node.attrs = _build_person_attrs(member)
+    session.add(node)
+
+
+def _mirror_member_to_node_on_delete(session: Session, member_id: UUID) -> None:
+    node = session.get(Node, member_id)
+    if node is None:
+        logger.warning(
+            "DELETE /members/%s: Node espejo no existe. No-op.", member_id
+        )
+        return
+    if node.deleted_at is None:
+        node.deleted_at = datetime.now(timezone.utc)
+        session.add(node)
+
+
+def _count_analyses_for_uuid(session: Session, target_id: UUID) -> int:
+    """Cuenta análisis que referencian este UUID.
+
+    node_analyses.group_id acepta UUIDs tanto de Groups como de Members
+    (naming legacy — ver MOTOR_ANALISIS.md disclaimer). Ambos casos se
+    cuentan usando la misma columna `group_id` porque los UUIDs son
+    globalmente únicos.
+    """
+    try:
+        n = session.execute(
+            text("SELECT COUNT(*) FROM node_analyses WHERE group_id = :uid"),
+            {"uid": str(target_id)},
+        ).scalar_one()
+        g = session.execute(
+            text("SELECT COUNT(*) FROM group_analyses WHERE group_id = :uid"),
+            {"uid": str(target_id)},
+        ).scalar_one()
+    except Exception:
+        return 0
+    return int(n or 0) + int(g or 0)
+
+
+# ─────────────────────────── Endpoints ──────────────────────────
+
+@router.post(
+    "/members",
+    response_model=MemberRead,
+    status_code=status.HTTP_201_CREATED,
+    deprecated=True,
+)
 def create_member(
     payload: MemberCreate,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -92,12 +250,16 @@ def create_member(
         token_status=MemberTokenStatus.PENDING,
     )
     session.add(member)
+    session.flush()
+
+    _mirror_member_to_node_on_create(session, member)
+
     session.commit()
     session.refresh(member)
     return MemberRead.model_validate(member)
 
 
-@router.get("/members/{member_id}", response_model=MemberRead)
+@router.get("/members/{member_id}", response_model=MemberRead, deprecated=True)
 def get_member(
     member_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -111,7 +273,7 @@ def get_member(
     return MemberRead.model_validate(member)
 
 
-@router.patch("/members/{member_id}", response_model=MemberRead)
+@router.patch("/members/{member_id}", response_model=MemberRead, deprecated=True)
 def update_member(
     member_id: UUID,
     payload: MemberUpdate,
@@ -132,12 +294,20 @@ def update_member(
         setattr(member, field, value)
 
     session.add(member)
+    session.flush()
+
+    _mirror_member_to_node_on_update(session, member)
+
     session.commit()
     session.refresh(member)
     return MemberRead.model_validate(member)
 
 
-@router.delete("/members/{member_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/members/{member_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    deprecated=True,
+)
 def delete_member(
     member_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -149,12 +319,27 @@ def delete_member(
 
     _ensure_member_access(member, current_user)
 
+    # Protección Sprint 1.4: no permitir borrar si hay análisis asociados.
+    if _count_analyses_for_uuid(session, member.id) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "El miembro tiene análisis históricos asociados. Use archivado "
+                "(soft-delete) en lugar de eliminación."
+            ),
+        )
+
     session.delete(member)
+    _mirror_member_to_node_on_delete(session, member_id)
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/organizations/{org_id}/members", response_model=list[MemberRead])
+@router.get(
+    "/organizations/{org_id}/members",
+    response_model=list[MemberRead],
+    deprecated=True,
+)
 def list_members_by_organization(
     org_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -167,7 +352,11 @@ def list_members_by_organization(
     return [MemberRead.model_validate(member) for member in members]
 
 
-@router.get("/groups/{group_id}/members", response_model=list[MemberRead])
+@router.get(
+    "/groups/{group_id}/members",
+    response_model=list[MemberRead],
+    deprecated=True,
+)
 def list_members_by_group(
     group_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -183,7 +372,11 @@ def list_members_by_group(
     return [MemberRead.model_validate(member) for member in members]
 
 
-@router.patch("/members/{member_id}/group", response_model=MemberRead)
+@router.patch(
+    "/members/{member_id}/group",
+    response_model=MemberRead,
+    deprecated=True,
+)
 def move_member_group(
     member_id: UUID,
     payload: MemberMoveGroup,
@@ -199,6 +392,10 @@ def move_member_group(
 
     member.group_id = payload.group_id
     session.add(member)
+    session.flush()
+
+    _mirror_member_to_node_on_update(session, member)
+
     session.commit()
     session.refresh(member)
     return MemberRead.model_validate(member)

@@ -1,5 +1,28 @@
+"""COMPATIBILITY LAYER — Sprint 1.4
+
+Este router es legacy. Sirve la experiencia del entrevistado vía token
+(`/entrevista/{token}`). Cada escritura sobre `interviews`/`members` se
+espeja sobre `node_states` dentro de la misma transacción, conservando
+UUIDs.
+
+Convención de Campaign: los interviews legacy se espejan contra el
+NodeState de la Campaign llamada "Diagnóstico Inicial" de la org del
+Member. Si esa Campaign no existe (caso anómalo post-migración), se
+crea on-the-fly con `status=active` y `created_by_user_id=NULL`.
+
+Mapeo de estado Member → NodeState:
+  - PENDING     → INVITED
+  - IN_PROGRESS → IN_PROGRESS
+  - COMPLETED   → COMPLETED
+  - EXPIRED     → SKIPPED
+
+El endpoint público NO está marcado `deprecated=True` en el decorator
+porque lo consume el frontend del entrevistado directamente; la marca
+deprecated se expone en la versión autenticada (`/interviews`).
+"""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -9,10 +32,24 @@ from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
 from app.db import get_session
+from app.models.campaign import AssessmentCampaign, CampaignStatus
 from app.models.interview import Interview
 from app.models.member import Member, MemberTokenStatus
+from app.models.node_state import NodeState, NodeStateStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+LEGACY_CAMPAIGN_NAME = "Diagnóstico Inicial"
+
+_MEMBER_TO_NODE_STATE: dict[MemberTokenStatus, NodeStateStatus] = {
+    MemberTokenStatus.PENDING: NodeStateStatus.INVITED,
+    MemberTokenStatus.IN_PROGRESS: NodeStateStatus.IN_PROGRESS,
+    MemberTokenStatus.COMPLETED: NodeStateStatus.COMPLETED,
+    MemberTokenStatus.EXPIRED: NodeStateStatus.SKIPPED,
+}
 
 
 class PublicInterviewResponse(BaseModel):
@@ -56,6 +93,90 @@ def _build_public_interview_response(
         data=interview.data if interview else {},
     )
 
+
+# ────────────── Mirror helpers (Interview ↔ NodeState) ──────────────
+
+def _get_or_create_legacy_campaign(
+    session: Session,
+    organization_id: UUID,
+) -> AssessmentCampaign:
+    campaign = session.exec(
+        select(AssessmentCampaign).where(
+            AssessmentCampaign.organization_id == organization_id,
+            AssessmentCampaign.name == LEGACY_CAMPAIGN_NAME,
+        )
+    ).first()
+    if campaign is not None:
+        return campaign
+
+    logger.warning(
+        "Organización %s sin Campaign '%s'; creando on-the-fly (compat).",
+        organization_id,
+        LEGACY_CAMPAIGN_NAME,
+    )
+    campaign = AssessmentCampaign(
+        organization_id=organization_id,
+        created_by_user_id=None,
+        name=LEGACY_CAMPAIGN_NAME,
+        status=CampaignStatus.ACTIVE,
+        started_at=datetime.now(timezone.utc),
+    )
+    session.add(campaign)
+    session.flush()
+    return campaign
+
+
+def _mirror_interview_to_node_state(
+    session: Session,
+    member: Member,
+    interview: Interview,
+    *,
+    is_submit: bool,
+) -> None:
+    """Upsert del NodeState espejo de un Interview.
+
+    - is_submit=True  → status=COMPLETED, completed_at=interview.submitted_at.
+    - is_submit=False → status=IN_PROGRESS (guardado de draft).
+
+    La primera vez que el NodeState se crea, se usa id=interview.id para
+    preservar UUIDs.
+    """
+    campaign = _get_or_create_legacy_campaign(session, member.organization_id)
+
+    ns = session.exec(
+        select(NodeState).where(
+            NodeState.node_id == member.id,
+            NodeState.campaign_id == campaign.id,
+        )
+    ).first()
+
+    target_status = (
+        NodeStateStatus.COMPLETED if is_submit else NodeStateStatus.IN_PROGRESS
+    )
+
+    if ns is None:
+        ns = NodeState(
+            id=interview.id,
+            node_id=member.id,
+            campaign_id=campaign.id,
+            email_assigned=None,
+            role_label=member.role_label,
+            respondent_token=member.interview_token,
+            status=target_status,
+            interview_data=interview.data,
+            invited_at=datetime.now(timezone.utc),
+            completed_at=interview.submitted_at if is_submit else None,
+        )
+    else:
+        ns.status = target_status
+        ns.interview_data = interview.data
+        ns.role_label = member.role_label
+        if is_submit:
+            ns.completed_at = interview.submitted_at
+    session.add(ns)
+
+
+# ─────────────────────────── Endpoints ──────────────────────────
 
 @router.get("/entrevista/{token}", response_model=PublicInterviewResponse)
 def get_public_interview(
@@ -104,6 +225,11 @@ def submit_public_interview(
 
     session.add(interview)
     session.add(member)
+    session.flush()  # asegura interview.id y member fresh para el espejado
+
+    # Mirror → NodeState (dentro de la misma transacción).
+    _mirror_interview_to_node_state(session, member, interview, is_submit=True)
+
     session.commit()
     session.refresh(member)
     session.refresh(interview)
@@ -140,6 +266,10 @@ def save_public_interview_draft(
 
     session.add(interview)
     session.add(member)
+    session.flush()
+
+    _mirror_interview_to_node_state(session, member, interview, is_submit=False)
+
     session.commit()
     session.refresh(member)
     session.refresh(interview)

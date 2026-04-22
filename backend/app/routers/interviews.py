@@ -1,3 +1,16 @@
+"""COMPATIBILITY LAYER — Sprint 1.4
+
+Este router es legacy y expone una lectura agregada sobre `members` +
+`interviews`. No realiza escrituras propias: las escrituras de Interview
+viven en `interview_public.py`, que espeja sobre `node_states`.
+
+El endpoint está marcado `deprecated=True`. Los consumidores nuevos
+deben leer de /node-states con `campaign_id` filtrado.
+
+Eliminar cuando:
+  - El frontend lea la lista de entrevistas vía /node-states.
+  - El motor de análisis no dependa de `interviews.data` directamente.
+"""
 from __future__ import annotations
 
 from datetime import datetime
@@ -36,6 +49,7 @@ def _can_access_org(user: User, org_id: UUID) -> bool:
 @router.get(
     "/organizations/{org_id}/interviews",
     response_model=list[OrganizationInterviewRead],
+    deprecated=True,
 )
 def list_organization_interviews(
     org_id: UUID,

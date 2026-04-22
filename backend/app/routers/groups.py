@@ -1,17 +1,52 @@
+"""COMPATIBILITY LAYER — Sprint 1.4
+
+Este router es legacy. Cada operación de escritura se espeja sobre la
+tabla nueva correspondiente (`nodes` con `type="unit"`) dentro de la
+misma transacción para mantener los datos sincronizados durante la
+coexistencia del viejo y el nuevo modelo.
+
+Los endpoints están marcados `deprecated=True`. Los consumidores deben
+migrar a /nodes, /edges, /node-states, /campaigns.
+
+Eliminar este router cuando:
+  - El frontend no llame a ningún endpoint legacy.
+  - El motor de análisis haya migrado sus FKs de
+    node_analyses.group_id → node_analyses.node_id
+    (deuda en DEUDA_DOCUMENTAL.md).
+
+Política de espejado:
+  - POST /groups      → INSERT Group + INSERT Node (mismo UUID, type=unit).
+  - PATCH /groups/{id}→ UPDATE Group + UPDATE Node (fallback: crea Node si
+                        falta, con log de error).
+  - DELETE /groups/{id}→ proteger contra NodeAnalyses/GroupAnalyses (409),
+                        luego DELETE Group + soft-delete Node
+                        (deleted_at=now).
+  - PATCH bulk positions → UPDATE ambos lados.
+  - GET endpoints       → sin cambios (leen solo de `groups`).
+
+Todas las escrituras ocurren dentro de una única transacción SQLModel;
+si la operación sobre Node falla, se hace ROLLBACK de ambas tablas.
+"""
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timezone
 from typing import Annotated, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlmodel import Session, func, select
 
 from app.core.dependencies import get_current_user
 from app.db import get_session
 from app.models.group import Group, GroupRead
 from app.models.member import Member
+from app.models.node import Node, NodeType
 from app.models.user import User, UserRole
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -130,7 +165,128 @@ def _validate_parent_group(
             cursor = next_group
 
 
-@router.post("/groups", response_model=GroupRead, status_code=status.HTTP_201_CREATED)
+# ────────────── Mirror helpers (Group ↔ Node type=unit) ──────────────
+
+def _build_unit_attrs(group: Group) -> dict[str, Any]:
+    """Campos de Group sin columna directa en Node quedan en attrs."""
+    return {
+        "description": group.description or "",
+        "tarea_general": group.tarea_general or "",
+        "email": group.email or "",
+        "area": group.area or "",
+        "nivel_jerarquico": group.nivel_jerarquico,
+        "tipo_nivel": group.tipo_nivel,
+        "context_notes": group.context_notes,
+        "node_type_legacy": group.node_type,
+        "is_default": group.is_default,
+    }
+
+
+def _resolve_parent_node_id(
+    session: Session,
+    group: Group,
+) -> UUID | None:
+    """Devuelve el id del Node espejo del parent_group_id, o None si no existe.
+
+    Si no existe espejo (estado inconsistente pre-1.4), loggea warning y
+    retorna None. El Node se crea como unit raíz huérfana; es reparable
+    más adelante por el script de backfill.
+    """
+    if group.parent_group_id is None:
+        return None
+    parent_node = session.get(Node, group.parent_group_id)
+    if parent_node is None or parent_node.deleted_at is not None:
+        logger.warning(
+            "Group %s tiene parent_group_id=%s sin Node espejo vivo; "
+            "creando Node raíz huérfano.",
+            group.id,
+            group.parent_group_id,
+        )
+        return None
+    return parent_node.id
+
+
+def _mirror_group_to_node_on_create(session: Session, group: Group) -> None:
+    """Crea el Node espejo con el MISMO UUID del Group."""
+    parent_node_id = _resolve_parent_node_id(session, group)
+    node = Node(
+        id=group.id,
+        organization_id=group.organization_id,
+        parent_node_id=parent_node_id,
+        type=NodeType.UNIT,
+        name=group.name,
+        position_x=group.position_x,
+        position_y=group.position_y,
+        attrs=_build_unit_attrs(group),
+        created_at=group.created_at,
+    )
+    session.add(node)
+
+
+def _mirror_group_to_node_on_update(session: Session, group: Group) -> None:
+    """Actualiza el Node espejo. Si no existe, lo crea on-the-fly + error log."""
+    node = session.get(Node, group.id)
+    if node is None:
+        logger.error(
+            "Group %s no tiene Node espejo durante PATCH (estado inconsistente). "
+            "Creando Node on-the-fly.",
+            group.id,
+        )
+        _mirror_group_to_node_on_create(session, group)
+        return
+
+    # Resucitar el Node si estaba soft-deleted (improbable pero defensivo).
+    node.deleted_at = None
+    node.name = group.name
+    node.position_x = group.position_x
+    node.position_y = group.position_y
+    node.parent_node_id = _resolve_parent_node_id(session, group)
+    node.attrs = _build_unit_attrs(group)
+    session.add(node)
+
+
+def _mirror_group_to_node_on_delete(session: Session, group_id: UUID) -> None:
+    """Soft-delete del Node espejo. Si no existe, no-op silencioso."""
+    node = session.get(Node, group_id)
+    if node is None:
+        logger.warning(
+            "DELETE /groups/%s: Node espejo no existe. No-op.", group_id
+        )
+        return
+    if node.deleted_at is None:
+        node.deleted_at = datetime.now(timezone.utc)
+        session.add(node)
+
+
+def _count_analyses_for_uuid(session: Session, target_id: UUID) -> int:
+    """Cuenta NodeAnalyses + GroupAnalyses que referencian este UUID.
+
+    `node_analyses.group_id` y `group_analyses.group_id` usan UUIDs
+    preservados entre tablas viejas y nuevas; por eso la misma PK sirve.
+    """
+    try:
+        n = session.execute(
+            text("SELECT COUNT(*) FROM node_analyses WHERE group_id = :gid"),
+            {"gid": str(target_id)},
+        ).scalar_one()
+        g = session.execute(
+            text("SELECT COUNT(*) FROM group_analyses WHERE group_id = :gid"),
+            {"gid": str(target_id)},
+        ).scalar_one()
+    except Exception:
+        # Tablas del motor pueden no existir en algunos escenarios de test.
+        return 0
+    return int(n or 0) + int(g or 0)
+
+
+# ─────────────────────────── Endpoints ──────────────────────────
+
+@router.post(
+    "/groups",
+    response_model=GroupRead,
+    status_code=status.HTTP_201_CREATED,
+    deprecated=True,
+)
 def create_group(
     payload: GroupCreate,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -157,12 +313,17 @@ def create_group(
         position_y=payload.position_y,
     )
     session.add(group)
+    session.flush()  # asigna/confirma group.id sin commit
+
+    # Mirror → Node (mismo UUID). Cualquier fallo aborta la transacción.
+    _mirror_group_to_node_on_create(session, group)
+
     session.commit()
     session.refresh(group)
     return GroupRead.model_validate(group)
 
 
-@router.get("/groups", response_model=list[GroupRead])
+@router.get("/groups", response_model=list[GroupRead], deprecated=True)
 def list_groups(
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
@@ -175,7 +336,7 @@ def list_groups(
     return [GroupRead.model_validate(group) for group in groups]
 
 
-@router.get("/groups/{group_id}", response_model=GroupRead)
+@router.get("/groups/{group_id}", response_model=GroupRead, deprecated=True)
 def get_group(
     group_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -189,7 +350,7 @@ def get_group(
     return GroupRead.model_validate(group)
 
 
-@router.patch("/groups/{group_id}", response_model=GroupRead)
+@router.patch("/groups/{group_id}", response_model=GroupRead, deprecated=True)
 def update_group(
     group_id: UUID,
     payload: GroupUpdate,
@@ -215,12 +376,21 @@ def update_group(
         setattr(group, field, value)
 
     session.add(group)
+    session.flush()
+
+    # Mirror → Node. Fallback: si no existe, se crea.
+    _mirror_group_to_node_on_update(session, group)
+
     session.commit()
     session.refresh(group)
     return GroupRead.model_validate(group)
 
 
-@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/groups/{group_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    deprecated=True,
+)
 def delete_group(
     group_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -249,12 +419,28 @@ def delete_group(
             detail="Group has members",
         )
 
+    # Protección nueva Sprint 1.4: no permitir borrar si hay análisis asociados.
+    if _count_analyses_for_uuid(session, group.id) > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "El grupo tiene análisis históricos asociados. Use archivado "
+                "(soft-delete) en lugar de eliminación."
+            ),
+        )
+
     session.delete(group)
+    # Mirror → soft-delete del Node espejo (política MODEL_PHILOSOPHY §5.1).
+    _mirror_group_to_node_on_delete(session, group_id)
     session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/organizations/{org_id}/groups/tree", response_model=list[GroupTreeNode])
+@router.get(
+    "/organizations/{org_id}/groups/tree",
+    response_model=list[GroupTreeNode],
+    deprecated=True,
+)
 def get_organization_groups_tree(
     org_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -308,14 +494,14 @@ def get_organization_groups_tree(
     return build(None)
 
 
-@router.patch("/organizations/{org_id}/groups/positions")
+@router.patch("/organizations/{org_id}/groups/positions", deprecated=True)
 def update_positions(
     org_id: UUID,
     payload: BulkPositionUpdate,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
 ) -> dict:
-    """Bulk update node positions after drag on canvas."""
+    """Bulk update node positions after drag on canvas (espejado a Node)."""
     if not _can_access_org(current_user, org_id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not enough permissions")
 
@@ -326,6 +512,18 @@ def update_positions(
             group.position_x = pos.position_x
             group.position_y = pos.position_y
             session.add(group)
+            # Mirror → Node.
+            node = session.get(Node, pos.id)
+            if node is not None:
+                node.position_x = pos.position_x
+                node.position_y = pos.position_y
+                session.add(node)
+            else:
+                logger.warning(
+                    "Bulk positions: Group %s sin Node espejo; se actualiza "
+                    "solo el Group.",
+                    pos.id,
+                )
             updated += 1
 
     session.commit()
