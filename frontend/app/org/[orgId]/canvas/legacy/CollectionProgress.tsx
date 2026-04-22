@@ -1,5 +1,12 @@
 "use client";
 
+/**
+ * @deprecated — componente legacy pre-Sprint 2.B.
+ * Reemplazado por UnitPanel/PersonPanel/NodeFilesSection en la capa
+ * Estructura unificada (visión del Sprint 2.A).
+ * Eliminación programada para Sprint 4 una vez confirmado cero consumidores.
+ */
+
 import { useEffect, useState } from "react";
 import { getCollectionStatus } from "@/lib/api";
 import { ArrowRight, CheckCircle } from "lucide-react";

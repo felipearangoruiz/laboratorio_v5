@@ -277,7 +277,10 @@ export async function saveDraft(token: string, data: Record<string, any>) {
 // consumer `canvas/page.tsx` (que los tipa como GroupData
 // inline). Tiparlos como `unknown` fuerza refactor del
 // consumer, que es trabajo del Sprint 2.3.
-/** @deprecated — usar listNodes después del Sprint 2.3 */
+/**
+ * @deprecated Sprint 2.B — reemplazado por useCanvasData + Node API.
+ * Eliminación en Sprint 4.
+ */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getOrgGroups(orgId: string) {
   return request<any[]>(`/organizations/${orgId}/groups/tree`);
@@ -406,6 +409,10 @@ export async function getCollectionStatus(orgId: string) {
   }>(`/organizations/${orgId}/collection/status`);
 }
 
+/**
+ * @deprecated Sprint 2.B — consumido principalmente por CollectionPanel
+ * legacy. Eliminación en Sprint 4.
+ */
 export async function getNodeInterviews(orgId: string, nodeId: string) {
   return request<{
     member_id: string;
