@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "jose": "^5.10.0",
     "lucide-react": "^0.468.0",
     "next": "14.2.33",
