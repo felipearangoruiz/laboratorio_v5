@@ -145,6 +145,32 @@ Información que define qué/quién es el nodo, independiente de cualquier campa
 - `created_at`: timestamptz NOT NULL.
 - `deleted_at`: timestamptz nullable, default null. Marca de soft-delete. Los queries del canvas filtran `WHERE deleted_at IS NULL`. Preserva integridad referencial con tablas del motor de análisis que referencian `Node` por UUID.
 
+### 5.1.1 Campos legacy en `Node.attrs` durante coexistencia
+
+Durante el período de coexistencia entre el modelo viejo (Group, Member) y el nuevo (Node), varios campos que existían como columnas en las tablas viejas se alojan temporalmente en Node.attrs porque no se promovieron a columnas dedicadas del nuevo modelo:
+
+Para Nodes espejados desde Group (type=unit):
+- description: descripción del grupo.
+- tarea_general: tarea principal del área.
+- area: sub-área o división.
+- nivel_jerarquico: nivel en la estructura.
+- tipo_nivel: tipo del nivel jerárquico.
+- is_default: marca de grupo por defecto.
+- node_type (legacy): tipo de grupo del modelo viejo.
+
+Para Nodes espejados desde Member (type=person):
+- role_label: rol reportado del miembro.
+- interview_token: token de entrevista legacy (ahora respondent_token en NodeState, pero preservado en attrs por consistencia de migración).
+- token_status: estado del token.
+- email: email del miembro, si la columna existe en Member.
+
+Estos campos son DEUDA TEMPORAL. Criterios para promover uno a columna dedicada de Node:
+- Se consulta frecuentemente en queries (requiere índice).
+- Es semánticamente central al Node (no metadata libre).
+- Tiene tipo estricto que JSONB no valida bien.
+
+La promoción se decide caso por caso en sprints futuros, trackeada en DEUDA_DOCUMENTAL.md.
+
 ### 5.2 Tabla `node_states` — estado por campaña
 
 Información que cambia entre diagnósticos y debe ser recuperable históricamente:
@@ -271,6 +297,26 @@ Lista numerada de las **13 invariantes** que se enforzan en validación server-s
 12. **Documentos consistentes**. Un `Document` pertenece a una organización. Si tiene `campaign_id` no nulo, ese campaign debe pertenecer a la misma organización (`documents.organization_id = campaigns.organization_id`). Un documento con `campaign_id NULL` es permanente y participa en todas las campañas posteriores a su `created_at`.
 
 13. **Orden requerido en edges `process`**. Edges con `edge_type='process'` deben tener un campo `'order'` entero positivo en `edge_metadata`. Edges con `edge_type='lateral'` pueden tener `edge_metadata` vacío (`{}`). La validación se ejecuta server-side antes de persistir el edge.
+
+### 8.1 Niveles de enforcement de las invariantes
+
+Las 13 invariantes documentadas se enforzan en niveles distintos según la etapa del refactor:
+
+**Nivel 1 — Router (Sprint 1.3 - actual):** la validación vive en los endpoints FastAPI. Cualquier request que viole una invariante recibe `422` (o `409` cuando aplica conflicto de estado). Este nivel asume que *todas* las escrituras pasan por el router autenticado.
+
+**Nivel 2 — Base de datos (Sprint 1.6+ objetivo):** las invariantes críticas (scope organizacional, tipo discreto, jerarquía persons/units, no self-loop, unicidad dirigida, campaña activa única) se espejan en `CHECK constraints`, `UNIQUE` parciales y `EXCLUSION constraints` de PostgreSQL. Escribir por fuera del router (ORM directo, SQL crudo, scripts de datos) sigue siendo rechazado.
+
+**Justificación de la capa de compatibilidad (Sprint 1.4):** los routers legacy `groups.py`, `members.py`, `interviews.py`, `interview_public.py` escriben sobre `nodes` / `node_states` sin pasar por el router nuevo. Mientras el enforcement viva solo en Nivel 1, estos espejados **bypasean** validaciones como "tipo discreto" o "jerarquía de persons" a nivel DB. Esto es aceptable porque:
+
+- Los routers legacy ya aplican sus propias validaciones equivalentes (ej. un `Member` solo puede tener `group_id` válido, lo que al espejarse genera un person hijo de unit, respetando la invariante 3).
+- La ventana de coexistencia es acotada: al completarse Sprint 1.5 (lectura unificada) y Sprint 1.6 (deprecación real de legacy), los espejados desaparecen y el Nivel 2 cierra la puerta trasera.
+
+**Política para tests de Sprint 1.5:** cada test de invariante debe declarar explícitamente qué nivel ejercita:
+
+- Test de "nivel router" → hace request HTTP y espera `422` / `409`.
+- Test de "nivel DB" → escribe directo con el ORM / SQL crudo y espera `IntegrityError` o `CheckViolation`.
+
+Mientras no exista la constraint DB, los tests de nivel DB quedan marcados `@pytest.mark.xfail(reason="invariante solo enforzada a nivel router hasta Sprint 1.6")`. Esto deja la deuda visible en el suite de tests, no escondida.
 
 ---
 
