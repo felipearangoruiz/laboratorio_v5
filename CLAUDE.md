@@ -59,22 +59,22 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 
 1. **El canvas organizacional es la pantalla principal.** No es un módulo. Es la home del usuario premium.
 2. **El usuario nunca pierde el contexto del canvas.** Toda funcionalidad se abre como panel lateral, overlay o capa. Nunca como navegación a otra página.
-3. **3 capas sobre el mismo canvas:** Estructura+Captura → Análisis → Resultados. Cambiar de capa no cambia de pantalla. *(La antigua capa "Recolección" se fusionó en "Estructura+Captura" por decisión del 21 de abril de 2026 — ver `docs/MODEL_PHILOSOPHY.md`.)*
+3. **3 capas sobre el mismo canvas:** Estructura → Análisis → Resultados. Cambiar de capa no cambia de pantalla. *(La antigua capa "Recolección" se fusionó en "Estructura" por decisión del 21 de abril de 2026 — ver `docs/MODEL_PHILOSOPHY.md`. La capa se llama **"Estructura"** a secas, no "Estructura+Captura".)*
 4. **Panel lateral contextual derecho:** se abre al hacer clic en un nodo. Su contenido cambia según la capa activa.
 5. **Sidebar mínimo izquierdo (colapsable):** solo para settings, billing, documentos, selector de org, cuenta.
 6. **Diagnóstico narrativo:** panel expandido lateral derecho (60-70% viewport), canvas visible en segundo plano.
 
 ### Comportamiento por capa (fuente de verdad)
 
-**CAPA ESTRUCTURA+CAPTURA:** *(unificada — antes eran dos capas separadas)*
-- El admin construye el mapa organizacional, caracteriza cada nodo y gestiona las invitaciones desde la misma vista.
-- Cada nodo tiene: nombre, tipo (`unit` | `person`), posición jerárquica vía `parent_node_id`, área, contexto libre, descripción. Para nodos `person`: email del respondiente y `role_label` del estado de campaña activa.
-- El email se ingresa **UNA SOLA VEZ** en el panel lateral del nodo `person` — es la persona que responderá la entrevista.
-- También desde esta capa el admin puede subir documentos institucionales (estatutos, misión, manuales) que alimentarán el análisis de IA. Los documentos pueden ser permanentes (transversales a campañas) o asociados a la campaña activa.
-- El panel lateral en esta capa muestra pestañas contextuales:
-  - **Identidad** — formulario de edición del nodo (nombre, tipo, padre jerárquico, descripción).
-  - **Estado de campaña** — email asignado, `role_label`, `context_notes`, estado de la entrevista (sin invitar / invitado / en progreso / completado / vencido), link copiable, botón WhatsApp, fecha de respuesta.
-  - **Documentos** — adjuntos al nodo si aplica.
+**CAPA ESTRUCTURA:** *(única capa de edición; antes fueron dos — Estructura y Recolección — que se fusionaron)*
+- Arquitectura visual: **canvas + panel contextual**, no sub-tabs en el panel, no selector de campaña.
+- **Canvas (izquierda):** mapa organizacional. Por cada nodo muestra solo `name`, un tipo visual distinto para `unit` vs. `person`, y un indicador simple de estado. No muestra descripción, correo, archivos, notas ni rol en el canvas.
+- **Panel contextual (derecha):** toda la información editable del nodo seleccionado. Sin pestañas — una sola vista que compone campos de `Node` (identidad permanente) y de `NodeState` de la Campaña Activa Implícita (estado de recolección), presentados al admin como un único formulario coherente.
+  - Para `unit`: nombre, descripción, notas permanentes (`Node.attrs.admin_notes`), documentos, listado de miembros (child persons).
+  - Para `person`: nombre, rol, email, estado de respuesta (`NodeState.status` — invited/in_progress/completed/skipped), link copiable, botón WhatsApp, documentos, notas permanentes del admin.
+- **Estado del área es calculado, no persistido**: un `unit` es vacío (sin miembros y sin descripción), incompleto (al menos un miembro no `completed`) o completo (todos los miembros `completed`). El estado del `person` sí es persistido (`NodeState.status`). Ver `docs/MODEL_PHILOSOPHY.md` §5.1.2.
+- **Notas del admin son permanentes**, no atadas a campaña. Viven en `Node.attrs.admin_notes`. `NodeState.context_notes` queda reservado para notas específicas-a-campaña si la UX alguna vez las distingue.
+- **No existe concepto de Campaign en la UX.** Toda operación de recolección opera sobre una **Campaña Activa Implícita** por organización (ver `docs/MODEL_PHILOSOPHY.md` §5.2.2). El admin nunca selecciona ni ve la campaña.
 - Los nodos `person` sin email asignado muestran un aviso "Asigna un email en este panel para invitar".
 - Ver `docs/MODEL_PHILOSOPHY.md` §7 para la convención visual completa.
 
@@ -136,7 +136,7 @@ El PRD v2 sección 7 define reglas que son **no negociables** para el frontend:
 
 ### Plan Premium — Producto completo (CON autenticación)
 
-- Canvas organizacional con 4 capas.
+- Canvas organizacional con 3 capas (Estructura, Análisis, Resultados).
 - 8 dimensiones: Liderazgo, Comunicación, Cultura, Procesos, Poder, Economía/Finanzas, Operación, Misión.
 - Entrevistas profundas (Likert + abiertas + selección múltiple).
 - Motor IA híbrido (scoring + LLM + análisis de redes).
@@ -254,6 +254,9 @@ class AssessmentCampaign:
     created_by_user_id: UUID
     # A lo sumo UNA campaign active por organization simultáneamente.
     # Schema existe desde Sprint 1; UI de múltiples campañas hasta Sprint 3.
+    # Nota UX (Sprint 2): el concepto NO se expone al usuario. Toda operación de
+    # recolección opera sobre una "Campaña Activa Implícita" por org (name="Diagnóstico Inicial").
+    # Ver docs/MODEL_PHILOSOPHY.md §5.2.2.
 
 # Membership — reemplaza relación directa User-Organization.
 class Membership:
@@ -345,19 +348,20 @@ El PRD v2 define **8 dimensiones** para premium y **4 dimensiones** para free.
 - [ ] Importación CSV con wizard
 - [ ] Tooltips progresivos de onboarding
 
-### Fase 2 — Recolección
+### Fase 2 — Captura (integrada en capa Estructura)
+
+> La capa "Recolección" desapareció con el rediseño del 21 de abril de 2026. La captura ocurre dentro de la capa Estructura, a través del panel contextual del nodo. Ver `docs/MODEL_PHILOSOPHY.md` §7 y el bloque "CAPA ESTRUCTURA" en §3.
 
 **Backend:**
-- [ ] Sistema de invitaciones con tokens (ya existe parcialmente, extender)
+- [ ] Sistema de invitaciones con tokens sobre `NodeState` de la Campaña Activa Implícita (extender endpoints existentes)
 - [ ] Banco de preguntas premium (8 dimensiones)
-- [ ] Endpoints de gestión de entrevistas (recordatorios, revocación)
+- [ ] Endpoints de gestión de entrevistas (recordatorios, revocación) basados en `NodeState`
 - [ ] Cálculo de umbral (40%, mínimo 5)
 
 **Frontend:**
-- [ ] Capa Recolección del canvas
-- [ ] Panel lateral en estado Recolección
+- [ ] Indicador de estado por nodo en canvas (person: estado persistido; unit: estado calculado)
+- [ ] Panel contextual de `person` con flujo de invitar / recordar / revocar
 - [ ] Experiencia del entrevistado premium (responsive, guardado automático)
-- [ ] Indicadores de estado en nodos
 
 ### Fase 3 — Motor de IA
 
@@ -414,7 +418,7 @@ El PRD v2 define **8 dimensiones** para premium y **4 dimensiones** para free.
 
 ### General
 
-- Commits en español, descriptivos: "feat: agregar capa Recolección al canvas"
+- Commits en español, descriptivos: "feat: agregar indicador de estado por nodo en capa Estructura"
 - No dejar console.log en producción
 - Variables de entorno en .env (nunca hardcoded)
 - Docker Compose para desarrollo local

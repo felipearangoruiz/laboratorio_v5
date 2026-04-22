@@ -1,6 +1,6 @@
 # Filosofía del Modelo de Datos
 
-> **Documento de referencia técnica para las capas de Estructura y Captura del canvas premium.**
+> **Documento de referencia técnica para la capa Estructura del canvas premium.**
 > Complementa el PRD v2.1 y establece los contratos de datos que se implementarán en el refactor Node + Edge.
 > En caso de conflicto, el PRD v2.1 gana.
 
@@ -10,7 +10,7 @@
 
 Este documento describe el modelo de datos de **identidad estructural** y **captura de insumos** de la organización diagnosticada:
 
-- **Alcance**: las capas de **Estructura** y **Captura** del canvas, que en este refactor **se unifican en una sola vista operativa**. El admin construye el organigrama, caracteriza nodos, adjunta documentos y gestiona invitaciones desde el mismo lienzo, sin cambiar de capa.
+- **Alcance**: la **capa Estructura** del canvas, entendida como una única vista operativa. El admin construye el organigrama, caracteriza nodos, adjunta documentos y gestiona invitaciones desde el mismo lienzo, sin cambiar de capa y sin exponer el concepto de campaña en la UX (ver §5.2.2).
 - **Fuera de alcance**: las capas **Análisis** y **Resultados** (lectura densa). Su modelo de datos, pipeline y contratos están definidos en:
   - [`MOTOR_ANALISIS.md`](./MOTOR_ANALISIS.md) — contrato del motor de análisis (tablas `analysis_runs`, `node_analyses`, `group_analyses`, `org_analyses`, `findings`, `recommendations`, `evidence_links`, `document_extractions`).
   - [`ARQUITECTURA_ANALISIS_RESULTADOS.md`](./ARQUITECTURA_ANALISIS_RESULTADOS.md) — especificación de UI de las capas Análisis y Resultados.
@@ -142,6 +142,10 @@ Información que define qué/quién es el nodo, independiente de cualquier campa
 - `name` — nombre canónico del unit o de la persona.
 - `position_x`, `position_y` — posición visual en el canvas de Estructura/Captura (ver nota en §5.3).
 - `attrs` (columna `Node.attrs`): jsonb NOT NULL DEFAULT '{}'. Metadata libre del nodo. No debe contener campos que deban ser queryables o indexables (esos se promocionan a columnas dedicadas). Tampoco debe contener secrets ni PII no necesaria.
+
+  `attrs` ejemplos de uso convencional:
+  - `admin_notes`: notas o instrucciones permanentes del admin sobre el nodo. No cambian entre diagnósticos. Antes se esperaba que vivieran en `NodeState.context_notes` — esa columna sigue existiendo para notas específicas-a-campaña si alguna vez la UX distingue, pero el default del Sprint 2 es guardar todas las notas en `Node.attrs.admin_notes`.
+
 - `created_at`: timestamptz NOT NULL.
 - `deleted_at`: timestamptz nullable, default null. Marca de soft-delete. Los queries del canvas filtran `WHERE deleted_at IS NULL`. Preserva integridad referencial con tablas del motor de análisis que referencian `Node` por UUID.
 
@@ -171,6 +175,19 @@ Estos campos son DEUDA TEMPORAL. Criterios para promover uno a columna dedicada 
 
 La promoción se decide caso por caso en sprints futuros, trackeada en DEUDA_DOCUMENTAL.md.
 
+### 5.1.2 Estado del área (calculado)
+
+El "estado" de un nodo `type=unit` no es un campo en DB. Se calcula on-the-fly desde el `NodeState.status` de los child persons del unit en la Campaña Activa Implícita (ver §5.2.2).
+
+Reglas:
+- **Vacío**: unit sin child persons Y sin descripción en attrs.
+- **Incompleto**: unit con al menos un child person cuyo `NodeState.status ≠ "completed"`.
+- **Completo**: todos los child persons tienen `NodeState.status = "completed"`.
+
+El estado de un person sí es persistido: viene directamente del `NodeState.status` en la Campaña Activa Implícita.
+
+Implementación: puede ser computed property en el SQLModel, vista SQL, o cómputo client-side. Decisión técnica del Sprint que implemente la UI.
+
 ### 5.2 Tabla `node_states` — estado por campaña
 
 Información que cambia entre diagnósticos y debe ser recuperable históricamente:
@@ -193,6 +210,17 @@ Información que cambia entre diagnósticos y debe ser recuperable históricamen
 - **`in_progress`**: respondiente entró y hay `interview_data` parcial.
 - **`completed`**: respondiente submitteó (`completed_at` no null).
 - **`skipped`**: admin excluyó explícitamente este node de la campaña (ej: persona en vacaciones, rol sin respondiente asignado).
+
+#### 5.2.2 Campaña Activa Implícita
+
+Durante la fase actual del refactor, la UX no expone el concepto de Campaign al usuario. Toda operación de recolección ocurre sobre una Campaña Activa Implícita única por organización, creada automáticamente con `name="Diagnóstico Inicial"` al crear la org (o por el seed / migración del Sprint 1.2 para orgs preexistentes).
+
+Consecuencias:
+- Toda query de NodeState en la capa Estructura filtra por `campaign_id = Campaña Activa Implícita`.
+- Al crear un nuevo NodeState desde UI, `campaign_id` se asigna automáticamente.
+- El admin nunca selecciona, cambia ni ve la Campaña Activa Implícita.
+
+Esta restricción es solo de UX. El modelo soporta múltiples campañas por org desde Sprint 1.1. La exposición futura del concepto a UX es feature nueva, no refactor de modelo.
 
 ### 5.3 Casos frontera y decisiones
 
@@ -235,36 +263,60 @@ La tabla `documents` admite dos modos:
 
 Esta distinción es la que hoy usa implícitamente `document_extractions.run_id` del motor, pero promovida a metadato de primera clase sobre el documento mismo.
 
+### 6.4 Relación con la UX actual
+
+La UX del Sprint 2 no expone campañas. Ver §5.2.2. El modelo de longitudinalidad se preserva pero se posterga su exposición hasta decisión futura explícita de producto.
+
 ---
 
-## 7. Convención visual del canvas (Estructura + Captura unificadas)
+## 7. Convención visual del canvas (capa Estructura)
 
-**Esta sección aplica solo a la vista unificada de Estructura y Captura.** Las capas Análisis y Resultados mantienen las convenciones de [`ARQUITECTURA_ANALISIS_RESULTADOS.md`](./ARQUITECTURA_ANALISIS_RESULTADOS.md) sin modificación.
+**Esta sección aplica solo a la capa Estructura.** Las capas Análisis y Resultados mantienen las convenciones de [`ARQUITECTURA_ANALISIS_RESULTADOS.md`](./ARQUITECTURA_ANALISIS_RESULTADOS.md) sin modificación.
 
-### 7.1 Nodos
+### 7.1 Canvas y panel: separación de roles
 
-- **unit**: tarjeta rectangular redondeada, tamaño estándar, color neutro con acento del área. Nombre del unit en tipografía display. Badge con número de hijos directos (`unit` + `person`).
-- **person**: tarjeta más pequeña, forma sutilmente distinta (chip ovalado o rectángulo más estrecho), con avatar-placeholder o inicial. Nombre + `role_label` del estado de la campaña activa.
-- **Nodo sin email asignado (person)**: borde punteado amarillo + tooltip *"Asigna un email en este panel para invitar"*.
-- **Nodo con entrevista completada (person)**: check verde discreto en esquina.
-- **Nodo con entrevista en progreso (person)**: spinner o indicador de progreso.
+- **Canvas (izquierda)**: mapa organizacional. Entendimiento y navegación. Visual simple.
+- **Panel contextual (derecha)**: toda la información editable del nodo seleccionado.
 
-### 7.2 Relaciones
+El canvas NUNCA muestra información densa del nodo (descripción, notas, correo, archivos). Esa información vive exclusivamente en el panel.
+
+### 7.2 Qué muestra el canvas por nodo
+
+El canvas de la capa Estructura muestra por cada nodo:
+
+- Nombre
+- Tipo visual distinto para unit vs. person
+- Indicador simple de estado
+  - Para person: vacío (sin NodeState o `status=invited`), en progreso (`status=in_progress`), completo (`status=completed`), omitido (`status=skipped`).
+  - Para unit: vacío, incompleto, completo (calculado — ver §5.1.2).
+
+El canvas no muestra: descripción, cantidad de archivos, notas del admin, rol, correo. Toda esa información vive en el panel contextual que se abre al seleccionar un nodo.
+
+### 7.3 Relaciones en canvas
 
 - **Composición (`parent_node_id`)**: línea sólida gris clara, vertical/curva estándar React Flow. No tiene etiqueta.
 - **Edge tipado**: línea punteada, color según `edge_type` (`lateral` / `process`), con etiqueta opcional al hover.
 
-### 7.3 Panel lateral contextual (único para ambas capas antes unificadas)
+### 7.4 Panel contextual: contenido por tipo de nodo
 
-Al hacer clic en un nodo, el panel lateral muestra pestañas:
+Al hacer clic en un nodo, el panel lateral muestra toda la información editable del nodo seleccionado. No hay pestañas "Identidad" / "Estado de campaña" separadas: el panel es una sola vista que compone campos de `Node` (identidad permanente) y de `NodeState` de la Campaña Activa Implícita (estado de recolección), presentados al admin como un único formulario coherente.
 
-- **Identidad** — `name`, `type`, `parent_node_id`.
-- **Estado de campaña** — campos de `node_states` de la campaña activa: `email_assigned`, `role_label`, `context_notes`, `status` (ver §5.2.1), token copiable, botón WhatsApp (solo persons).
-- **Documentos** — adjuntos al nodo (si aplica en el roadmap).
+Campos por tipo de nodo:
 
-Esta unificación en un solo panel reemplaza la dualidad *Estructura (edición) / Recolección (lectura de estado)* del PRD v2.1 sección 7.
+- **Area (`type=unit`)**:
+  - `name` (identidad).
+  - Descripción (en `Node.attrs`).
+  - Notas del admin (`Node.attrs.admin_notes`, permanentes — ver §5.1).
+  - Documentos adjuntos.
+  - Listado de miembros (child persons con `parent_node_id` apuntando a este unit).
 
-> **Decisión final (21 de abril de 2026):** tres capas oficiales — **Estructura+Captura**, **Análisis**, **Resultados**. La antigua "Recolección" se fusiona en "Estructura+Captura". CLAUDE.md §3 y el PRD v2.1 §7 deben actualizarse para reflejar esta oficialización.
+- **Miembro (`type=person`)**:
+  - `name` (identidad).
+  - Rol (`NodeState.role_label` en la Campaña Activa Implícita, o `Node.attrs.role_label` como fallback legacy).
+  - Email (`NodeState.email_assigned`).
+  - Estado de respuesta (`NodeState.status`, ver §5.2.1) con token copiable y botón WhatsApp.
+  - Documentos adjuntos.
+  - Notas del admin sobre la persona (`Node.attrs.admin_notes`).
 
 ---
 

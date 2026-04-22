@@ -13,7 +13,9 @@
 
 Esta versión incorpora cuatro decisiones tomadas durante el Sprint 0 del refactor de modelo de nodos y unificación de capas. Estas decisiones modifican secciones específicas del PRD original y prevalecen sobre cualquier afirmación contradictoria del v2.1.
 
-**Decisión A1 — Tres capas en lugar de cuatro.** Las capas Estructura y Recolección se fusionan en una sola capa unificada llamada Estructura+Captura. El canvas pasa de tener cuatro capas (Estructura, Recolección, Análisis, Resultados) a tener tres (Estructura+Captura, Análisis, Resultados). Afecta secciones 7.3, 7.4, 7.8, 8.3.
+**Decisión A1 — Tres capas en lugar de cuatro.** Las capas Estructura y Recolección se fusionan en una sola capa unificada llamada **Estructura** (nombre canónico). El canvas pasa de tener cuatro capas (Estructura, Recolección, Análisis, Resultados) a tener tres (Estructura, Análisis, Resultados). Afecta secciones 7.3, 7.4, 7.8, 8.3.
+
+> **Refinamiento (21 de abril de 2026 tarde, post-Sprint 2.2):** el nombre canónico de la capa es **"Estructura"** a secas, no "Estructura" ni "Estructura y Recolección". La capa opera como **canvas + panel contextual**: el canvas es mapa visual simple (nombre, tipo, indicador de estado) y el panel contiene toda la información editable del nodo. La UX no expone el concepto de Campaign — toda operación de recolección ocurre sobre una Campaña Activa Implícita por organización (ver `MODEL_PHILOSOPHY.md` §5.2.2).
 
 **Decisión A2 — AssessmentCampaign como entidad de schema.** El sistema soporta múltiples diagnósticos a lo largo del tiempo sobre la misma organización mediante la entidad AssessmentCampaign. El schema existe desde el Sprint 1 del refactor; la UI que expone campañas múltiples se entrega en el Sprint 3. Cada diagnóstico ejecutado pertenece a una Campaign. La migración inicial crea automáticamente una Campaign llamada "Diagnóstico Inicial" para preservar los datos existentes. Afecta sección 12 (modelo de datos).
 
@@ -265,16 +267,25 @@ Contiene únicamente navegación secundaria que no puede vivir en el canvas:
 
 ## 7.3. Capas del canvas
 
-> **Actualizado v2.2 (decisión A1):** el canvas pasa de cuatro a tres capas. Estructura y Recolección se fusionan en una capa unificada llamada Estructura+Captura.
+> **Actualizado v2.2 (decisión A1, refinada 21-abr-2026):** el canvas pasa de cuatro a tres capas. Estructura y Recolección se fusionan en una capa unificada llamada simplemente **Estructura**.
 
 El canvas tiene 3 capas que representan diferentes modos de interacción con la misma información. El usuario cambia de capa mediante un selector visible (tabs o toggle en la parte superior del canvas). Cambiar de capa no cambia de pantalla; cambia qué información es visible y qué acciones están disponibles.
 
-Estructura+Captura es la capa de captura: el administrador construye la organización y gestiona las invitaciones simultáneamente. Análisis y Resultados son capas de lectura densa con coordinación visual: el canvas actúa como ancla estructural mientras los paneles contienen información contextualizada en la estructura real. En la primera el admin actúa; en las segundas, comprende. En Análisis y Resultados el canvas nunca es decorativo: siempre es reactivo.
+**Capa Estructura (unificada).**
+El admin entra a una sola vista donde construye la organización, navega su estructura y completa la información de cada nodo desde un panel contextual.
+
+Componentes:
+- Canvas a la izquierda: mapa de la organización con nombre, tipo e indicador de estado simple por nodo.
+- Panel contextual a la derecha: información completa del nodo seleccionado, editable.
+
+No existen capas separadas "Estructura" y "Recolección" — quedaron fusionadas en esta capa única. No existe concepto de campañas en la experiencia de usuario (ver `docs/MODEL_PHILOSOPHY.md` §5.2.2).
+
+Análisis y Resultados son capas de lectura densa con coordinación visual: el canvas actúa como ancla estructural mientras los paneles contienen información contextualizada en la estructura real. En la primera el admin actúa; en las segundas, comprende. En Análisis y Resultados el canvas nunca es decorativo: siempre es reactivo.
 
 
 | **Capa** | **Propósito** | **Qué se ve en el canvas** | **Acciones disponibles** |
 |---|---|---|---|
-| Estructura+Captura | Construir la organización y gestionar entrevistas | Nodos en modo edición + indicador de estado de entrevista (gris/azul/verde/naranja) | Crear/editar/eliminar nodos, arrastrar conexiones, importar CSV, invitar miembros, enviar recordatorios, ver progreso, revocar invitaciones |
+| Estructura | Construir la organización, completar información de nodos y monitorear respuestas | Nodos con nombre, tipo (unit/person) e indicador simple de estado | Crear/editar/eliminar nodos, arrastrar conexiones, importar CSV, editar datos desde panel, invitar miembros, enviar recordatorios, ver progreso, revocar invitaciones |
 | Análisis | Visualizar el diagnóstico sobre la estructura | Nodos coloreados por nivel de tensión (verde/amarillo/rojo), conexiones con intensidad | Filtrar por dimensión, ver mapa de calor, comparar con diagnóstico anterior |
 | Resultados | Leer hallazgos y recomendaciones | Nodos con highlights de insights, badges de hallazgos | Abrir diagnóstico narrativo, ver hallazgos por nodo, exportar |
 
@@ -286,7 +297,7 @@ Al hacer clic en un nodo del canvas, se abre un panel lateral derecho que funcio
 
 | **Capa activa** | **Contenido del panel al hacer clic en un nodo** |
 |---|---|
-| Estructura+Captura | Formulario de edición completo del nodo: nombre, rol/cargo, descripción, área, nivel jerárquico. Campo de email del miembro asignado. Campo de contexto libre (notas sobre la dinámica del nodo). Sección para subir documentos institucionales que alimentarán el análisis de IA. Botón eliminar nodo. Relaciones jerárquicas y laterales. **Captura integrada (sección dentro del mismo panel):** estado de la entrevista para ese nodo (sin invitar / invitado / en progreso / completado / vencido), link copiable único para compartir con el miembro, botón de envío por WhatsApp, fecha de respuesta o expiración si aplica. |
+| Estructura | Para `unit`: nombre, descripción, notas permanentes del admin, documentos adjuntos, listado de miembros (child persons). Para `person`: nombre, rol, email, estado de respuesta (sin invitar / invitado / en progreso / completado / vencido), link copiable y botón WhatsApp, documentos adjuntos, notas permanentes del admin. Toda la información editable del nodo vive aquí — el canvas solo muestra nombre, tipo e indicador de estado. Ver `docs/MODEL_PHILOSOPHY.md` §7.4 para el detalle por tipo. |
 | Análisis | Scores del nodo por dimensión (radar mini), comparación con promedio de su área, alertas de tensión, resumen de percepciones agregadas. |
 | Resultados | Hallazgos específicos del nodo o su área, recomendaciones relevantes, enlace al diagnóstico narrativo completo. |
 
@@ -331,21 +342,21 @@ Para evitar ambigüedades, se listan decisiones de diseño que quedan explícita
 
 ## 7.8. Jerarquía y flujo progresivo de capas
 
-> **Actualizado v2.2 (decisión A1):** la fila Recolección se elimina; sus acciones quedan integradas en Estructura+Captura. La jerarquía pasa de cuatro a tres capas.
+> **Actualizado v2.2 (decisión A1, refinada 21-abr-2026):** la fila Recolección se elimina; el admin completa la información y monitorea las respuestas desde la capa Estructura. La jerarquía pasa de cuatro a tres capas.
 
 **Las capas siguen un orden lógico que refleja el ciclo del diagnóstico.** El usuario avanza progresivamente; el sistema guía la transición entre capas mediante estados y CTAs contextuales.
 
 
 | **Orden** | **Capa** | **Estado inicial** | **Se desbloquea cuando...** | **CTA de transición** |
 |---|---|---|---|---|
-| 1 | Estructura+Captura (default) | Siempre activa. Es la capa de entrada al canvas. Permite tanto construir la estructura como invitar y monitorear entrevistas. | N/A — siempre disponible | Cuando se alcanza umbral de respuestas: "Tienes suficientes respuestas. Genera tu diagnóstico →" |
+| 1 | Estructura (default) | Siempre activa. Es la capa de entrada al canvas. Permite construir la estructura, completar la información de cada nodo e invitar y monitorear entrevistas. | N/A — siempre disponible | Cuando se alcanza umbral de respuestas: "Tienes suficientes respuestas. Genera tu diagnóstico →" |
 | 2 | Análisis | Bloqueada hasta que exista un diagnóstico procesado | Diagnóstico en estado "Publicado" | Al entrar por primera vez: "Ve los hallazgos más importantes →" (abre panel lateral con top 3) |
 | 3 | Resultados | Bloqueada hasta que exista un diagnóstico procesado | Diagnóstico en estado "Publicado" | "Lee el diagnóstico completo →" (abre panel expandido de diagnóstico narrativo) |
 
 
 Las capas bloqueadas son visibles en el selector pero no interactivas. Al pasar el cursor muestran un tooltip que explica qué falta para desbloquearlas. Esto cumple dos funciones: evita la confusión de "¿por dónde empiezo?" y genera anticipación del valor que viene después.
 
-**Regla:** el usuario no puede saltar capas. La primera vez que usa el producto, la única capa activa es Estructura+Captura. Análisis y Resultados se desbloquean progresivamente cuando se publica un diagnóstico.
+**Regla:** el usuario no puede saltar capas. La primera vez que usa el producto, la única capa activa es Estructura. Análisis y Resultados se desbloquean progresivamente cuando se publica un diagnóstico.
 
 ## 7.9. Definición del panel de diagnóstico narrativo
 
@@ -449,7 +460,7 @@ Lo que el usuario ve al entrar al canvas por primera vez:
 | **Zona** | **Ubicación** | **Contenido exacto** |
 |---|---|---|
 | Header bar | Top, ancho completo | Logo del producto (izquierda). Nombre de la organización (centro). Avatar + dropdown de usuario (derecha). |
-| Selector de capas | Top, debajo del header, alineado a la izquierda | 3 tabs: Estructura+Captura (activa, color primario), Análisis (gris, candado), Resultados (gris, candado). Al pasar cursor sobre las bloqueadas: tooltip "Genera tu primer diagnóstico para desbloquear". |
+| Selector de capas | Top, debajo del header, alineado a la izquierda | 3 tabs: Estructura (activa, color primario), Análisis (gris, candado), Resultados (gris, candado). Al pasar cursor sobre las bloqueadas: tooltip "Genera tu primer diagnóstico para desbloquear". |
 | Sidebar mínimo | Lateral izquierdo, colapsado por defecto | Ícono de menú hamburguesa. Al expandir: selector de org, settings, documentos, billing, cuenta. |
 | Canvas (centro) | 85%+ del viewport | Fondo limpio con grid sutil. En el centro exacto: ilustración minimalista de un organigrama (3 nodos conectados, estilo wireframe) + texto debajo. |
 | Texto central del canvas | Centro del canvas, sobre la ilustración | "Construye tu organización" (heading, 20px, bold). Debajo: "Empieza creando tu primer nodo o importa tu estructura." (subtext, 14px, gris). |
@@ -549,7 +560,7 @@ Historia de usuario
 
 Como **administrador**, quiero invitar miembros a responder desde el canvas, para capturar su percepción.
 
-Flujo (dentro de Capa Estructura+Captura, sección de captura del panel lateral)
+Flujo (dentro de Capa Estructura, sección de captura del panel lateral)
 
 27. Desde un nodo (o selección múltiple), abre el panel lateral y registra el email del miembro.
 
@@ -569,7 +580,7 @@ Reglas de negocio
 
 - **Umbral mínimo para diagnóstico:** 40% de nodos con entrevista completada, mínimo absoluto 5 entrevistas.
 
-Estados del nodo (sección de captura del panel lateral en Estructura+Captura)
+Estados del nodo (sección de captura del panel lateral en Estructura)
 
 
 | **Estado** | **Descripción** | **Color** |
@@ -785,6 +796,8 @@ El sistema almacena snapshots inmutables de cada diagnóstico.
 
 
 > **Actualizado v2.2 (decisiones A2, A3, A4):** el modelo de datos se reestructura. Group y Member se unifican como Node con campo `type` (`unit` o `person`). LateralRelation se reemplaza por Edge con `edge_type` cerrado a `lateral` o `process`. Se introduce AssessmentCampaign como entidad de primera clase para soportar múltiples diagnósticos en el tiempo. NodeState almacena el estado de captura por nodo y por campaña. Para detalle conceptual completo, ver `docs/MODEL_PHILOSOPHY.md`.
+>
+> **Nota sobre UX de campañas:** aunque el schema soporta múltiples `AssessmentCampaign` por organización, la UX del Sprint 2 no expone el concepto al usuario. Toda operación de recolección opera sobre una **Campaña Activa Implícita** única por org. Ver `docs/MODEL_PHILOSOPHY.md` §5.2.2.
 
 | **Entidad** | **Atributos clave** | **Relaciones** |
 |---|---|---|
@@ -911,7 +924,7 @@ La estructura de rutas del frontend refleja el principio de que la organización
 | Pantalla de espera / progreso | Free | Baja |
 | Score radar + CTA upgrade | Free | Media |
 | Selector de organización | Ambos | Baja |
-| Canvas — Capa Estructura+Captura | Premium | Alta (núcleo) |
+| Canvas — Capa Estructura | Premium | Alta (núcleo) |
 | Canvas — Capa Análisis | Premium | Alta |
 | Canvas — Capa Resultados | Premium | Alta |
 | Panel lateral contextual (3 estados) | Premium | Alta |
@@ -940,7 +953,7 @@ El roadmap prioriza el embudo free primero para validar activación y conversió
 
 ## 18.2. Fase 1 -- Canvas y estructura (semanas 4–8)
 
-- Canvas interactivo con Capa Estructura+Captura.
+- Canvas interactivo con Capa Estructura.
 
 - CRUD de nodos y relaciones jerárquicas (Edge con tipos lateral y process).
 
@@ -956,7 +969,7 @@ El roadmap prioriza el embudo free primero para validar activación y conversió
 
 ## 18.3. Fase 2 -- Captura y entrevistas (semanas 7–11)
 
-> **Actualizado v2.2:** la Fase 2 ya no agrega una capa nueva al canvas, porque las acciones de captura quedan integradas en la Capa Estructura+Captura desde Fase 1. Esta fase ahora se concentra en el sistema de invitaciones y en la experiencia del entrevistado.
+> **Actualizado v2.2:** la Fase 2 ya no agrega una capa nueva al canvas, porque las acciones de captura quedan integradas en la Capa Estructura desde Fase 1. Esta fase ahora se concentra en el sistema de invitaciones y en la experiencia del entrevistado.
 
 - Sistema de invitaciones con tokens, integrado en la sección de captura del panel lateral.
 
