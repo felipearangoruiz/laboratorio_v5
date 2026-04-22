@@ -405,6 +405,17 @@ export default function CanvasPage() {
     setHighlightedNodeIds(nodeIds.length > 0 ? new Set(nodeIds) : null);
   }, []);
 
+  /**
+   * Navega desde capa Análisis a capa Resultados preservando el nodo
+   * seleccionado (spec: ARQUITECTURA_ANALISIS_RESULTADOS.md §3).
+   */
+  const navigateToResultsWithNode = useCallback((nodeId: string) => {
+    setActiveLayer("resultados");
+    setSelectedNode(nodeId);
+    setShowNarrative(false);
+    setHighlightedNodeIds(null);
+  }, []);
+
   async function handleStructureTypeSelected(type: StructureType) {
     setStructureType(type);
     await updateOrganization(orgId, { org_structure_type: type });
@@ -680,7 +691,7 @@ export default function CanvasPage() {
               nodeName={selectedNodeData.data.label}
               diagnosis={diagnosis}
               onClose={() => setSelectedNode(null)}
-              onViewNarrative={() => setShowNarrative(true)}
+              onNavigateToResults={navigateToResultsWithNode}
             />
           )}
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, TrendingUp, TrendingDown, ArrowRight, Loader2 } from "lucide-react";
+import { X, TrendingUp, TrendingDown, Loader2, Target } from "lucide-react";
 import { getNodeAnalysis, type NodeAnalysisRead, type DiagnosisResult } from "@/lib/api";
 
 interface Props {
@@ -10,7 +10,8 @@ interface Props {
   nodeName: string;
   diagnosis: DiagnosisResult;
   onClose: () => void;
-  onViewNarrative: () => void;
+  /** Navega a capa Resultados preservando el nodo activo. */
+  onNavigateToResults: (nodeId: string) => void;
 }
 
 const DIM_LABELS: Record<string, string> = {
@@ -61,7 +62,7 @@ export default function AnalysisNodePanel({
   nodeName,
   diagnosis,
   onClose,
-  onViewNarrative,
+  onNavigateToResults,
 }: Props) {
   const [nodeAnalysis, setNodeAnalysis] = useState<NodeAnalysisRead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -300,13 +301,13 @@ export default function AnalysisNodePanel({
           </>
         )}
 
-        {/* CTA — open narrative panel */}
+        {/* CTA — navigate to Resultados layer with this node active */}
         <button
-          onClick={onViewNarrative}
+          onClick={() => onNavigateToResults(nodeId)}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-warm-900 text-white text-xs font-semibold rounded-xl hover:bg-warm-800 transition-colors"
         >
-          Ver diagnóstico completo
-          <ArrowRight className="w-3.5 h-3.5" />
+          <Target className="w-3.5 h-3.5" />
+          Ver hallazgos relacionados
         </button>
       </div>
     </div>
