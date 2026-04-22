@@ -13,14 +13,14 @@ import type {
   NodeStateUpdate,
   NodeStateStatus,
 } from "./types";
+import {
+  getAuthToken,
+  authHeader,
+  setAuthToken,
+  clearAuth,
+} from "./auth-utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-function getToken(): string | null {
-  return typeof window !== "undefined"
-    ? localStorage.getItem("access_token")
-    : null;
-}
 
 async function tryRefreshToken(): Promise<boolean> {
   try {
@@ -30,7 +30,7 @@ async function tryRefreshToken(): Promise<boolean> {
     });
     if (!res.ok) return false;
     const data = await res.json();
-    localStorage.setItem("access_token", data.access_token);
+    setAuthToken(data.access_token);
     return true;
   } catch {
     return false;
@@ -42,16 +42,13 @@ async function request<T>(
   options: RequestInit = {},
   _retried = false,
 ): Promise<T> {
-  const token = getToken();
+  const token = getAuthToken();
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
+    ...authHeader(),
     ...(options.headers as Record<string, string>),
   };
-
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -72,7 +69,7 @@ async function request<T>(
       // Refresh failed and we had a token — user's session is invalid,
       // send them to login.
       if (typeof window !== "undefined") {
-        localStorage.removeItem("access_token");
+        clearAuth();
         window.location.href = "/login";
       }
     }
@@ -119,7 +116,7 @@ export async function login(email: string, password: string) {
   }
 
   const data = await res.json();
-  localStorage.setItem("access_token", data.access_token);
+  setAuthToken(data.access_token);
   return data;
 }
 
@@ -147,11 +144,11 @@ export async function getMe() {
  * Use on public pages that optionally show auth-dependent UI.
  */
 export async function getMeSafe(): Promise<import("./types").User | null> {
-  const token = getToken();
+  const token = getAuthToken();
   if (!token) return null;
   try {
     const res = await fetch(`${API_BASE}/auth/me`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { ...authHeader() },
       credentials: "include",
     });
     if (!res.ok) return null;
@@ -163,7 +160,7 @@ export async function getMeSafe(): Promise<import("./types").User | null> {
 
 export async function logout() {
   await request("/auth/logout", { method: "POST" });
-  localStorage.removeItem("access_token");
+  clearAuth();
 }
 
 // ── Quick Assessment (Free MVP) ──────────────────────
@@ -272,11 +269,21 @@ export async function saveDraft(token: string, data: Record<string, any>) {
   });
 }
 
-// ── Canvas / Groups ──────────────────────────────────
+// ── Canvas / Groups (legacy) ─────────────────────────
+// Los 4 helpers siguientes consumen los routers `/groups` del
+// compat layer (Sprint 1.4). Serán reemplazados en Sprint 2.3
+// por `listNodes` / `createNode` / `updateNode` / `deleteNode`.
+// `any` se conserva en estos 3 helpers para no romper al
+// consumer `canvas/page.tsx` (que los tipa como GroupData
+// inline). Tiparlos como `unknown` fuerza refactor del
+// consumer, que es trabajo del Sprint 2.3.
+/** @deprecated — usar listNodes después del Sprint 2.3 */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getOrgGroups(orgId: string) {
   return request<any[]>(`/organizations/${orgId}/groups/tree`);
 }
 
+/** @deprecated — usar createNode después del Sprint 2.3 */
 export async function createGroup(data: {
   organization_id: string;
   node_type?: string;
@@ -290,22 +297,27 @@ export async function createGroup(data: {
   position_x?: number;
   position_y?: number;
 }) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return request<any>("/groups", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
+/** @deprecated — usar updateNode después del Sprint 2.3 */
 export async function updateGroup(
   groupId: string,
-  data: Record<string, any>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  data: Record<string, any>,
 ) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return request<any>(`/groups/${groupId}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
 }
 
+/** @deprecated — usar deleteNode después del Sprint 2.3 */
 export async function deleteGroup(groupId: string) {
   return request<void>(`/groups/${groupId}`, { method: "DELETE" });
 }
@@ -330,7 +342,7 @@ export async function getTemplates(orgId: string) {
 }
 
 export async function applyTemplate(orgId: string, templateId: string) {
-  return request<{ created: number; nodes: any[] }>(
+  return request<{ created: number; nodes: unknown[] }>(
     `/organizations/${orgId}/canvas/templates/${templateId}`,
     { method: "POST" }
   );
@@ -406,7 +418,14 @@ export async function getNodeInterviews(orgId: string, nodeId: string) {
   }[]>(`/organizations/${orgId}/nodes/${nodeId}/interviews`);
 }
 
+/**
+ * @deprecated — el shape del instrumento premium no está
+ * tipado todavía. Pendiente tipar contra el response real
+ * (ver deuda Sprint 2.3).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function getPremiumQuestions() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return request<any>("/interview/premium/questions");
 }
 
@@ -433,10 +452,9 @@ export async function uploadDocument(
   formData.append("label", label);
   formData.append("doc_type", docType);
 
-  const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   const res = await fetch(`${API_BASE}/organizations/${orgId}/documents`, {
     method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: { ...authHeader() },
     body: formData,
     credentials: "include",
   });
