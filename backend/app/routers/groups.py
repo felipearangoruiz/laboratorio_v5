@@ -167,9 +167,18 @@ def _validate_parent_group(
 
 # ────────────── Mirror helpers (Group ↔ Node type=unit) ──────────────
 
-def _build_unit_attrs(group: Group) -> dict[str, Any]:
-    """Campos de Group sin columna directa en Node quedan en attrs."""
-    return {
+def _build_unit_attrs(
+    group: Group,
+    prev_attrs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Campos de Group sin columna directa en Node quedan en attrs.
+
+    Si se pasa `prev_attrs` (dict del Node espejo existente), se preservan
+    las claves NO-legacy (p. ej. `admin_notes`) que el frontend escribe
+    vía PATCH /nodes. Los campos legacy siempre se reemplazan con los
+    valores actuales del Group.
+    """
+    attrs: dict[str, Any] = {
         "description": group.description or "",
         "tarea_general": group.tarea_general or "",
         "email": group.email or "",
@@ -180,6 +189,11 @@ def _build_unit_attrs(group: Group) -> dict[str, Any]:
         "node_type_legacy": group.node_type,
         "is_default": group.is_default,
     }
+    if prev_attrs:
+        for key, value in prev_attrs.items():
+            if key not in attrs:
+                attrs[key] = value
+    return attrs
 
 
 def _resolve_parent_node_id(
@@ -217,7 +231,7 @@ def _mirror_group_to_node_on_create(session: Session, group: Group) -> None:
         name=group.name,
         position_x=group.position_x,
         position_y=group.position_y,
-        attrs=_build_unit_attrs(group),
+        attrs=_build_unit_attrs(group, prev_attrs=None),
         created_at=group.created_at,
     )
     session.add(node)
@@ -235,13 +249,16 @@ def _mirror_group_to_node_on_update(session: Session, group: Group) -> None:
         _mirror_group_to_node_on_create(session, group)
         return
 
+    # Preservar claves custom (p. ej. admin_notes) seteadas vía PATCH /nodes.
+    prev_attrs = dict(node.attrs) if isinstance(node.attrs, dict) else {}
+
     # Resucitar el Node si estaba soft-deleted (improbable pero defensivo).
     node.deleted_at = None
     node.name = group.name
     node.position_x = group.position_x
     node.position_y = group.position_y
     node.parent_node_id = _resolve_parent_node_id(session, group)
-    node.attrs = _build_unit_attrs(group)
+    node.attrs = _build_unit_attrs(group, prev_attrs=prev_attrs)
     session.add(node)
 
 

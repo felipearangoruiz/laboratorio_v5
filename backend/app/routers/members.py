@@ -111,8 +111,17 @@ def _generate_unique_token(session: Session) -> str:
 
 # ────────────── Mirror helpers (Member ↔ Node type=person) ──────────────
 
-def _build_person_attrs(member: Member) -> dict[str, Any]:
-    """Metadata del Member sin columna directa en Node queda en attrs."""
+def _build_person_attrs(
+    member: Member,
+    prev_attrs: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Metadata del Member sin columna directa en Node queda en attrs.
+
+    Si se pasa `prev_attrs` (dict del Node espejo existente), se preservan
+    las claves NO-legacy (p. ej. `admin_notes`) que el frontend escribe
+    vía PATCH /nodes. Los campos legacy siempre se reemplazan con los
+    valores actuales del Member.
+    """
     attrs: dict[str, Any] = {
         "role_label": member.role_label or "",
         "interview_token": member.interview_token,
@@ -123,6 +132,10 @@ def _build_person_attrs(member: Member) -> dict[str, Any]:
     email = getattr(member, "email", None)
     if email:
         attrs["email"] = email
+    if prev_attrs:
+        for key, value in prev_attrs.items():
+            if key not in attrs:
+                attrs[key] = value
     return attrs
 
 
@@ -165,7 +178,7 @@ def _mirror_member_to_node_on_create(session: Session, member: Member) -> None:
         name=member.name,
         position_x=0.0,
         position_y=0.0,
-        attrs=_build_person_attrs(member),
+        attrs=_build_person_attrs(member, prev_attrs=None),
         created_at=member.created_at,
     )
     session.add(node)
@@ -182,10 +195,13 @@ def _mirror_member_to_node_on_update(session: Session, member: Member) -> None:
         _mirror_member_to_node_on_create(session, member)
         return
 
+    # Preservar claves custom (p. ej. admin_notes) seteadas vía PATCH /nodes.
+    prev_attrs = dict(node.attrs) if isinstance(node.attrs, dict) else {}
+
     node.deleted_at = None
     node.name = member.name
     node.parent_node_id = _resolve_person_parent_node_id(session, member)
-    node.attrs = _build_person_attrs(member)
+    node.attrs = _build_person_attrs(member, prev_attrs=prev_attrs)
     session.add(node)
 
 
