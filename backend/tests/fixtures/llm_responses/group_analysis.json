@@ -1,0 +1,15 @@
+{
+  "patterns_internal": [
+    {"pattern": "consenso en visión estratégica", "frequency": 3}
+  ],
+  "dominant_themes": ["liderazgo", "comunicación"],
+  "tension_level": "bajo",
+  "scores_by_dimension": {
+    "Liderazgo": 0.82,
+    "Comunicación": 0.75,
+    "Procesos": 0.68
+  },
+  "gap_leader_team": 0.08,
+  "coverage": 1.0,
+  "confidence": 0.85
+}

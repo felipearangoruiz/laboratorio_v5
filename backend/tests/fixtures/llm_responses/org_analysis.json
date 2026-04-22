@@ -1,0 +1,21 @@
+{
+  "cross_patterns": [
+    {"pattern": "alineación entre estrategia y operación", "support": "fuerte"}
+  ],
+  "contradictions": [],
+  "structural_risks": [
+    {"risk": "sobrecarga de nodo central", "severity": "media"}
+  ],
+  "dimension_scores": {
+    "Liderazgo": 0.82,
+    "Comunicación": 0.75,
+    "Procesos": 0.68,
+    "Cultura": 0.70
+  },
+  "network_metrics": {
+    "centrality": {},
+    "bridge_nodes": [],
+    "isolated_nodes": []
+  },
+  "confidence": 0.80
+}

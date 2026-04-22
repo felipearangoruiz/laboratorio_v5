@@ -1,0 +1,29 @@
+{
+  "findings": [
+    {
+      "title": "Liderazgo fuerte con riesgos de sobrecarga",
+      "description": "El líder es reconocido pero concentra demasiadas decisiones.",
+      "type": "fortaleza",
+      "severity": "media",
+      "dimensions": ["Liderazgo"],
+      "node_ids": [],
+      "confidence": 0.82,
+      "confidence_rationale": "Coincidencia en 3 de 3 miembros",
+      "evidence_links": []
+    }
+  ],
+  "recommendations": [
+    {
+      "finding_index": 0,
+      "title": "Delegar decisiones tácticas al equipo",
+      "description": "Reducir dependencia del líder mediante rituales de decisión compartida.",
+      "priority": 1,
+      "impact": "alto",
+      "effort": "medio",
+      "horizon": "corto",
+      "node_ids": []
+    }
+  ],
+  "narrative_md": "## Diagnóstico\n\nLa organización presenta liderazgo fuerte.",
+  "executive_summary": "Liderazgo fuerte con oportunidades de delegación."
+}

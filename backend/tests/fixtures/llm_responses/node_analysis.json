@@ -1,0 +1,19 @@
+{
+  "signals_positive": [
+    "Comunicación fluida entre líder y equipo",
+    "Procesos documentados claramente"
+  ],
+  "signals_tension": [
+    "Carga desigual entre miembros del equipo"
+  ],
+  "themes": ["liderazgo", "procesos"],
+  "dimensions_touched": ["Liderazgo", "Procesos"],
+  "evidence_type": "observacion",
+  "emotional_intensity": "media",
+  "key_quotes": [
+    "El líder siempre responde dentro del día",
+    "Las reuniones semanales son claras"
+  ],
+  "context_notes_used": false,
+  "confidence": 0.78
+}
