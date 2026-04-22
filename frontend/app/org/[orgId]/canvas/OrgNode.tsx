@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
-import { User, Users } from "lucide-react";
+import { User, Users, Building2 } from "lucide-react";
 
 export interface OrgNodeData {
   label: string;
@@ -56,6 +56,12 @@ function tensionColor(score: number): { hex: string; dot: string } {
  *   Person: gris (none/pending) · amarillo (in_progress) · verde
  *   (completed) · gris punteado (expired).
  *   Unit:   sin dot (empty) · amarillo (incomplete) · verde (complete).
+ *
+ * Post-Sprint 2.B — distinción visual clara unit vs person:
+ *   Person: cápsula blanca (rounded-full), borde 1px, ícono User en
+ *     círculo.
+ *   Unit:   caja gris (rounded-md), borde 2px, ícono Building2 en
+ *     cuadrado acento.
  */
 function OrgNodeStructureView({ data, selected }: NodeProps<OrgNodeData>) {
   const isPerson = data.nodeType === "person";
@@ -77,30 +83,37 @@ function OrgNodeStructureView({ data, selected }: NodeProps<OrgNodeData>) {
     // empty → null (no dot)
   }
 
-  const borderClass = selected
-    ? "border-[#C2410C] border-2 shadow-[0_0_0_3px_rgba(194,65,12,0.15)]"
-    : "border-[#D4D0C8] border-[1.5px] hover:border-[#A8A29E]";
+  // Shape / surface difference per node type.
+  const containerClass = isPerson
+    ? // Person: cápsula blanca, borde 1px.
+      selected
+      ? "bg-white rounded-full border border-[#C2410C] shadow-[0_0_0_3px_rgba(194,65,12,0.15)] px-4 py-2"
+      : "bg-white rounded-full border border-warm-300 hover:border-warm-400 px-4 py-2"
+    : // Unit: caja gris suave, borde 2px, esquinas rectas.
+      selected
+      ? "bg-warm-100 rounded-md border-2 border-[#C2410C] shadow-[0_0_0_3px_rgba(194,65,12,0.15)] px-4 py-3"
+      : "bg-warm-100 rounded-md border-2 border-warm-300 hover:border-warm-400 px-4 py-3";
 
   return (
-    <div className="relative min-w-[160px]">
+    <div className={`relative ${isPerson ? "min-w-[170px]" : "min-w-[180px]"}`}>
       <Handle
         type="target"
         position={Position.Top}
         className="!w-2.5 !h-2.5 !bg-[#6b7280] !border-2 !border-[#0D0D14]"
       />
       <div
-        className={`bg-white rounded-[6px] px-4 py-3 transition-all ${borderClass}`}
+        className={`transition-all ${containerClass}`}
         style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.18)" }}
       >
         <div className="flex items-center gap-2.5">
           <div className="flex-shrink-0">
             {isPerson ? (
-              <div className="w-7 h-7 rounded-full bg-warm-100 flex items-center justify-center">
-                <User className="w-3.5 h-3.5 text-warm-500" strokeWidth={1.5} />
+              <div className="w-6 h-6 rounded-full bg-warm-100 flex items-center justify-center">
+                <User className="w-3.5 h-3.5 text-warm-500" strokeWidth={1.75} />
               </div>
             ) : (
-              <div className="w-7 h-7 rounded-md bg-accent/10 flex items-center justify-center">
-                <Users className="w-3.5 h-3.5 text-accent" strokeWidth={1.5} />
+              <div className="w-8 h-8 rounded-md bg-accent/15 flex items-center justify-center">
+                <Building2 className="w-4 h-4 text-accent" strokeWidth={1.75} />
               </div>
             )}
           </div>
