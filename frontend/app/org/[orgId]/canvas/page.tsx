@@ -30,8 +30,8 @@ import {
 import DocumentsOverlay from "./DocumentsOverlay";
 import { useAuth } from "@/hooks/useAuth";
 import OrgNode from "./OrgNode";
-import SidePanel from "./SidePanel";
 import PersonPanel from "./PersonPanel";
+import UnitPanel from "./UnitPanel";
 import AnalysisLayer from "./AnalysisLayer";
 import AnalysisNodePanel from "./AnalysisNodePanel";
 import DimensionFilter from "./DimensionFilter";
@@ -428,11 +428,6 @@ export default function CanvasPage() {
     setSelectedNode(newNode.id);
   }
 
-  async function handleUpdateNode(nodeId: string, data: Record<string, any>) {
-    await updateGroup(nodeId, data);
-    await refetchCanvas();
-  }
-
   async function handleDeleteNode(nodeId: string) {
     try {
       await deleteGroup(nodeId);
@@ -598,8 +593,9 @@ export default function CanvasPage() {
           )}
 
           {/* Side panel — capa Estructura usa paneles nuevos (Sprint 2.B).
-              PersonPanel reemplaza a SidePanel+CollectionPanel para type=person.
-              type=unit sigue con SidePanel legacy hasta el Commit 5 (UnitPanel). */}
+              PersonPanel y UnitPanel reemplazan a SidePanel+CollectionPanel
+              legacy. SidePanel/CollectionPanel/CollectionProgress quedan en
+              código pero desreferenciados; Turno D los mueve a legacy/. */}
           {selectedModelNode && activeLayer === "estructura" && selectedModelNode.type === "person" && (
             <PersonPanel
               node={selectedModelNode}
@@ -610,14 +606,18 @@ export default function CanvasPage() {
               onRefetch={refetchCanvas}
             />
           )}
-          {selectedNodeData && activeLayer === "estructura" && selectedModelNode?.type === "unit" && (
-            <SidePanel
-              nodeId={selectedNode!}
-              orgId={orgId}
-              data={selectedNodeData.data}
-              onUpdate={handleUpdateNode}
-              onDelete={handleDeleteNode}
+          {selectedModelNode && activeLayer === "estructura" && selectedModelNode.type === "unit" && (
+            <UnitPanel
+              node={selectedModelNode}
+              childPersons={modelNodes.filter(
+                (n) => n.parent_node_id === selectedModelNode.id && n.type === "person",
+              )}
+              nodeStates={nodeStates}
+              activeCampaignId={activeCampaign?.id ?? null}
               onClose={() => setSelectedNode(null)}
+              onSelectNode={setSelectedNode}
+              onDelete={handleDeleteNode}
+              onRefetch={refetchCanvas}
             />
           )}
 
