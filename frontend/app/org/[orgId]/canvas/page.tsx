@@ -16,7 +16,6 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 
 import {
-  getOrgGroups,
   createGroup,
   updateGroup,
   deleteGroup,
@@ -24,7 +23,6 @@ import {
   getCollectionStatus,
   getLatestDiagnosis,
   getAnalysisStatus,
-  getOrganization,
   updateOrganization,
   type DiagnosisResult,
   type AnalysisRunStatus,
@@ -33,8 +31,6 @@ import DocumentsOverlay from "./DocumentsOverlay";
 import { useAuth } from "@/hooks/useAuth";
 import OrgNode from "./OrgNode";
 import SidePanel from "./SidePanel";
-import CollectionPanel from "./CollectionPanel";
-import CollectionProgress from "./CollectionProgress";
 import AnalysisLayer from "./AnalysisLayer";
 import AnalysisNodePanel from "./AnalysisNodePanel";
 import DimensionFilter from "./DimensionFilter";
@@ -45,6 +41,11 @@ import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import LayerSelector from "./LayerSelector";
 import { Loader2, Plus, User, Users } from "lucide-react";
+import { useCanvasData } from "@/lib/hooks/useCanvasData";
+import { useActiveCampaign } from "@/lib/hooks/useActiveCampaign";
+import { useOrg } from "@/lib/contexts/OrgContext";
+import { toLegacyOrgNodeData } from "@/lib/view-models/legacyOrgNodeAdapter";
+import type { Node as ModelNode } from "@/lib/types";
 
 const nodeTypes = { orgNode: OrgNode };
 
@@ -82,99 +83,116 @@ function computeNodeTension(
 
 type StructureType = "people" | "areas" | "mixed";
 
-interface GroupData {
-  id: string;
-  name: string;
-  description: string;
-  node_type: string;
-  email: string;
-  area: string;
-  tarea_general: string;
-  context_notes: string | null;
-  nivel_jerarquico: number | null;
-  position_x: number;
-  position_y: number;
-  parent_group_id: string | null;
-  organization_id: string;
-  member_count: number;
-  children: GroupData[];
-}
+type LegacyLayer = "estructura" | "analisis" | "resultados";
 
-function flattenTree(nodes: GroupData[]): GroupData[] {
-  const result: GroupData[] = [];
-  function walk(list: GroupData[]) {
-    for (const n of list) {
-      result.push(n);
-      if (n.children?.length) walk(n.children);
+/**
+ * Sprint 2.B: proyección de Node[] del nuevo modelo al formato
+ * ReactFlow, enriquecido con NodeState (capa Estructura) y con
+ * edges jerárquicas generadas desde `parent_node_id`.
+ */
+function buildFlowFromModel(
+  modelNodes: ModelNode[],
+  nodeStates: import("@/lib/types").NodeState[],
+  modelEdges: import("@/lib/types").Edge[],
+  activeCampaignId: string | null,
+  activeLayer: LegacyLayer,
+): { nodes: Node[]; edges: Edge[] } {
+  // Memberships por unit (para memberCount).
+  const childCountByUnit: Record<string, number> = {};
+  for (const n of modelNodes) {
+    if (n.type === "person" && n.parent_node_id) {
+      childCountByUnit[n.parent_node_id] =
+        (childCountByUnit[n.parent_node_id] ?? 0) + 1;
     }
   }
-  walk(nodes);
-  return result;
-}
 
-function treeToFlow(
-  groups: GroupData[],
-  activeLayer: string,
-  nodeStatuses: Record<string, string>,
-): { nodes: Node[]; edges: Edge[] } {
-  const flat = flattenTree(groups);
-  const nodes: Node[] = flat.map((g) => ({
-    id: g.id,
-    type: "orgNode",
-    position: { x: g.position_x, y: g.position_y },
-    data: {
-      label: g.name,
-      area: g.area,
-      role: g.tarea_general,
-      email: g.email || "",
-      memberCount: g.member_count,
-      level: g.nivel_jerarquico,
-      nodeType: g.node_type || "area",
-      contextNotes: g.context_notes ?? null,
-      activeLayer,
-      interviewStatus: nodeStatuses[g.id] || "none",
-    },
-  }));
+  const flowNodes: Node[] = modelNodes.map((n) => {
+    const state = nodeStates.find(
+      (ns) =>
+        ns.node_id === n.id &&
+        (!activeCampaignId || ns.campaign_id === activeCampaignId),
+    );
+    const memberCount =
+      n.type === "unit" ? childCountByUnit[n.id] ?? 0 : 0;
+    return {
+      id: n.id,
+      type: "orgNode",
+      position: { x: n.position_x, y: n.position_y },
+      data: toLegacyOrgNodeData(n, state, memberCount, activeLayer),
+    };
+  });
 
-  const edges: Edge[] = flat
-    .filter((g) => g.parent_group_id)
-    .map((g) => ({
-      id: `e-${g.parent_group_id}-${g.id}`,
-      source: g.parent_group_id!,
-      target: g.id,
+  // Edges jerárquicas (parent_node_id) + edges explícitas (lateral/process).
+  const hierarchical: Edge[] = modelNodes
+    .filter((n) => n.parent_node_id)
+    .map((n) => ({
+      id: `e-tree-${n.parent_node_id}-${n.id}`,
+      source: n.parent_node_id!,
+      target: n.id,
       type: "smoothstep",
       markerEnd: { type: MarkerType.ArrowClosed },
       style: { stroke: "#94a3b8", strokeWidth: 2 },
     }));
 
-  return { nodes, edges };
+  const explicit: Edge[] = modelEdges.map((e) => ({
+    id: `e-${e.edge_type}-${e.id}`,
+    source: e.source_node_id,
+    target: e.target_node_id,
+    type: "smoothstep",
+    style: {
+      stroke: e.edge_type === "lateral" ? "#64748b" : "#94a3b8",
+      strokeWidth: 2,
+      strokeDasharray: e.edge_type === "lateral" ? "4 4" : undefined,
+    },
+  }));
+
+  return { nodes: flowNodes, edges: [...hierarchical, ...explicit] };
 }
 
 export default function CanvasPage() {
-  const { user, loading: authLoading } = useAuth();
-  const orgId = user?.organization_id ?? "";
+  const { loading: authLoading } = useAuth();
+  const { orgId, organization } = useOrg();
+
+  // Sprint 2.B: useCanvasData es la única fuente de verdad de
+  // Node/Edge/NodeState. useActiveCampaign aprovecha el invariante
+  // 11 (máximo una campaña 'active' por org).
+  const {
+    nodes: modelNodes,
+    edges: modelEdges,
+    nodeStates,
+    isLoading: canvasLoading,
+    refetch: refetchCanvas,
+  } = useCanvasData();
+  const { campaign: activeCampaign } = useActiveCampaign(orgId);
 
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [isEmpty, setIsEmpty] = useState(false);
-  const [activeLayer, setActiveLayer] = useState<string>("estructura");
-  const [nodeStatuses, setNodeStatuses] = useState<Record<string, string>>({});
-  const [collectionRefreshKey, setCollectionRefreshKey] = useState(0);
+  const [activeLayer, setActiveLayer] = useState<LegacyLayer>("estructura");
   const [thresholdMet, setThresholdMet] = useState(false);
   const [diagnosis, setDiagnosis] = useState<DiagnosisResult | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisRunStatus | null>(null);
   const [structureType, setStructureType] = useState<StructureType>("areas");
   const [showNodeTypeSelector, setShowNodeTypeSelector] = useState(false);
   const [showDocuments, setShowDocuments] = useState(false);
+  // Legacy nodeStatuses (Record<id,string>) derivado del nuevo NodeState
+  // para mantener compat con DiagnosisGate y otros consumidores.
+  const nodeStatuses = useMemo<Record<string, string>>(() => {
+    const map: Record<string, string> = {};
+    for (const ns of nodeStates) {
+      if (activeCampaign && ns.campaign_id !== activeCampaign.id) continue;
+      map[ns.node_id] = ns.status;
+    }
+    return map;
+  }, [nodeStates, activeCampaign]);
   // Analysis layer state
   const [activeDimension,   setActiveDimension]   = useState<string | null>(null);
   const [showNarrative,     setShowNarrative]     = useState(false);
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string> | null>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rawGroupsRef = useRef<GroupData[]>([]);
+
+  const isEmpty = !canvasLoading && modelNodes.length === 0;
 
   // ── Per-node finding counts (for resultados badges) ───────────────
   const nodeFindingCounts = useMemo<Record<string, number>>(() => {
@@ -199,39 +217,12 @@ export default function CanvasPage() {
     return tops;
   }, [diagnosis]);
 
-  // Load org structure type
+  // Load org structure type desde OrgContext (evita re-fetch).
   useEffect(() => {
-    if (!orgId) return;
-    getOrganization(orgId)
-      .then((org) => {
-        if (org.org_structure_type) {
-          setStructureType(org.org_structure_type as StructureType);
-        }
-      })
-      .catch(() => {});
-  }, [orgId]);
-
-  const loadGroups = useCallback(async () => {
-    if (!orgId) return;
-    try {
-      const tree = await getOrgGroups(orgId);
-      rawGroupsRef.current = tree || [];
-      if (!tree || tree.length === 0) {
-        setIsEmpty(true);
-        setNodes([]);
-        setEdges([]);
-      } else {
-        setIsEmpty(false);
-        const { nodes: n, edges: e } = treeToFlow(tree, activeLayer, nodeStatuses);
-        setNodes(n);
-        setEdges(e);
-      }
-    } catch {
-      setIsEmpty(true);
-    } finally {
-      setLoading(false);
+    if (organization?.org_structure_type) {
+      setStructureType(organization.org_structure_type as StructureType);
     }
-  }, [orgId, setNodes, setEdges, activeLayer, nodeStatuses]);
+  }, [organization]);
 
   const loadMeta = useCallback(async () => {
     if (!orgId) return;
@@ -243,7 +234,7 @@ export default function CanvasPage() {
       ]);
       if (collStatus.status === "fulfilled") {
         setThresholdMet(collStatus.value.threshold_met);
-        setNodeStatuses(collStatus.value.node_statuses ?? {});
+        // nodeStatuses ahora se deriva de useCanvasData().nodeStates.
       }
       if (diag.status === "fulfilled" && diag.value && diag.value.status === "ready") {
         setDiagnosis(diag.value);
@@ -254,13 +245,18 @@ export default function CanvasPage() {
     } catch { /* ignore */ }
   }, [orgId]);
 
-  useEffect(() => { loadGroups(); }, [loadGroups]);
   useEffect(() => { loadMeta(); }, [loadMeta]);
 
-  // Re-render nodes when layer or analysis/results state changes
+  // Re-render ReactFlow cuando cambian Node/Edge/NodeState/capa/campaña.
   useEffect(() => {
-    if (rawGroupsRef.current.length > 0) {
-      const { nodes: n, edges: e } = treeToFlow(rawGroupsRef.current, activeLayer, nodeStatuses);
+    if (modelNodes.length > 0) {
+      const { nodes: n, edges: e } = buildFlowFromModel(
+        modelNodes,
+        nodeStates,
+        modelEdges,
+        activeCampaign?.id ?? null,
+        activeLayer,
+      );
 
       if (activeLayer === "analisis" && diagnosis?.status === "ready") {
         // Enrich with tension scores + highlighting for análisis layer
@@ -312,9 +308,13 @@ export default function CanvasPage() {
         setNodes(n);
       }
       setEdges(e);
+    } else {
+      setNodes([]);
+      setEdges([]);
     }
   }, [
-    activeLayer, nodeStatuses, diagnosis,
+    modelNodes, modelEdges, nodeStates, activeCampaign,
+    activeLayer, diagnosis,
     activeDimension, highlightedNodeIds,
     nodeFindingCounts, nodeTopFinding,
     setNodes, setEdges,
@@ -423,49 +423,13 @@ export default function CanvasPage() {
       position_x: Math.random() * 400 + 100,
       position_y: Math.random() * 300 + 100,
     });
-    setIsEmpty(false);
-    setNodes((nds) => [
-      ...nds,
-      {
-        id: newNode.id,
-        type: "orgNode",
-        position: { x: newNode.position_x, y: newNode.position_y },
-        data: {
-          label: newNode.name,
-          area: newNode.area || "",
-          role: newNode.tarea_general || "",
-          email: newNode.email || "",
-          memberCount: 0,
-          level: newNode.nivel_jerarquico,
-          nodeType: newNode.node_type || nodeType,
-          contextNotes: null,
-          activeLayer,
-          interviewStatus: "none",
-        },
-      },
-    ]);
+    await refetchCanvas();
     setSelectedNode(newNode.id);
   }
 
   async function handleUpdateNode(nodeId: string, data: Record<string, any>) {
     await updateGroup(nodeId, data);
-    setNodes((nds) =>
-      nds.map((n) =>
-        n.id === nodeId
-          ? {
-              ...n,
-              data: {
-                ...n.data,
-                label: data.name ?? n.data.label,
-                area: data.area ?? n.data.area,
-                role: data.tarea_general ?? n.data.role,
-                email: data.email ?? n.data.email,
-                level: data.nivel_jerarquico ?? n.data.level,
-              },
-            }
-          : n
-      )
-    );
+    await refetchCanvas();
   }
 
   async function handleDeleteNode(nodeId: string) {
@@ -475,25 +439,15 @@ export default function CanvasPage() {
       alert(err?.message || "No se pudo eliminar el nodo");
       return;
     }
-    setNodes((nds) => nds.filter((n) => n.id !== nodeId));
-    setEdges((eds) =>
-      eds.filter((e) => e.source !== nodeId && e.target !== nodeId)
-    );
     setSelectedNode(null);
-    if (nodes.length <= 1) setIsEmpty(true);
+    await refetchCanvas();
   }
 
   async function handleTemplateApplied() {
-    await loadGroups();
+    await refetchCanvas();
   }
 
-  function handleCollectionChanged() {
-    setCollectionRefreshKey((k) => k + 1);
-    loadGroups();
-    loadMeta();
-  }
-
-  if (authLoading || loading) {
+  if (authLoading || canvasLoading) {
     return (
       <div className="h-screen flex items-center justify-center" style={{ background: "#0D0D14" }}>
         <div className="w-8 h-8 border-2 border-white/10 border-t-white/60 rounded-full animate-spin" />
@@ -517,16 +471,38 @@ export default function CanvasPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <LayerSelector
           active={activeLayer}
-          onChange={setActiveLayer}
+          onChange={(layer) => setActiveLayer(layer as LegacyLayer)}
           hasNodes={nodes.length > 0}
           thresholdMet={thresholdMet}
           hasDiagnosis={!!diagnosis}
         />
 
-        {/* Collection progress bar */}
-        {activeLayer === "recoleccion" && (
-          <CollectionProgress orgId={orgId} refreshKey={collectionRefreshKey} />
-        )}
+        {/* Sprint 2.B: indicador compacto de progreso en la capa Estructura.
+            Reemplaza la barra CollectionProgress del tab eliminado. */}
+        {activeLayer === "estructura" && !isEmpty && (() => {
+          const personNodes = modelNodes.filter((n) => n.type === "person");
+          const total = personNodes.length;
+          const completed = personNodes.filter((p) =>
+            nodeStates.some(
+              (ns) =>
+                ns.node_id === p.id &&
+                ns.status === "completed" &&
+                (!activeCampaign || ns.campaign_id === activeCampaign.id),
+            ),
+          ).length;
+          if (total === 0) return null;
+          return (
+            <div
+              className="h-8 flex items-center px-4 text-[11px] text-white/50 border-b"
+              style={{
+                background: "rgba(13,13,20,0.6)",
+                borderBottomColor: "rgba(255,255,255,0.06)",
+              }}
+            >
+              {completed} de {total} miembros respondieron
+            </div>
+          );
+        })()}
 
         {/* Dimension filter — análisis layer with ready diagnosis */}
         {activeLayer === "analisis" && diagnosis?.status === "ready" && (
@@ -619,18 +595,9 @@ export default function CanvasPage() {
             />
           )}
 
-          {selectedNodeData && activeLayer === "recoleccion" && (
-            <CollectionPanel
-              orgId={orgId}
-              nodeId={selectedNode!}
-              nodeName={selectedNodeData.data.label}
-              nodeEmail={selectedNodeData.data.email || ""}
-              interviewStatus={selectedNodeData.data.interviewStatus || "none"}
-              onClose={() => setSelectedNode(null)}
-              onChanged={handleCollectionChanged}
-              onSwitchToEstructura={() => setActiveLayer("estructura")}
-            />
-          )}
+          {/* Sprint 2.B: se elimina el tab Recolección. La lógica de
+              recolección se fusiona dentro de la capa Estructura en el
+              Turno B (PersonPanel reemplaza a SidePanel/CollectionPanel). */}
 
           {/* Analysis layer — no diagnosis, no run: show verify-data prompt */}
           {activeLayer === "analisis" && !diagnosis &&

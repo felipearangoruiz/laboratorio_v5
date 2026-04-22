@@ -82,7 +82,12 @@ export function toLegacyOrgNodeData(
     email: (attrs.email as string) ?? "",
     memberCount,
     level: (attrs.nivel_jerarquico as number | null) ?? null,
-    nodeType: (attrs.node_type_legacy as string) ?? node.type,
+    // Map el nuevo `type` ("unit"|"person") al legacy ("area"|"person")
+    // que OrgNode y SidePanel esperan. `attrs.node_type_legacy` tiene
+    // precedencia si existe (sub-tipos legacy como "direccion", etc.).
+    nodeType:
+      (attrs.node_type_legacy as string) ??
+      (node.type === "unit" ? "area" : "person"),
     contextNotes: (attrs.context_notes as string) ?? "",
     activeLayer,
     interviewStatus: mapNodeStateToLegacyStatus(
