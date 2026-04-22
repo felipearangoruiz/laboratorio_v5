@@ -46,6 +46,7 @@ import { useCanvasData } from "@/lib/hooks/useCanvasData";
 import { useActiveCampaign } from "@/lib/hooks/useActiveCampaign";
 import { useOrg } from "@/lib/contexts/OrgContext";
 import { toLegacyOrgNodeData } from "@/lib/view-models/legacyOrgNodeAdapter";
+import { computeAreaStatus } from "@/lib/view-models/areaStatus";
 import type { Node as ModelNode } from "@/lib/types";
 
 const nodeTypes = { orgNode: OrgNode };
@@ -115,11 +116,24 @@ function buildFlowFromModel(
     );
     const memberCount =
       n.type === "unit" ? childCountByUnit[n.id] ?? 0 : 0;
+    const data = toLegacyOrgNodeData(n, state, memberCount, activeLayer);
+    if (n.type === "unit") {
+      const childPersons = modelNodes.filter(
+        (c) => c.parent_node_id === n.id && c.type === "person",
+      );
+      const areaStatus = computeAreaStatus(
+        n,
+        childPersons,
+        nodeStates,
+        activeCampaignId,
+      );
+      data.unitStatus = areaStatus.label;
+    }
     return {
       id: n.id,
       type: "orgNode",
       position: { x: n.position_x, y: n.position_y },
-      data: toLegacyOrgNodeData(n, state, memberCount, activeLayer),
+      data,
     };
   });
 

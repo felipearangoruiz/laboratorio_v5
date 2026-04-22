@@ -30,6 +30,12 @@ export interface LegacyOrgNodeData {
   contextNotes: string;
   activeLayer: "estructura" | "analisis" | "resultados";
   interviewStatus: LegacyInterviewStatus;
+  /**
+   * Sprint 2.B Turno D — estado visual para units (áreas) en capa
+   * Estructura. Lo setea el caller (page.tsx) usando computeAreaStatus;
+   * el adapter no lo calcula porque requiere conocer child persons.
+   */
+  unitStatus?: "empty" | "incomplete" | "complete";
 }
 
 /**

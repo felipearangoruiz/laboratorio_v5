@@ -15,6 +15,8 @@ export interface OrgNodeData {
   contextNotes?: string | null;
   interviewStatus?: "none" | "invited" | "in_progress" | "completed" | "expired" | "pending";
   activeLayer?: string;
+  // Sprint 2.B — estado de unidad (área) en capa Estructura
+  unitStatus?: "empty" | "incomplete" | "complete";
   // Análisis layer
   tensionScore?: number;    // 0–100 (100 = max tension)
   isHighlighted?: boolean;  // false → 0.35 opacity; undefined/true → full opacity
@@ -48,7 +50,87 @@ function tensionColor(score: number): { hex: string; dot: string } {
   return { hex: "#DC2626", dot: "bg-red-600" };
 }
 
-function OrgNode({ data, selected }: NodeProps<OrgNodeData>) {
+/**
+ * Sprint 2.B Turno D — render minimalista para capa Estructura.
+ * Nombre + icono de tipo + status dot según convención UX:
+ *   Person: gris (none/pending) · amarillo (in_progress) · verde
+ *   (completed) · gris punteado (expired).
+ *   Unit:   sin dot (empty) · amarillo (incomplete) · verde (complete).
+ */
+function OrgNodeStructureView({ data, selected }: NodeProps<OrgNodeData>) {
+  const isPerson = data.nodeType === "person";
+  const status = data.interviewStatus || "none";
+
+  let dotClass: string | null = null;
+  if (isPerson) {
+    if (status === "in_progress") dotClass = "bg-yellow-500";
+    else if (status === "completed") dotClass = "bg-green-500";
+    else if (status === "expired")
+      dotClass = "bg-gray-200 border border-dashed border-gray-400";
+    else if (status === "pending" || status === "invited" || status === "none")
+      dotClass = "bg-gray-400";
+  } else {
+    // Unit
+    const unitStatus = data.unitStatus ?? "empty";
+    if (unitStatus === "incomplete") dotClass = "bg-yellow-500";
+    else if (unitStatus === "complete") dotClass = "bg-green-500";
+    // empty → null (no dot)
+  }
+
+  const borderClass = selected
+    ? "border-[#C2410C] border-2 shadow-[0_0_0_3px_rgba(194,65,12,0.15)]"
+    : "border-[#D4D0C8] border-[1.5px] hover:border-[#A8A29E]";
+
+  return (
+    <div className="relative min-w-[160px]">
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!w-2.5 !h-2.5 !bg-[#6b7280] !border-2 !border-[#0D0D14]"
+      />
+      <div
+        className={`bg-white rounded-[6px] px-4 py-3 transition-all ${borderClass}`}
+        style={{ boxShadow: "0 4px 16px rgba(0,0,0,0.18)" }}
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="flex-shrink-0">
+            {isPerson ? (
+              <div className="w-7 h-7 rounded-full bg-warm-100 flex items-center justify-center">
+                <User className="w-3.5 h-3.5 text-warm-500" strokeWidth={1.5} />
+              </div>
+            ) : (
+              <div className="w-7 h-7 rounded-md bg-accent/10 flex items-center justify-center">
+                <Users className="w-3.5 h-3.5 text-accent" strokeWidth={1.5} />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-warm-900 truncate leading-tight">
+              {data.label}
+            </div>
+          </div>
+          {dotClass && (
+            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotClass}`} />
+          )}
+        </div>
+      </div>
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!w-2.5 !h-2.5 !bg-[#6b7280] !border-2 !border-[#0D0D14]"
+      />
+    </div>
+  );
+}
+
+function OrgNode(props: NodeProps<OrgNodeData>) {
+  if (props.data.activeLayer === "estructura") {
+    return <OrgNodeStructureView {...props} />;
+  }
+  return <OrgNodeAnalysisResultsView {...props} />;
+}
+
+function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) {
   const showStatus    = data.activeLayer === "recoleccion";
   const showAnalysis  = data.activeLayer === "analisis";
   const showResultados = data.activeLayer === "resultados";
