@@ -17,17 +17,18 @@ export default function LayerSelector({
   thresholdMet,
   hasDiagnosis,
 }: LayerSelectorProps) {
+  // Sprint 2.B: pasamos de 4 a 3 tabs. La tab 'Recolección' desaparece;
+  // su funcionalidad se fusiona dentro de la capa Estructura (visión
+  // Sprint 2.A).
   const layers = [
-    { id: "estructura",  label: "Estructura",  locked: false },
-    { id: "recoleccion", label: "Recolección", locked: !hasNodes },
-    { id: "analisis",    label: "Análisis",    locked: !thresholdMet },
-    { id: "resultados",  label: "Resultados",  locked: !hasDiagnosis },
+    { id: "estructura", label: "Estructura", locked: false },
+    { id: "analisis",   label: "Análisis",   locked: !(hasNodes && thresholdMet) },
+    { id: "resultados", label: "Resultados", locked: !hasDiagnosis },
   ];
 
   const tooltips: Record<string, string> = {
-    recoleccion: "Crea tu estructura primero",
-    analisis:    "Alcanza el umbral de recolección primero",
-    resultados:  "Genera tu diagnóstico primero",
+    analisis:   "Alcanza el umbral de recolección primero",
+    resultados: "Genera tu diagnóstico primero",
   };
 
   return (
