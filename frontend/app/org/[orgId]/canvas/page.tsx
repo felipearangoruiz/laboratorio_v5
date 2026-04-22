@@ -31,6 +31,7 @@ import DocumentsOverlay from "./DocumentsOverlay";
 import { useAuth } from "@/hooks/useAuth";
 import OrgNode from "./OrgNode";
 import SidePanel from "./SidePanel";
+import PersonPanel from "./PersonPanel";
 import AnalysisLayer from "./AnalysisLayer";
 import AnalysisNodePanel from "./AnalysisNodePanel";
 import DimensionFilter from "./DimensionFilter";
@@ -459,6 +460,19 @@ export default function CanvasPage() {
     ? nodes.find((n) => n.id === selectedNode)
     : null;
 
+  // Sprint 2.B: resolver el Node raw (modelo nuevo) y su NodeState
+  // para los paneles nuevos (PersonPanel / UnitPanel).
+  const selectedModelNode = selectedNode
+    ? modelNodes.find((n) => n.id === selectedNode) ?? null
+    : null;
+  const selectedNodeState = selectedModelNode
+    ? nodeStates.find(
+        (ns) =>
+          ns.node_id === selectedModelNode.id &&
+          (!activeCampaign || ns.campaign_id === activeCampaign.id),
+      )
+    : undefined;
+
   return (
     <div className="h-screen flex overflow-hidden" style={{ background: "#0D0D14" }}>
       <Sidebar
@@ -583,8 +597,20 @@ export default function CanvasPage() {
             </div>
           )}
 
-          {/* Side panel — changes based on active layer */}
-          {selectedNodeData && activeLayer === "estructura" && (
+          {/* Side panel — capa Estructura usa paneles nuevos (Sprint 2.B).
+              PersonPanel reemplaza a SidePanel+CollectionPanel para type=person.
+              type=unit sigue con SidePanel legacy hasta el Commit 5 (UnitPanel). */}
+          {selectedModelNode && activeLayer === "estructura" && selectedModelNode.type === "person" && (
+            <PersonPanel
+              node={selectedModelNode}
+              nodeState={selectedNodeState}
+              orgId={orgId}
+              onClose={() => setSelectedNode(null)}
+              onDelete={handleDeleteNode}
+              onRefetch={refetchCanvas}
+            />
+          )}
+          {selectedNodeData && activeLayer === "estructura" && selectedModelNode?.type === "unit" && (
             <SidePanel
               nodeId={selectedNode!}
               orgId={orgId}
