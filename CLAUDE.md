@@ -491,3 +491,16 @@ document_extractions, findings, recommendations, evidence_links
 ### Regla de oro
 
 > Si un prompt del motor recibe datos crudos de entrevistas sin transformación previa, hay un **bug de arquitectura**.
+
+## Ejecución de tests
+
+Los tests usan testcontainers con Postgres real (no SQLite).
+Por esa razón deben ejecutarse desde el host, no desde dentro
+del contenedor backend:
+
+  cd backend && uv run pytest tests
+
+El comando `docker compose exec backend uv run pytest` falla
+porque testcontainers necesita acceso al Docker daemon del
+host. El runner de CI debe correr `uv` directamente en el
+ambiente del worker, con acceso a Docker.

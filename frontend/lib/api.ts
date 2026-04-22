@@ -1,3 +1,19 @@
+import type {
+  Node as ApiNode,
+  NodeCreate,
+  NodeUpdate,
+  Edge as ApiEdge,
+  EdgeCreate,
+  EdgeUpdate,
+  AssessmentCampaign,
+  CampaignCreate,
+  CampaignUpdate,
+  NodeState,
+  NodeStateCreate,
+  NodeStateUpdate,
+  NodeStateStatus,
+} from "./types";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 function getToken(): string | null {
@@ -583,4 +599,144 @@ export async function updateOrganization(orgId: string, data: Record<string, any
 
 export async function getOrgStats(orgId: string) {
   return request<Record<string, number>>(`/organizations/${orgId}/stats`);
+}
+
+// ============================================================
+// Sprint 1.6 — API client del nuevo modelo (Node/Edge/Campaign)
+// ============================================================
+// Funciones aditivas que consumen los routers `/nodes`,
+// `/edges`, `/campaigns` y `/node-states`. Coexisten con los
+// helpers legacy (getOrgGroups, createGroup, etc.) durante la
+// fase de coexistencia del refactor. Ningún componente
+// existente las consume aún — Sprint 2 arranca la migración.
+//
+// Patrón de URL verificado en backend/app/routers/*.py:
+//   GET  /nodes?organization_id=…&type=…&parent_node_id=…
+//   GET  /nodes/{id}
+//   POST /nodes
+//   PATCH /nodes/{id}
+//   DELETE /nodes/{id}  (204, soft-delete)
+// Mismo patrón para /edges, /campaigns, /node-states.
+// Filtro de status en /node-states usa query param `status`
+// (alias del parámetro `status_filter` en FastAPI).
+
+function buildQuery(params: Record<string, string | undefined>): string {
+  const entries = Object.entries(params).filter(
+    ([, v]) => v !== undefined && v !== null && v !== "",
+  ) as [string, string][];
+  if (entries.length === 0) return "";
+  const qs = new URLSearchParams(entries).toString();
+  return `?${qs}`;
+}
+
+// ── /nodes ───────────────────────────────────────────
+export async function listNodes(organizationId?: string) {
+  const qs = buildQuery({ organization_id: organizationId });
+  return request<ApiNode[]>(`/nodes${qs}`);
+}
+
+export async function getNode(id: string) {
+  return request<ApiNode>(`/nodes/${id}`);
+}
+
+export async function createNode(payload: NodeCreate) {
+  return request<ApiNode>("/nodes", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateNode(id: string, payload: NodeUpdate) {
+  return request<ApiNode>(`/nodes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteNode(id: string) {
+  return request<void>(`/nodes/${id}`, { method: "DELETE" });
+}
+
+// ── /edges ───────────────────────────────────────────
+export async function listEdges(organizationId?: string) {
+  const qs = buildQuery({ organization_id: organizationId });
+  return request<ApiEdge[]>(`/edges${qs}`);
+}
+
+export async function getEdge(id: string) {
+  return request<ApiEdge>(`/edges/${id}`);
+}
+
+export async function createEdge(payload: EdgeCreate) {
+  return request<ApiEdge>("/edges", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateEdge(id: string, payload: EdgeUpdate) {
+  return request<ApiEdge>(`/edges/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteEdge(id: string) {
+  return request<void>(`/edges/${id}`, { method: "DELETE" });
+}
+
+// ── /campaigns ───────────────────────────────────────
+export async function listCampaigns(organizationId?: string) {
+  const qs = buildQuery({ organization_id: organizationId });
+  return request<AssessmentCampaign[]>(`/campaigns${qs}`);
+}
+
+export async function getCampaign(id: string) {
+  return request<AssessmentCampaign>(`/campaigns/${id}`);
+}
+
+export async function createCampaign(payload: CampaignCreate) {
+  return request<AssessmentCampaign>("/campaigns", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateCampaign(id: string, payload: CampaignUpdate) {
+  return request<AssessmentCampaign>(`/campaigns/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── /node-states ─────────────────────────────────────
+export async function listNodeStates(filters?: {
+  node_id?: string;
+  campaign_id?: string;
+  status?: NodeStateStatus;
+}) {
+  const qs = buildQuery({
+    node_id: filters?.node_id,
+    campaign_id: filters?.campaign_id,
+    status: filters?.status,
+  });
+  return request<NodeState[]>(`/node-states${qs}`);
+}
+
+export async function getNodeState(id: string) {
+  return request<NodeState>(`/node-states/${id}`);
+}
+
+export async function createNodeState(payload: NodeStateCreate) {
+  return request<NodeState>("/node-states", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateNodeState(id: string, payload: NodeStateUpdate) {
+  return request<NodeState>(`/node-states/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
