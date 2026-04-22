@@ -302,21 +302,38 @@ Lista numerada de las **13 invariantes** que se enforzan en validación server-s
 
 Las 13 invariantes documentadas se enforzan en niveles distintos según la etapa del refactor:
 
-**Nivel 1 — Router (Sprint 1.3 - actual):** la validación vive en los endpoints FastAPI. Cualquier request que viole una invariante recibe `422` (o `409` cuando aplica conflicto de estado). Este nivel asume que *todas* las escrituras pasan por el router autenticado.
+**Nivel 1 — Router:** la validación vive en los endpoints FastAPI. Cualquier request que viole una invariante recibe `422` (o `409` cuando aplica conflicto de estado). Este nivel asume que *todas* las escrituras pasan por el router autenticado.
 
-**Nivel 2 — Base de datos (Sprint 1.6+ objetivo):** las invariantes críticas (scope organizacional, tipo discreto, jerarquía persons/units, no self-loop, unicidad dirigida, campaña activa única) se espejan en `CHECK constraints`, `UNIQUE` parciales y `EXCLUSION constraints` de PostgreSQL. Escribir por fuera del router (ORM directo, SQL crudo, scripts de datos) sigue siendo rechazado.
+**Nivel 2 — Base de datos:** las invariantes críticas se espejan en `CHECK constraints`, `UNIQUE` parciales y triggers PL/pgSQL de PostgreSQL. Escribir por fuera del router (ORM directo, SQL crudo, scripts de datos, compat layer) es rechazado por la DB.
 
-**Justificación de la capa de compatibilidad (Sprint 1.4):** los routers legacy `groups.py`, `members.py`, `interviews.py`, `interview_public.py` escriben sobre `nodes` / `node_states` sin pasar por el router nuevo. Mientras el enforcement viva solo en Nivel 1, estos espejados **bypasean** validaciones como "tipo discreto" o "jerarquía de persons" a nivel DB. Esto es aceptable porque:
+**Estado por invariante (actualizado Sprint 2.1, commit de migración `20260421_0009_invariantes_db`):**
 
-- Los routers legacy ya aplican sus propias validaciones equivalentes (ej. un `Member` solo puede tener `group_id` válido, lo que al espejarse genera un person hijo de unit, respetando la invariante 3).
-- La ventana de coexistencia es acotada: al completarse Sprint 1.5 (lectura unificada) y Sprint 1.6 (deprecación real de legacy), los espejados desaparecen y el Nivel 2 cierra la puerta trasera.
+| Inv | Nombre | Nivel 1 (router) | Nivel 2 (DB) | Mecanismo DB |
+|---|---|---|---|---|
+| 1  | Scope organizacional (org_id NOT NULL en Node) | sí | sí | `NOT NULL` desde Sprint 1.1 |
+| 2  | Parent mismo org | sí | sí | Trigger `trg_nodes_parent_same_org` |
+| 3  | Jerarquía de persons / unit no tiene parent person | sí | sí | Trigger `trg_nodes_unit_parent_is_unit` |
+| 4  | Jerarquía de units (no self-loop y cross-type en parent) | sí | parcial | self-loop vía `check_edge_source_ne_target` (edges). Self-parent de Node queda router-only. |
+| 5  | Acíclico | sí | no | Requiere CTE recursiva — queda router-only |
+| 6  | Edges inter-unit y misma org | sí | sí (org) | Trigger `trg_edges_nodes_same_org`. El sub-requisito "ambos son unit" queda router-only. |
+| 7  | No duplicado `(source, target, edge_type)` | sí | no | Conflicto con `edge_metadata.order` en process edges — pendiente de resolución (ver `DEUDA_DOCUMENTAL.md`). |
+| 8  | Enum cerrado `edge_type` | sí | sí | Native PostgreSQL `ENUM edge_type_enum` |
+| 9  | Identidad inmutable por campaña | sí | no | Validación semántica sobre PATCH — queda router-only |
+| 10 | NodeState UNIQUE (node_id, campaign_id) | sí | sí | `UNIQUE` desde Sprint 1.1 |
+| 11 | Campaña activa única | sí | sí | Partial unique index `uniq_one_active_campaign_per_org` |
+| 12 | Documents consistentes | sí | no | Requiere validación multi-tabla — queda router-only |
+| 13 | Orden requerido en edges `process` | sí | no | Validación semántica sobre JSONB — queda router-only |
 
-**Política para tests de Sprint 1.5:** cada test de invariante debe declarar explícitamente qué nivel ejercita:
+**Capa de compatibilidad y Nivel 2 (Sprint 2.1):** los routers legacy `groups.py`, `members.py`, `interviews.py`, `interview_public.py` escriben sobre `nodes` / `node_states` sin pasar por el router nuevo. Desde Sprint 2.1 el Nivel 2 está activo para las invariantes 2, 3, 4 (edge self-loop), 6 (misma org) y 11: si un router legacy materializa un dato inválido sobre esas invariantes, la DB lo rechaza y la operación falla ruidosamente en vez de corromper silenciosamente.
 
-- Test de "nivel router" → hace request HTTP y espera `422` / `409`.
-- Test de "nivel DB" → escribe directo con el ORM / SQL crudo y espera `IntegrityError` o `CheckViolation`.
+Las invariantes que quedan router-only (5, 7, 9, 12, 13 y el sub-requisito "ambos nodos son unit" de la 6) siguen cubiertas por los propios routers legacy, que aplican sus validaciones equivalentes antes de espejar (ej. un `Member` solo puede tener `group_id` válido, lo que al espejarse genera un person hijo de unit, respetando la invariante 3).
 
-Mientras no exista la constraint DB, los tests de nivel DB quedan marcados `@pytest.mark.xfail(reason="invariante solo enforzada a nivel router hasta Sprint 1.6")`. Esto deja la deuda visible en el suite de tests, no escondida.
+**Política para tests de invariantes:** cada test de invariante debe declarar explícitamente qué nivel ejercita:
+
+- Test de "nivel router" (`test_router_*`) → hace request HTTP y espera `422` / `409`.
+- Test de "nivel DB" (`test_db_*`) → escribe directo con el ORM / SQL crudo y espera `IntegrityError` o `CheckViolation`.
+
+Mientras una invariante no tenga constraint de DB, los tests `test_db_*` quedan marcados `@pytest.mark.xfail` con razón explícita (p. ej. "invariante router-only por validación semántica sobre JSONB"). Esto deja la deuda visible en el suite en vez de ocultarla.
 
 ---
 

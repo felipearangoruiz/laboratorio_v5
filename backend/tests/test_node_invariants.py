@@ -605,7 +605,6 @@ def test_router_campaign_active_y_draft_coexisten(
     assert r.status_code == 201
 
 
-@pytest.mark.xfail(reason="invariante solo enforzada a nivel router hasta Sprint 1.6")
 def test_db_segunda_campaign_active_rechazada(session: Session, seeded: dict) -> None:
     c1 = AssessmentCampaign(
         organization_id=seeded["own_org"].id,
