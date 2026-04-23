@@ -12,6 +12,8 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronRight,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import type { DiagnosisResult, DiagnosisFinding } from "@/lib/api";
 
@@ -182,6 +184,10 @@ export default function NarrativePanel({
   const [expandedFinding, setExpandedFinding] = useState<string | null>(
     targetFindingId ?? null,
   );
+  // Sprint 5.C feature (vii) — modo lectura ampliado. El panel pasa del
+  // ~65% del viewport al 100%, ocultando el canvas temporalmente. No
+  // desmonta el componente, así que la posición de scroll se preserva.
+  const [expanded, setExpanded] = useState(false);
   const findingRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const observerRef = useRef<IntersectionObserver | null>(null);
   // Sprint 5.C feature (vi) — observer auxiliar para dimension cards
@@ -355,7 +361,10 @@ export default function NarrativePanel({
   return (
     <div
       className="absolute top-0 right-0 h-full bg-warm-50 border-l border-warm-200 shadow-warm-md z-30 flex flex-col"
-      style={{ width: "clamp(420px, 65%, 860px)" }}
+      style={{
+        width: expanded ? "100%" : "clamp(420px, 65%, 860px)",
+        transition: "width 0.25s ease",
+      }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-warm-200 bg-white flex-shrink-0">
@@ -366,6 +375,25 @@ export default function NarrativePanel({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Sprint 5.C feature (vii) — lectura ampliada: toggle 65%/100% */}
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-warm-300 rounded-md hover:bg-warm-100 text-warm-600 transition-colors"
+            title={expanded ? "Volver al canvas" : "Modo lectura ampliado"}
+          >
+            {expanded ? (
+              <>
+                <Minimize2 className="w-3.5 h-3.5" />
+                Volver al canvas
+              </>
+            ) : (
+              <>
+                <Maximize2 className="w-3.5 h-3.5" />
+                Lectura ampliada
+              </>
+            )}
+          </button>
           <button className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs border border-warm-300 rounded-md hover:bg-warm-100 text-warm-600 transition-colors">
             <FileDown className="w-3.5 h-3.5" />
             Exportar PDF
