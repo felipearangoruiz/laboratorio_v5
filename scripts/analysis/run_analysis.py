@@ -603,16 +603,17 @@ def _run_paso4(
     base_url: str,
     run_id: str,
     input_data: dict,
+    node_analyses_full: dict[str, dict],
     group_analyses_full: dict[str, dict],
     org_analysis_full: dict,
     state: dict,
 ) -> dict:
     """Síntesis final. Devuelve el response de submit_findings.
 
-    Recibe group_analyses_full y org_analysis_full íntegros (no stubs
-    de IDs). Cumple la regla de MOTOR_ANALISIS.md §1 Paso 4: el LLM solo
-    sintetiza, no puede introducir información nueva — y ahora sí tiene
-    la información de los pasos anteriores para sintetizar.
+    Recibe node_analyses_full, group_analyses_full y org_analysis_full
+    íntegros. Sprint 4.B Ronda 2: los node_analyses ahora llegan al input
+    del Paso 4 para que el LLM pueda citar key_quotes textuales y fundar
+    evidence_links con node_analysis_id concreto.
     """
     if state.get("step", 0) >= 4 and state.get("diagnosis_id"):
         _log("Paso 4 — ya completado, skip")
@@ -630,6 +631,9 @@ def _run_paso4(
     llm_input = {
         "org_analysis": org_analysis_full,
         "group_analyses": list(group_analyses_full.values()),
+        # Sprint 4.B Ronda 2 — node_analyses completos para fundar citas
+        # textuales y evidence_links a nivel de respondente individual.
+        "node_analyses": list(node_analyses_full.values()),
         "top_patterns": cross_patterns[:5],
         "top_contradictions": contradictions[:5],
         "structural_risks": structural_risks[:5],
@@ -811,7 +815,7 @@ def run_pipeline(org_id: str, base_url: str, resume_run_id: str | None = None) -
     # Inyecta group_analyses_full y org_analysis_full íntegros.
     final = _run_paso4(
         client, base_url, run_id, input_data,
-        group_analyses_full, org_analysis_full, state,
+        node_analyses_full, group_analyses_full, org_analysis_full, state,
     )
 
     print()
