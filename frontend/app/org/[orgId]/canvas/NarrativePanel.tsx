@@ -25,6 +25,9 @@ interface Props {
   /** Sprint 5.C feature (iii) — deep-link: si se pasa un findingId, el
    *  panel hace scroll automático al finding y lo expande al montarse. */
   targetFindingId?: string | null;
+  /** Sprint 5.C feature (v) — mapa id → nombre del nodo para renderizar
+   *  chips legibles en narrative_sections.dimensions[*].node_ids. */
+  nodeNames?: Record<string, string>;
 }
 
 const DIM_LABELS: Record<string, string> = {
@@ -166,6 +169,7 @@ export default function NarrativePanel({
   onHighlightNodes,
   onSoftHighlightNodes,
   targetFindingId,
+  nodeNames,
 }: Props) {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(
     targetFindingId ?? null,
@@ -242,6 +246,13 @@ export default function NarrativePanel({
   const findings        = diagnosis.findings || [];
   const recommendations = diagnosis.recommendations || [];
   const hasNarrative    = diagnosis.narrative_md && diagnosis.narrative_md.trim().length > 0;
+  const sections        = diagnosis.narrative_sections || null;
+
+  /** Helper: nombre amigable del nodo; fallback a los primeros 8
+   *  caracteres del UUID si el mapa no lo tiene (run huérfano o nodo
+   *  ya eliminado). */
+  const nodeLabel = (nid: string): string =>
+    nodeNames?.[nid] ?? nid.slice(0, 8);
 
   const overallScore =
     scoreEntries.length > 0
@@ -346,14 +357,135 @@ export default function NarrativePanel({
           </div>
         )}
 
-        {/* Narrative / Resumen ejecutivo — full markdown render */}
-        {hasNarrative && (
-          <div>
-            <h3 className="text-sm font-semibold text-warm-900 mb-3">Resumen Ejecutivo</h3>
-            <div className="bg-white border border-warm-200 rounded-lg px-5 py-4">
-              <SimpleMarkdown text={diagnosis.narrative_md} />
+        {/* Sprint 5.C feature (v) — narrativa estructurada cuando el
+            motor la provee (runs post-5.A). Fallback al narrative_md
+            monolítico para runs antiguos. */}
+        {sections ? (
+          <>
+            {/* a. Executive summary */}
+            {sections.executive_summary.markdown.trim() && (
+              <section>
+                <h3 className="text-sm font-semibold text-warm-900 mb-3">Resumen Ejecutivo</h3>
+                <div className="bg-white border border-warm-200 rounded-lg px-5 py-4">
+                  <SimpleMarkdown text={sections.executive_summary.markdown} />
+                </div>
+              </section>
+            )}
+
+            {/* b. Análisis por dimensión — una card por entrada */}
+            {sections.dimensions.length > 0 && (
+              <section>
+                <h3 className="text-sm font-semibold text-warm-900 mb-3">Análisis por dimensión</h3>
+                <div className="space-y-3">
+                  {sections.dimensions.map((d) => {
+                    const scorePct = Math.round(Math.min(100, Math.max(0, d.score * 100)));
+                    const barColor =
+                      d.score >= 0.5 ? "bg-emerald-500" : d.score >= 0.25 ? "bg-amber-500" : "bg-red-500";
+                    return (
+                      <div
+                        key={d.dimension}
+                        className="bg-white border border-warm-200 rounded-lg px-5 py-4"
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-sm font-semibold text-warm-900 capitalize">
+                            {dimLabel(d.dimension)}
+                          </h4>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-[10px] text-warm-500 tabular-nums">
+                              std {d.std.toFixed(2)}
+                            </span>
+                            <span className="text-[11px] font-semibold text-warm-900 tabular-nums">
+                              {d.score.toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden mb-3">
+                          <div
+                            className={`h-full rounded-full transition-all ${barColor}`}
+                            style={{ width: `${scorePct}%` }}
+                          />
+                        </div>
+                        <SimpleMarkdown text={d.markdown} />
+                        {d.node_ids.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-warm-100">
+                            <span className="text-[10px] text-warm-400 mr-1">
+                              Nodos afectados:
+                            </span>
+                            {d.node_ids.map((nid) => (
+                              <span
+                                key={nid}
+                                className="px-2 py-0.5 bg-warm-100 text-warm-700 text-[10px] rounded-full font-medium"
+                                title={nid}
+                              >
+                                {nodeLabel(nid)}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {/* c. Hallazgos transversales */}
+            {sections.transversal_findings.markdown.trim() && (
+              <section>
+                <h3 className="text-sm font-semibold text-warm-900 mb-3">Hallazgos transversales</h3>
+                <div className="bg-white border border-warm-200 rounded-lg px-5 py-4">
+                  <SimpleMarkdown text={sections.transversal_findings.markdown} />
+                  {sections.transversal_findings.node_ids.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-warm-100">
+                      <span className="text-[10px] text-warm-400 mr-1">Involucrados:</span>
+                      {sections.transversal_findings.node_ids.map((nid) => (
+                        <span
+                          key={nid}
+                          className="px-2 py-0.5 bg-warm-100 text-warm-700 text-[10px] rounded-full font-medium"
+                          title={nid}
+                        >
+                          {nodeLabel(nid)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* d. Resumen de recomendaciones */}
+            {sections.recommendations_summary.markdown.trim() && (
+              <section>
+                <h3 className="text-sm font-semibold text-warm-900 mb-3">Resumen de recomendaciones</h3>
+                <div className="bg-white border border-warm-200 rounded-lg px-5 py-4">
+                  <SimpleMarkdown text={sections.recommendations_summary.markdown} />
+                </div>
+              </section>
+            )}
+
+            {/* e. Advertencias */}
+            {sections.warnings.markdown.trim() && (
+              <section>
+                <h3 className="text-sm font-semibold text-warm-900 mb-3 flex items-center gap-1.5">
+                  <AlertCircle className="w-4 h-4 text-amber-500" />
+                  Advertencias metodológicas
+                </h3>
+                <div className="bg-amber-50/50 border border-amber-200 rounded-lg px-5 py-4">
+                  <SimpleMarkdown text={sections.warnings.markdown} />
+                </div>
+              </section>
+            )}
+          </>
+        ) : (
+          /* Fallback legacy — narrative_md monolítico (runs pre-5.A) */
+          hasNarrative && (
+            <div>
+              <h3 className="text-sm font-semibold text-warm-900 mb-3">Resumen Ejecutivo</h3>
+              <div className="bg-white border border-warm-200 rounded-lg px-5 py-4">
+                <SimpleMarkdown text={diagnosis.narrative_md} />
+              </div>
             </div>
-          </div>
+          )
         )}
 
         {/* Hallazgos */}

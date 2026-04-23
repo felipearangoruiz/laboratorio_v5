@@ -317,6 +317,13 @@ export default function CanvasPage() {
     return tops;
   }, [diagnosis]);
 
+  // ── Sprint 5.C feature (v) — mapa id → nombre para NarrativePanel ──
+  const nodeNames = useMemo<Record<string, string>>(() => {
+    const out: Record<string, string> = {};
+    for (const m of modelNodes) out[m.id] = m.name;
+    return out;
+  }, [modelNodes]);
+
   // ── Sprint 5.C feature (iv) — lista ordenada de nodos con findings ──
   // Para la navegación ant/sig en ResultsNodePanel. Orden: count de
   // findings descendente, desempate por nombre ascendente. Solo nodos
@@ -1079,6 +1086,7 @@ export default function CanvasPage() {
           {(activeLayer === "resultados" || showNarrative) && diagnosis && (
             <NarrativePanel
               diagnosis={diagnosis}
+              nodeNames={nodeNames}
               targetFindingId={narrativeTargetFindingId}
               onClose={() => {
                 if (showNarrative) {
