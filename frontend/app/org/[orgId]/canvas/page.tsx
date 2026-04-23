@@ -1101,6 +1101,27 @@ export default function CanvasPage() {
                 showNarrative ? handleHighlightNodes : handleHighlightNodesInMap
               }
               onSoftHighlightNodes={handleSoftHighlightNodes}
+              onNodeClick={(nid) => {
+                // Sprint 5.C feature (vi) — clic en chip de nodo dentro
+                // del panel narrativo: cierra el panel, selecciona el
+                // nodo y asegura capa Resultados para que el
+                // ResultsNodePanel abra con sus findings.
+                setShowNarrative(false);
+                setNarrativeTargetFindingId(null);
+                setActiveLayer("resultados");
+                setSelectedNode(nid);
+                setHighlightedNodeIds(new Set([nid]));
+              }}
+              onDimensionClick={(dim) => {
+                // Sprint 5.C feature (vi) — clic en nombre de dimensión:
+                // switch a capa Análisis y aplica la dim como filtro,
+                // reusando la lógica de 5.B (top-3 + coloreo).
+                setShowNarrative(false);
+                setNarrativeTargetFindingId(null);
+                setActiveLayer("analisis");
+                setActiveDimension(dim);
+                setHighlightedNodeIds(null);
+              }}
             />
           )}
         </div>

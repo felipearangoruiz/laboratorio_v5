@@ -28,6 +28,12 @@ interface Props {
   /** Sprint 5.C feature (v) — mapa id → nombre del nodo para renderizar
    *  chips legibles en narrative_sections.dimensions[*].node_ids. */
   nodeNames?: Record<string, string>;
+  /** Sprint 5.C feature (vi) — clic en chip de nodo: cierra panel y
+   *  selecciona el nodo (capa Resultados abre su panel lateral). */
+  onNodeClick?: (nodeId: string) => void;
+  /** Sprint 5.C feature (vi) — clic en header de dimensión: switch a
+   *  capa Análisis y aplica esa dim como filtro. */
+  onDimensionClick?: (dimension: string) => void;
 }
 
 const DIM_LABELS: Record<string, string> = {
@@ -170,12 +176,19 @@ export default function NarrativePanel({
   onSoftHighlightNodes,
   targetFindingId,
   nodeNames,
+  onNodeClick,
+  onDimensionClick,
 }: Props) {
   const [expandedFinding, setExpandedFinding] = useState<string | null>(
     targetFindingId ?? null,
   );
   const findingRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const observerRef = useRef<IntersectionObserver | null>(null);
+  // Sprint 5.C feature (vi) — observer auxiliar para dimension cards
+  // del narrative_sections. Al entrar en viewport, dispara soft-highlight
+  // sobre los node_ids de la dim.
+  const dimRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const dimObserverRef = useRef<IntersectionObserver | null>(null);
 
   // Sprint 5.C feature (iii) — deep-link scroll + expand al finding.
   // Cada vez que cambia targetFindingId (el usuario abrió el panel desde
@@ -235,6 +248,35 @@ export default function NarrativePanel({
     return () => observerRef.current?.disconnect();
   }, [setupObserver]);
 
+  // Sprint 5.C feature (vi) — IntersectionObserver sobre dimension cards.
+  // Se configura aparte para evitar mezclar selectores y thresholds.
+  const setupDimObserver = useCallback(() => {
+    if (!onSoftHighlightNodes) return;
+    dimObserverRef.current?.disconnect();
+
+    dimObserverRef.current = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const raw = (entry.target as HTMLElement).dataset.nodeIds;
+            if (!raw) continue;
+            const ids = raw.split(",").filter(Boolean);
+            if (ids.length > 0) onSoftHighlightNodes(ids);
+          }
+        }
+      },
+      { threshold: 0.5 },
+    );
+    dimRefs.current.forEach((el) => {
+      if (el) dimObserverRef.current?.observe(el);
+    });
+  }, [onSoftHighlightNodes]);
+
+  useEffect(() => {
+    setupDimObserver();
+    return () => dimObserverRef.current?.disconnect();
+  }, [setupDimObserver]);
+
   // Clear soft highlight when panel unmounts
   useEffect(() => {
     return () => {
@@ -253,6 +295,42 @@ export default function NarrativePanel({
    *  ya eliminado). */
   const nodeLabel = (nid: string): string =>
     nodeNames?.[nid] ?? nid.slice(0, 8);
+
+  /** Sprint 5.C feature (vi) — chip de nodo interactivo. Hover dispara
+   *  soft-highlight (pulse en canvas). Click cierra panel y abre el
+   *  panel lateral del nodo (capa Resultados). Si no hay callbacks,
+   *  renderiza un span no-interactivo (fallback defensivo). */
+  const renderNodeChip = (nid: string) => {
+    const label = nodeLabel(nid);
+    const canClick = typeof onNodeClick === "function";
+    const canHover = typeof onSoftHighlightNodes === "function";
+    if (!canClick && !canHover) {
+      return (
+        <span
+          key={nid}
+          className="px-2 py-0.5 bg-warm-100 text-warm-700 text-[10px] rounded-full font-medium"
+          title={nid}
+        >
+          {label}
+        </span>
+      );
+    }
+    return (
+      <button
+        key={nid}
+        type="button"
+        onClick={() => canClick && onNodeClick!(nid)}
+        onMouseEnter={() => canHover && onSoftHighlightNodes!([nid])}
+        onMouseLeave={() => canHover && onSoftHighlightNodes!([])}
+        onFocus={() => canHover && onSoftHighlightNodes!([nid])}
+        onBlur={() => canHover && onSoftHighlightNodes!([])}
+        className="px-2 py-0.5 bg-warm-100 hover:bg-accent/15 focus:bg-accent/15 text-warm-700 hover:text-accent focus:text-accent text-[10px] rounded-full font-medium transition-colors cursor-pointer focus:outline-none"
+        title={`Ver ${label} en el canvas`}
+      >
+        {label}
+      </button>
+    );
+  };
 
   const overallScore =
     scoreEntries.length > 0
@@ -381,15 +459,36 @@ export default function NarrativePanel({
                     const scorePct = Math.round(Math.min(100, Math.max(0, d.score * 100)));
                     const barColor =
                       d.score >= 0.5 ? "bg-emerald-500" : d.score >= 0.25 ? "bg-amber-500" : "bg-red-500";
+                    const canClickDim = typeof onDimensionClick === "function";
                     return (
                       <div
                         key={d.dimension}
+                        ref={(el) => {
+                          if (el) {
+                            dimRefs.current.set(d.dimension, el);
+                            dimObserverRef.current?.observe(el);
+                          } else {
+                            dimRefs.current.delete(d.dimension);
+                          }
+                        }}
+                        data-node-ids={d.node_ids.join(",")}
                         className="bg-white border border-warm-200 rounded-lg px-5 py-4"
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-sm font-semibold text-warm-900 capitalize">
-                            {dimLabel(d.dimension)}
-                          </h4>
+                          {canClickDim ? (
+                            <button
+                              type="button"
+                              onClick={() => onDimensionClick!(d.dimension)}
+                              className="text-sm font-semibold text-warm-900 capitalize hover:text-accent focus:text-accent focus:outline-none transition-colors text-left truncate"
+                              title={`Ver ${dimLabel(d.dimension)} en capa Análisis`}
+                            >
+                              {dimLabel(d.dimension)}
+                            </button>
+                          ) : (
+                            <h4 className="text-sm font-semibold text-warm-900 capitalize">
+                              {dimLabel(d.dimension)}
+                            </h4>
+                          )}
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <span className="text-[10px] text-warm-500 tabular-nums">
                               std {d.std.toFixed(2)}
@@ -411,15 +510,7 @@ export default function NarrativePanel({
                             <span className="text-[10px] text-warm-400 mr-1">
                               Nodos afectados:
                             </span>
-                            {d.node_ids.map((nid) => (
-                              <span
-                                key={nid}
-                                className="px-2 py-0.5 bg-warm-100 text-warm-700 text-[10px] rounded-full font-medium"
-                                title={nid}
-                              >
-                                {nodeLabel(nid)}
-                              </span>
-                            ))}
+                            {d.node_ids.map((nid) => renderNodeChip(nid))}
                           </div>
                         )}
                       </div>
@@ -438,15 +529,7 @@ export default function NarrativePanel({
                   {sections.transversal_findings.node_ids.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-warm-100">
                       <span className="text-[10px] text-warm-400 mr-1">Involucrados:</span>
-                      {sections.transversal_findings.node_ids.map((nid) => (
-                        <span
-                          key={nid}
-                          className="px-2 py-0.5 bg-warm-100 text-warm-700 text-[10px] rounded-full font-medium"
-                          title={nid}
-                        >
-                          {nodeLabel(nid)}
-                        </span>
-                      ))}
+                      {sections.transversal_findings.node_ids.map((nid) => renderNodeChip(nid))}
                     </div>
                   )}
                 </div>
