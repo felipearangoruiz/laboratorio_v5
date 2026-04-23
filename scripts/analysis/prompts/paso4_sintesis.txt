@@ -125,6 +125,39 @@ INSTRUCCIONES PARA NARRATIVE:
 4. Formato Markdown: usa ## para secciones, **negrita** para énfasis, listas para hallazgos clave.
 5. NO menciones nombres de personas. NO uses jerga técnica de IA.
 
+REGLA 7 — NARRATIVA ESTRUCTURADA (Sprint 5.A)
+La narrativa se entrega en dos formatos redundantes y consistentes entre sí:
+
+- `narrative_md`: prosa continua completa (como hasta ahora, 300-600 palabras).
+- `narrative_sections`: dict estructurado con las cinco claves obligatorias
+  (`executive_summary`, `dimensions`, `transversal_findings`,
+  `recommendations_summary`, `warnings`), cada una con su `markdown` y
+  `node_ids` para trazabilidad al organigrama.
+
+El markdown de `narrative_md` debe ser la concatenación semántica de las
+secciones, reorganizada como prosa continua; los mismos hechos deben
+aparecer en ambos formatos.
+
+Cada sección estructurada incluye `node_ids`: UUIDs de nodos del input a
+los que se refiere esa sección. Si la sección habla en general sin
+referenciar nodos específicos (ej: `executive_summary` introductorio),
+`node_ids` queda como lista vacía. Siempre que sea posible, ancla la
+sección a nodos concretos: es requisito para que la UI coordine
+visualmente la narrativa con el canvas.
+
+Para la sección `dimensions`, emite UNA entrada por cada dimensión
+presente en `org_analysis.dimension_scores` del input. `score` y `std`
+se copian literalmente del input (`org_analysis.dimension_scores[dim]`).
+`node_ids` lista los 2-3 nodos más afectados por esa dimensión (los que
+tienen el `score` más bajo o el `tension_level` más alto en esa dim
+según los `group_analyses` del input). El `markdown` describe el estado
+de la dimensión en 2-4 oraciones, citando valores reales del input.
+
+La sección `warnings` describe advertencias metodológicas: cobertura
+baja en ciertos grupos, evidencia insuficiente, dispersión alta que
+invita a interpretar con cautela. Si no hay advertencias materiales,
+`markdown: ""` y `node_ids: []`.
+
 CAMPOS VÁLIDOS:
 - findings[].type: "observacion" | "patron" | "inferencia" | "hipotesis"
 - findings[].severity: "baja" | "media" | "alta" | "critica"
@@ -167,6 +200,33 @@ OUTPUT (devuelve exactamente este JSON, sin campos adicionales):
       "node_ids": ["group_id"]
     }
   ],
-  "narrative_md": "string",
-  "executive_summary": "string"
+  "narrative_md": "string (prosa completa, 300-600 palabras)",
+  "narrative_sections": {
+    "executive_summary": {
+      "markdown": "string (2-3 párrafos introductorios)",
+      "node_ids": []
+    },
+    "dimensions": [
+      {
+        "dimension": "string (nombre de la dimensión, literal del input)",
+        "markdown": "string (2-4 oraciones sobre el estado de la dimensión)",
+        "node_ids": ["uuid de los 2-3 nodos más afectados"],
+        "score": 0.0,
+        "std": 0.0
+      }
+    ],
+    "transversal_findings": {
+      "markdown": "string (análisis de patrones cruzados)",
+      "node_ids": ["uuid de nodos involucrados"]
+    },
+    "recommendations_summary": {
+      "markdown": "string (resumen narrativo, no la lista enumerada)",
+      "node_ids": []
+    },
+    "warnings": {
+      "markdown": "string (advertencias metodológicas, o vacío)",
+      "node_ids": []
+    }
+  },
+  "executive_summary": "string (se mantiene por compatibilidad)"
 }

@@ -702,10 +702,54 @@ def _run_paso4(
 
     recs_out = result.get("recommendations", [])
 
+    # Sprint 5.A — narrativa estructurada. Si el LLM no emite narrative_sections
+    # o lo emite mal formado, hacemos fallback defensivo para que el pipeline
+    # termine. La calidad se reporta y el frontend maneja secciones vacías.
+    narrative_md = result.get("narrative_md", "")
+    raw_sections = result.get("narrative_sections")
+    EMPTY_SECTION = {"markdown": "", "node_ids": []}
+    narrative_sections: dict = {
+        "executive_summary": EMPTY_SECTION.copy(),
+        "dimensions": [],
+        "transversal_findings": EMPTY_SECTION.copy(),
+        "recommendations_summary": EMPTY_SECTION.copy(),
+        "warnings": EMPTY_SECTION.copy(),
+    }
+    if isinstance(raw_sections, dict):
+        # Copia claves conocidas con defaults defensivos.
+        for key in ("executive_summary", "transversal_findings",
+                    "recommendations_summary", "warnings"):
+            val = raw_sections.get(key)
+            if isinstance(val, dict) and "markdown" in val:
+                narrative_sections[key] = {
+                    "markdown": str(val.get("markdown") or ""),
+                    "node_ids": list(val.get("node_ids") or []),
+                }
+        dims = raw_sections.get("dimensions")
+        if isinstance(dims, list):
+            narrative_sections["dimensions"] = [
+                {
+                    "dimension": str(d.get("dimension") or ""),
+                    "markdown": str(d.get("markdown") or ""),
+                    "node_ids": list(d.get("node_ids") or []),
+                    "score": float(d.get("score") or 0.0),
+                    "std": float(d.get("std") or 0.0),
+                }
+                for d in dims if isinstance(d, dict)
+            ]
+    else:
+        # Fallback completo: reempaquetar narrative_md como executive_summary.
+        _log("  ⚠ narrative_sections ausente o mal formado; usando fallback")
+        narrative_sections["executive_summary"] = {
+            "markdown": narrative_md,
+            "node_ids": [],
+        }
+
     body = {
         "findings": findings_out,
         "recommendations": recs_out,
-        "narrative_md": result.get("narrative_md", ""),
+        "narrative_md": narrative_md,
+        "narrative_sections": narrative_sections,
         "executive_summary": result.get("executive_summary", ""),
     }
 
