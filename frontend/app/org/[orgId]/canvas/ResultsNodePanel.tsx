@@ -5,6 +5,8 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowRight,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   Minus,
   AlertCircle,
@@ -20,6 +22,12 @@ interface Props {
    *  deep-link: si se pasa, NarrativePanel abre con scroll + expand
    *  automático hacia ese finding. Sin argumento, abre al inicio. */
   onViewNarrative: (findingId?: string) => void;
+  /** Sprint 5.C feature (iv) — lista ordenada de nodos con findings
+   *  (count desc, nombre asc) para navegación ant/sig. */
+  nodesWithFindings?: { id: string; name: string; count: number }[];
+  /** Sprint 5.C feature (iv) — cambia el nodo seleccionado al id dado.
+   *  El canvas pulsa el nuevo nodo brevemente para reforzar el cambio. */
+  onNavigate?: (nextNodeId: string) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -112,6 +120,8 @@ export default function ResultsNodePanel({
   diagnosis,
   onClose,
   onViewNarrative,
+  nodesWithFindings,
+  onNavigate,
 }: Props) {
   const nodeFindings = (diagnosis.findings || []).filter(
     (f) => f.node_ids?.includes(nodeId)
@@ -119,6 +129,17 @@ export default function ResultsNodePanel({
   const nodeRecs = (diagnosis.recommendations || [])
     .filter((r) => r.node_ids?.includes(nodeId))
     .sort((a, b) => (a.priority ?? 99) - (b.priority ?? 99));
+
+  // Sprint 5.C feature (iv) — índice del nodo actual en la lista
+  // ordenada. -1 si el nodo no tiene findings (pero se abrió el panel
+  // igual) o si la lista no fue provista.
+  const navList = nodesWithFindings ?? [];
+  const navIndex = navList.findIndex((n) => n.id === nodeId);
+  const navPrev = navIndex > 0 ? navList[navIndex - 1] : null;
+  const navNext = navIndex >= 0 && navIndex < navList.length - 1
+    ? navList[navIndex + 1]
+    : null;
+  const canNavigate = typeof onNavigate === "function" && navList.length > 1;
 
   return (
     <div
@@ -140,6 +161,36 @@ export default function ResultsNodePanel({
           <X className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Sprint 5.C feature (iv) — navegación ant/sig entre nodos con
+          findings. Se oculta si solo hay 0-1 nodos navegables. */}
+      {canNavigate && navIndex >= 0 && (
+        <div className="flex items-center justify-between px-4 py-2 border-b border-warm-200 bg-warm-50 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => navPrev && onNavigate!(navPrev.id)}
+            disabled={!navPrev}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-warm-700 hover:text-warm-900 disabled:text-warm-300 disabled:cursor-not-allowed transition-colors"
+            title={navPrev ? `Ver ${navPrev.name}` : "Ya estás en el primero"}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            Anterior
+          </button>
+          <span className="text-[10px] text-warm-400 tabular-nums">
+            {navIndex + 1} / {navList.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => navNext && onNavigate!(navNext.id)}
+            disabled={!navNext}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-warm-700 hover:text-warm-900 disabled:text-warm-300 disabled:cursor-not-allowed transition-colors"
+            title={navNext ? `Ver ${navNext.name}` : "Ya estás en el último"}
+          >
+            Siguiente
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">

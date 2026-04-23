@@ -317,6 +317,27 @@ export default function CanvasPage() {
     return tops;
   }, [diagnosis]);
 
+  // ── Sprint 5.C feature (iv) — lista ordenada de nodos con findings ──
+  // Para la navegación ant/sig en ResultsNodePanel. Orden: count de
+  // findings descendente, desempate por nombre ascendente. Solo nodos
+  // del modelo actual (cubre caso edge de diagnósticos huérfanos).
+  const nodesWithFindingsList = useMemo<{ id: string; name: string; count: number }[]>(() => {
+    const nameById = new Map<string, string>(
+      modelNodes.map((m) => [m.id, m.name]),
+    );
+    const entries: { id: string; name: string; count: number }[] = [];
+    for (const [id, count] of Object.entries(nodeFindingCounts)) {
+      const name = nameById.get(id);
+      if (!name) continue; // nodo eliminado o de otra org
+      entries.push({ id, name, count });
+    }
+    entries.sort((a, b) => {
+      if (a.count !== b.count) return b.count - a.count;
+      return a.name.localeCompare(b.name, "es");
+    });
+    return entries;
+  }, [modelNodes, nodeFindingCounts]);
+
   // ── Sprint 5.C feature (ii) — set de nodos con insights ─────────────
   // Unión de node_ids citados en findings y recommendations del run.
   // En capa Resultados, los nodos fuera del set se renderizan con
@@ -1040,6 +1061,14 @@ export default function CanvasPage() {
               onViewNarrative={(findingId) => {
                 setNarrativeTargetFindingId(findingId ?? null);
                 setShowNarrative(true);
+              }}
+              nodesWithFindings={nodesWithFindingsList}
+              onNavigate={(nextId) => {
+                setSelectedNode(nextId);
+                // Pulse breve del nuevo nodo en canvas para reforzar el
+                // cambio. Se limpia cuando el user interactúa con otro
+                // highlight (filtro de dim, finding, etc.).
+                setHighlightedNodeIds(new Set([nextId]));
               }}
             />
           )}
