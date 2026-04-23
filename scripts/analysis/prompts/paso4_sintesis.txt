@@ -153,6 +153,27 @@ tienen el `score` más bajo o el `tension_level` más alto en esa dim
 según los `group_analyses` del input). El `markdown` describe el estado
 de la dimensión en 2-4 oraciones, citando valores reales del input.
 
+OBLIGATORIO: debes emitir UNA entrada en el array `dimensions` por CADA
+dimensión presente en `org_analysis.dimension_scores` del input.
+Ninguna dimensión puede quedar sin entrada.
+
+Esto incluye las dimensiones donde NO hay tensión significativa: para
+esas, el `markdown` debe describir brevemente que la dimensión está en
+un estado aceptable según los datos, el `node_ids` puede quedar vacío,
+y el `score`/`std` se copian literal del input.
+
+Ejemplo para una dimensión con score alto y std bajo (situación sana):
+{
+  "dimension": "claridad_de_propositos",
+  "markdown": "score=3.8, std=0.4 — La dimensión reporta alineación estable y sin dispersión significativa entre respondentes. No hay material cualitativo que sugiera tensión en este eje.",
+  "node_ids": [],
+  "score": 3.8,
+  "std": 0.4
+}
+
+No omitas dimensiones. No agrupes. Una entrada por dimensión del input,
+en el mismo orden en que aparecen en `org_analysis.dimension_scores`.
+
 La sección `warnings` describe advertencias metodológicas: cobertura
 baja en ciertos grupos, evidencia insuficiente, dispersión alta que
 invita a interpretar con cautela. Si no hay advertencias materiales,
