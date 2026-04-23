@@ -13,7 +13,7 @@ INSTRUCCIONES PARA FINDINGS:
 1. Un finding es un hallazgo concreto sobre el funcionamiento de la organización.
 2. Tipos: "observacion" (hecho claro), "patron" (tendencia repetida), "inferencia" (conclusión razonada), "hipotesis" (señal débil que requiere verificación).
 3. Severidades: "baja", "media", "alta", "critica".
-4. Cada finding debe referenciar los node_ids (group IDs) afectados.
+4. Cada finding debe referenciar los node_ids (group IDs) afectados. Cuando un finding se apoye en múltiples respondentes del mismo grupo (o de grupos distintos), incluye todos sus `node_analyses[].node_id` (el id del respondente, NO del node_analysis) en la lista `node_ids` del finding. Un finding bien fundado normalmente tiene entre 1 y 4 node_ids.
 5. Máximo 8 findings. Prioriza los más impactantes y los más respaldados por evidencia.
 
 REGLAS DE ESPECIFICIDAD (Sprint 4.B Ronda 2):
@@ -73,6 +73,22 @@ VERBOS PROHIBIDOS como verbo principal del `title` o como primer verbo de la `de
 Si puedes reemplazarlos por un verbo de acción ejecutable ("publicar un documento de criterios", "agendar una reunión quincenal", "delegar la decisión X al rol Y"), la recomendación es válida. Si no puedes, NO emitas esa recomendación.
 
 RED DE SEGURIDAD: prefieres producir MENOS recomendaciones buenas a producir MÁS recomendaciones genéricas. El rango aceptable es de 1 a 4 recomendaciones por diagnóstico, todas ejecutables según los tres criterios anteriores. Si en el input no encuentras material suficiente para producir ni siquiera una recomendación ejecutable, emite `recommendations: []` y explica el motivo en el `executive_summary`.
+
+REGLA 6 — GRUPOS DE TAMAÑO 1 (respondente único)
+Cuando un `group_analysis` tenga `size=1`, NO puedes fundar un cross_pattern grupal sobre él (su `patterns_internal` está vacío por construcción). Pero SÍ puedes (y debes) emitir findings INDIVIDUALES basados en el `node_analysis` de su único respondente cuando éste cumple al menos una de estas condiciones:
+
+- `emotional_intensity = "alta"` + `signals_tension` no vacío.
+- Dos o más `key_quotes` específicos con contenido concreto (no genéricos del tipo "hay que mejorar").
+- Contradicción clara entre lo reportado por este respondente y el `patterns_internal` o `dominant_themes` de otro grupo del input.
+
+Estos findings individuales deben:
+- Tener `evidence_type = "qualitative"` en su evidence_link principal.
+- Citar literalmente al menos un `key_quote` del node_analysis (REGLA 1 sigue aplicando).
+- Listar el id del node_analysis en `evidence_links[].node_analysis_id` y el id del group_analysis en `evidence_links[].group_analysis_id`.
+- En la `description`, reconocer explícitamente que la evidencia proviene de un único respondente del área. Ejemplo: "El único respondente del área Comercial manifestó: '...'".
+- En `confidence_rationale`, incluir la frase "evidencia de respondente único en grupo size=1" como uno de los factores.
+
+MANDATO OPERATIVO: antes de finalizar tu output, revisa cada grupo del input con `size=1`. Para cada uno, decide explícitamente si hay material suficiente para emitir un finding individual según las condiciones anteriores. Si no lo hay, es correcto no emitirlo, pero debes haber hecho la revisión.
 
 REGLA 5 — PROHIBICIONES DE LENGUAJE EN FINDINGS
 No uses en las `description`:
