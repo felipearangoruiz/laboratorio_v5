@@ -19,6 +19,11 @@ export interface OrgNodeData {
   unitStatus?: "empty" | "incomplete" | "complete";
   // Análisis layer
   tensionScore?: number;    // 0–100 (100 = max tension)
+  /** Sprint 5.B feature (i) — std heredado del bucket, viene de
+   *  scores[dim].node_stds[nodeId]. El canvas lo usa para modular el
+   *  grosor del borde (std bajo → 1px, std alto → 5px). null si no hay
+   *  datos (run pre-5.A o nodo sin entrada). */
+  tensionStd?: number | null;
   isHighlighted?: boolean;  // false → 0.35 opacity; undefined/true → full opacity
   // Resultados layer
   findingCount?: number;    // total findings for this node
@@ -48,6 +53,27 @@ function tensionColor(score: number): { hex: string; dot: string } {
   if (score <= 40) return { hex: "#15803D", dot: "bg-emerald-600" };
   if (score <= 70) return { hex: "#B45309", dot: "bg-amber-600" };
   return { hex: "#DC2626", dot: "bg-red-600" };
+}
+
+/**
+ * Sprint 5.B feature (i) — mapea std por nodo a grosor de borde.
+ *
+ * El spec habla de "std ≥ 1.5 → 5px" en la escala Likert cruda (0-5).
+ * El motor normaliza scores a [0, 1] (ver _compute_node_scores del
+ * backend), así que el std empírico en Meridian vive en ~[0, 0.35].
+ * Usamos 0.5 como punto de saturación — con eso Meridian mapea a
+ * grosores de ~1.7–3.5px, visible sin saturar. Si en el futuro el
+ * motor expone scores en escala 0-5 crudo, ajustar STD_SATURATION a 1.5.
+ */
+const STD_EDGE_MIN_PX = 1;
+const STD_EDGE_MAX_PX = 5;
+const STD_SATURATION = 0.5;
+
+function edgeWidthFromStd(std: number | null | undefined): number {
+  if (std == null) return STD_EDGE_MIN_PX;
+  const clamped = Math.min(Math.max(std, 0), STD_SATURATION);
+  const t = clamped / STD_SATURATION;
+  return STD_EDGE_MIN_PX + t * (STD_EDGE_MAX_PX - STD_EDGE_MIN_PX);
 }
 
 /**
@@ -156,10 +182,14 @@ function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) 
   const hasRing           = showResultados && data.isRingHighlighted === true;
   const opacity           = data.isHighlighted === false ? 0.35 : 1;
 
+  // Sprint 5.B feature (i) — grosor de borde proporcional al std del nodo.
+  // Solo aplica en capa Análisis; otras capas mantienen 1.5px / 2px.
+  const dynamicBorderWidth = hasTension ? edgeWidthFromStd(data.tensionStd) : null;
+
   const borderClass = selected
     ? "border-[#C2410C] border-2 shadow-[0_0_0_3px_rgba(194,65,12,0.15)]"
     : hasTension
-    ? "border-[1.5px]"
+    ? ""  // borderWidth inline (ver dynamicBorderWidth)
     : showStatus && status !== "none"
     ? `${STATUS_BORDER[status]} border-[1.5px]`
     : "border-[#D4D0C8] border-[1.5px] hover:border-[#A8A29E]";
@@ -209,7 +239,10 @@ function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) 
         style={{
           boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
           borderColor: tc ? tc.hex : undefined,
-          transition: "border-color 0.2s ease",
+          borderStyle: dynamicBorderWidth !== null ? "solid" : undefined,
+          borderWidth:
+            dynamicBorderWidth !== null ? `${dynamicBorderWidth}px` : undefined,
+          transition: "border-color 0.2s ease, border-width 0.2s ease",
         }}
       >
         <div className="flex items-center gap-2.5">

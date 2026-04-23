@@ -576,14 +576,48 @@ export interface DiagnosisRecommendation {
   horizon?: string;
 }
 
+/** Narrative section with markdown + node_ids (Sprint 5.A).
+ *  Used for each key of DiagnosisResult.narrative_sections. */
+export interface DiagnosisNarrativeSection {
+  markdown: string;
+  node_ids: string[];
+}
+
+export interface DiagnosisNarrativeDimension extends DiagnosisNarrativeSection {
+  dimension: string;
+  score: number;
+  std: number;
+}
+
+export interface DiagnosisNarrativeSections {
+  executive_summary: DiagnosisNarrativeSection;
+  dimensions: DiagnosisNarrativeDimension[];
+  transversal_findings: DiagnosisNarrativeSection;
+  recommendations_summary: DiagnosisNarrativeSection;
+  warnings: DiagnosisNarrativeSection;
+}
+
 export interface DiagnosisResult {
   id: string;
   organization_id: string;
   status: "processing" | "ready" | "failed";
-  scores: Record<string, { score: number; avg: number; std: number; node_scores: Record<string, number> }>;
+  /** Sprint 5.A — `node_stds` hereda el std del bucket (parent) al que
+   *  pertenece el nodo. Ausente en runs pre-5.A. */
+  scores: Record<
+    string,
+    {
+      score: number;
+      avg: number;
+      std: number;
+      node_scores: Record<string, number>;
+      node_stds?: Record<string, number>;
+    }
+  >;
   findings: DiagnosisFinding[];
   recommendations: DiagnosisRecommendation[];
   narrative_md: string;
+  /** Sprint 5.A — narrativa estructurada. null en runs pre-5.A. */
+  narrative_sections?: DiagnosisNarrativeSections | null;
   structure_snapshot: Record<string, unknown>;
   error: string | null;
   created_at: string;

@@ -88,6 +88,37 @@ function computeNodeTension(
   return Math.round(tensionValues.reduce((a, b) => a + b, 0) / tensionValues.length);
 }
 
+/**
+ * Sprint 5.B feature (i) — std por nodo en la dimensión activa (o promedio
+ * si no hay dimensión filtrada). Viene de scores[dim].node_stds[nodeId]
+ * que el backend Sprint 5.A calcula con OPCIÓN 2 (std heredado del bucket).
+ *
+ * Retorna null si no hay datos (runs pre-5.A con scores={}, o dim/nodo
+ * sin entrada). El canvas usa el valor para modular el grosor del borde.
+ */
+function computeNodeStd(
+  nodeId: string,
+  scores: DiagnosisResult["scores"],
+  dimension: string | null,
+): number | null {
+  if (!scores || Object.keys(scores).length === 0) return null;
+
+  if (dimension) {
+    const s = scores[dimension]?.node_stds?.[nodeId];
+    return typeof s === "number" ? s : null;
+  }
+
+  const stdValues = Object.values(scores)
+    .map((d) => {
+      const s = d.node_stds?.[nodeId];
+      return typeof s === "number" ? s : null;
+    })
+    .filter((x): x is number => x !== null);
+
+  if (stdValues.length === 0) return null;
+  return stdValues.reduce((a, b) => a + b, 0) / stdValues.length;
+}
+
 type StructureType = "people" | "areas" | "mixed";
 
 type LegacyLayer = "estructura" | "analisis" | "resultados";
@@ -305,6 +336,7 @@ export default function CanvasPage() {
         // Enrich with tension scores + highlighting for análisis layer
         const enriched = n.map((node) => {
           const tension = computeNodeTension(node.id, diagnosis.scores, activeDimension);
+          const tensionStd = computeNodeStd(node.id, diagnosis.scores, activeDimension);
           let isHighlighted: boolean | undefined = undefined;
 
           if (highlightedNodeIds !== null) {
@@ -315,7 +347,7 @@ export default function CanvasPage() {
 
           return {
             ...node,
-            data: { ...node.data, tensionScore: tension, isHighlighted },
+            data: { ...node.data, tensionScore: tension, tensionStd, isHighlighted },
           };
         });
         setNodes(enriched);
