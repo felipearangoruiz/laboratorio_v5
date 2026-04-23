@@ -12,6 +12,9 @@ interface Props {
   onClose: () => void;
   /** Navega a capa Resultados preservando el nodo activo. */
   onNavigateToResults: (nodeId: string) => void;
+  /** Sprint 5.B feature (ii) — clic en score de dimensión: el canvas
+   *  resalta top-3 de esa dimensión y atenúa el resto. */
+  onDimensionClick?: (dimension: string) => void;
 }
 
 const DIM_LABELS: Record<string, string> = {
@@ -56,6 +59,80 @@ function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
+/**
+ * Sprint 5.B feature (ii) — lista clickeable de scores por dimensión.
+ * Cada fila es un botón: clic dispara onDimensionClick(dim), y el canvas
+ * resalta el top-3 de esa dimensión (lógica en page.tsx vía activeDimension).
+ */
+function DimensionScoresList({
+  dimScores,
+  onDimensionClick,
+}: {
+  dimScores: { dim: string; nodeScore: number; orgAvg: number }[];
+  onDimensionClick?: (dim: string) => void;
+}) {
+  if (dimScores.length === 0) return null;
+  const clickable = typeof onDimensionClick === "function";
+
+  return (
+    <div>
+      <p className="text-xs font-semibold text-warm-700 mb-2.5">Score por dimensión</p>
+      <div className="space-y-2.5">
+        {dimScores.map(({ dim, nodeScore, orgAvg }) => {
+          const pct    = Math.round(Math.min(100, Math.max(0, nodeScore * 20)));
+          const avgPct = Math.round(Math.min(100, Math.max(0, orgAvg * 20)));
+          const diff   = nodeScore - orgAvg;
+          const barColor =
+            nodeScore >= 3.8 ? "bg-emerald-500" : nodeScore >= 2.5 ? "bg-amber-500" : "bg-red-500";
+
+          const content = (
+            <>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] text-warm-600 capitalize">{dimLabel(dim)}</span>
+                <div className="flex items-center gap-1.5">
+                  {diff > 0.05 ? (
+                    <TrendingUp className="w-3 h-3 text-emerald-500" />
+                  ) : diff < -0.05 ? (
+                    <TrendingDown className="w-3 h-3 text-red-500" />
+                  ) : null}
+                  <span className="text-[11px] font-semibold text-warm-900 tabular-nums">
+                    {nodeScore.toFixed(1)}
+                  </span>
+                  <span className="text-[10px] text-warm-400 tabular-nums">
+                    ({diff > 0 ? "+" : ""}{diff.toFixed(1)} vs org)
+                  </span>
+                </div>
+              </div>
+              <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden relative">
+                <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                <div
+                  className="absolute top-0 bottom-0 w-px bg-warm-400/50"
+                  style={{ left: `${avgPct}%` }}
+                  title={`Promedio org: ${orgAvg.toFixed(1)}`}
+                />
+              </div>
+            </>
+          );
+
+          if (!clickable) return <div key={dim}>{content}</div>;
+
+          return (
+            <button
+              key={dim}
+              type="button"
+              onClick={() => onDimensionClick!(dim)}
+              className="w-full text-left cursor-pointer rounded-md px-1 py-0.5 -mx-1 -my-0.5 hover:bg-warm-100 focus:bg-warm-100 focus:outline-none transition-colors"
+              title={`Ver top-3 nodos con más tensión en ${dimLabel(dim)}`}
+            >
+              {content}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function AnalysisNodePanel({
   orgId,
   nodeId,
@@ -63,6 +140,7 @@ export default function AnalysisNodePanel({
   diagnosis,
   onClose,
   onNavigateToResults,
+  onDimensionClick,
 }: Props) {
   const [nodeAnalysis, setNodeAnalysis] = useState<NodeAnalysisRead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -209,6 +287,12 @@ export default function AnalysisNodePanel({
               <ConfidenceBar value={nodeAnalysis.confidence} />
             </div>
 
+            {/* Scores por dimensión — clickeables (Sprint 5.B feature ii) */}
+            <DimensionScoresList
+              dimScores={dimScores}
+              onDimensionClick={onDimensionClick}
+            />
+
             {/* Evidence type / emotional intensity metadata */}
             {(nodeAnalysis.evidence_type || nodeAnalysis.emotional_intensity) && (
               <div className="flex items-center gap-3 text-[10px] text-warm-400">
@@ -248,47 +332,12 @@ export default function AnalysisNodePanel({
                   </p>
                 </div>
 
-                {/* Legacy per-dim bars */}
-                <div>
-                  <p className="text-xs font-semibold text-warm-700 mb-2.5">Score por dimensión</p>
-                  <div className="space-y-2.5">
-                    {dimScores.map(({ dim, nodeScore, orgAvg }) => {
-                      const pct    = Math.round(Math.min(100, Math.max(0, nodeScore * 20)));
-                      const avgPct = Math.round(Math.min(100, Math.max(0, orgAvg * 20)));
-                      const diff   = nodeScore - orgAvg;
-                      const barColor =
-                        nodeScore >= 3.8 ? "bg-emerald-500" : nodeScore >= 2.5 ? "bg-amber-500" : "bg-red-500";
-                      return (
-                        <div key={dim}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[11px] text-warm-600 capitalize">{dimLabel(dim)}</span>
-                            <div className="flex items-center gap-1.5">
-                              {diff > 0.05 ? (
-                                <TrendingUp className="w-3 h-3 text-emerald-500" />
-                              ) : diff < -0.05 ? (
-                                <TrendingDown className="w-3 h-3 text-red-500" />
-                              ) : null}
-                              <span className="text-[11px] font-semibold text-warm-900 tabular-nums">
-                                {nodeScore.toFixed(1)}
-                              </span>
-                              <span className="text-[10px] text-warm-400 tabular-nums">
-                                ({diff > 0 ? "+" : ""}{diff.toFixed(1)} vs org)
-                              </span>
-                            </div>
-                          </div>
-                          <div className="h-1.5 bg-warm-100 rounded-full overflow-hidden relative">
-                            <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-                            <div
-                              className="absolute top-0 bottom-0 w-px bg-warm-400/50"
-                              style={{ left: `${avgPct}%` }}
-                              title={`Promedio org: ${orgAvg.toFixed(1)}`}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                {/* Legacy per-dim bars — reutiliza el mismo componente
+                    clickeable que el path principal. */}
+                <DimensionScoresList
+                  dimScores={dimScores}
+                  onDimensionClick={onDimensionClick}
+                />
               </>
             ) : (
               <div className="text-center py-10 space-y-2">

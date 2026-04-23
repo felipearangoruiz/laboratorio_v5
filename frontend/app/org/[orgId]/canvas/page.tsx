@@ -119,6 +119,41 @@ function computeNodeStd(
   return stdValues.reduce((a, b) => a + b, 0) / stdValues.length;
 }
 
+/**
+ * Sprint 5.B feature (ii) — top-N nodos con mayor tensión en una dimensión.
+ *
+ * Devuelve los node_ids con el score más bajo (= mayor tensión) en la
+ * dimensión dada. Criterio de desempate: std descendente (más dispersión
+ * = más crítico). Si la dimensión no tiene datos o scores está vacío,
+ * retorna array vacío.
+ *
+ * Reemplaza la lógica anterior de "tension > 40" que resaltaba por umbral
+ * fijo — independiente de la distribución real de scores.
+ */
+function topTensionNodes(
+  scores: DiagnosisResult["scores"],
+  dimension: string,
+  n: number = 3,
+): string[] {
+  if (!scores || Object.keys(scores).length === 0) return [];
+  const dimData = scores[dimension];
+  if (!dimData || !dimData.node_scores) return [];
+
+  const entries = Object.entries(dimData.node_scores).map(([nodeId, score]) => ({
+    nodeId,
+    score,
+    std: dimData.node_stds?.[nodeId] ?? 0,
+  }));
+
+  // Score más bajo = más tensión. Tie-breaker: std descendente.
+  entries.sort((a, b) => {
+    if (a.score !== b.score) return a.score - b.score;
+    return b.std - a.std;
+  });
+
+  return entries.slice(0, n).map((e) => e.nodeId);
+}
+
 type StructureType = "people" | "areas" | "mixed";
 
 type LegacyLayer = "estructura" | "analisis" | "resultados";
@@ -333,6 +368,17 @@ export default function CanvasPage() {
       const e = built.edges;
 
       if (activeLayer === "analisis" && diagnosis?.status === "ready") {
+        // Sprint 5.B feature (ii) — si hay una dimensión filtrada, el
+        // highlight se calcula como top-3 por tensión en esa dimensión.
+        // Reemplaza la lógica anterior de umbral fijo (tension > 40).
+        // Si además highlightedNodeIds fue seteado externamente (ej. desde
+        // capa Resultados), ese set domina — es coherente con el patrón
+        // previo.
+        const top3Set: Set<string> | null =
+          highlightedNodeIds === null && activeDimension !== null
+            ? new Set(topTensionNodes(diagnosis.scores, activeDimension, 3))
+            : null;
+
         // Enrich with tension scores + highlighting for análisis layer
         const enriched = n.map((node) => {
           const tension = computeNodeTension(node.id, diagnosis.scores, activeDimension);
@@ -341,8 +387,13 @@ export default function CanvasPage() {
 
           if (highlightedNodeIds !== null) {
             isHighlighted = highlightedNodeIds.has(node.id);
-          } else if (activeDimension !== null && tension !== undefined) {
-            isHighlighted = tension > 40;
+          } else if (top3Set !== null) {
+            // Top-3 hay entradas reales; resaltamos solo esos y atenuamos
+            // el resto. Si el set está vacío (dimensión sin datos) no
+            // atenuamos nada — fallback silencioso.
+            if (top3Set.size > 0) {
+              isHighlighted = top3Set.has(node.id);
+            }
           }
 
           return {
@@ -849,6 +900,14 @@ export default function CanvasPage() {
               diagnosis={diagnosis}
               onClose={() => setSelectedNode(null)}
               onNavigateToResults={navigateToResultsWithNode}
+              onDimensionClick={(dim) => {
+                // Sprint 5.B feature (ii) — clic en score del panel selecciona
+                // la dimensión. El enrich (useEffect de arriba) detecta
+                // activeDimension y calcula top-3; limpiamos highlightedNodeIds
+                // para que la rama de top-3 domine (no una selección previa).
+                setActiveDimension(dim);
+                setHighlightedNodeIds(null);
+              }}
             />
           )}
 
