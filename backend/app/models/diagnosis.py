@@ -59,6 +59,20 @@ class DiagnosisResult(SQLModel, table=True):
         sa_column=Column(Text, nullable=False, server_default=""),
     )
 
+    # Sprint 5.A — narrativa estructurada en 5 secciones para panel expandido.
+    # Shape: {
+    #   executive_summary: {markdown, node_ids},
+    #   dimensions: [{dimension, markdown, node_ids, score, std}],
+    #   transversal_findings: {markdown, node_ids},
+    #   recommendations_summary: {markdown, node_ids},
+    #   warnings: {markdown, node_ids}
+    # }
+    # nullable para retrocompatibilidad con runs anteriores a Sprint 5.A.
+    narrative_sections: dict[str, Any] | None = Field(
+        default=None,
+        sa_column=Column(JSONB, nullable=True),
+    )
+
     # Org graph snapshot at the moment of diagnosis (for historical comparison)
     structure_snapshot: dict[str, Any] = Field(
         default_factory=dict,
@@ -88,6 +102,7 @@ class DiagnosisResultRead(SQLModel):
     findings: list[Any]
     recommendations: list[Any]
     narrative_md: str
+    narrative_sections: dict[str, Any] | None = None
     structure_snapshot: dict[str, Any]
     error: str | None
     created_at: datetime
@@ -103,4 +118,5 @@ class DiagnosisCreate(SQLModel):
     findings: list[Any]
     recommendations: list[Any]
     narrative_md: str
+    narrative_sections: dict[str, Any] | None = None
     structure_snapshot: dict[str, Any]
