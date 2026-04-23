@@ -709,7 +709,12 @@ class EvidenceLinkRead(SQLModel):
 
 
 class EvidenceLinkCreate(SQLModel):
-    finding_id: UUID
+    # Sprint 4.B Ronda 2: finding_id es opcional porque el LLM del Paso 4 no
+    # conoce el UUID del finding cuando emite evidence_links (el finding aún
+    # no existe en BD). El endpoint sobrescribe finding_id con el UUID real
+    # después de crear el finding. La FK en la tabla sigue NOT NULL; se
+    # asigna server-side.
+    finding_id: UUID | None = None
     node_analysis_id: UUID | None = None
     group_analysis_id: UUID | None = None
     quote: str | None = None
