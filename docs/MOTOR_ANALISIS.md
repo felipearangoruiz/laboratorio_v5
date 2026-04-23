@@ -402,6 +402,10 @@ Si responder cualquiera de estas preguntas requiere re-ejecutar el pipeline comp
 
 ## Registro de cambios
 
+- **2026-04-23 — Sprint 4.B Ronda 1 (fundamentación).** Tres intervenciones anti-alucinación sin tocar modelos ni Paso 4:
+  - **Grupos `size=1`:** el Paso 2 inyecta al prompt el `size` del grupo. Si `size == 1`, `patterns_internal=[]` por construcción (defensa en profundidad: el código lo fuerza además del prompt). Elimina la ilusión de "patrones" con `frequency=1` que eran copy-paste del único respondente.
+  - **Paso 3 anti-alucinación:** tres reglas nuevas en `paso3_org.txt`: (A) toda afirmación numérica cita el valor exacto del input (no más "baja cobertura" cuando `coverage=1.0`); (B) los `cross_patterns` requieren evidencia en ≥2 grupos con al menos uno de `size≥2`; (C) grupos `size=1` son voz individual, no patrón grupal.
+  - **Fix `_compute_confidence`:** el flag `has_quanti_quali_convergence` era `bool(f.get("dimensions"))` — siempre True. Ahora compara las `dimensions` del finding contra `dimension_scores` agregados del org_analysis (score<0.50 o std>0.25 → convergencia legítima).
 - **2026-04-23 — Sprint 4.A.** Encadenamiento corregido: cada paso propaga el dict completo del LLM al siguiente, no solo su id. State file gana tres claves nuevas (`node_analyses_full`, `group_analyses_full`, `org_analysis_full`) y rompe retrocompatibilidad con state files anteriores. Payload de POST al backend en Pasos 1 y 2 pasa a usar `node_id` (antes enviaba el obsoleto `group_id`, deuda Sprint 3).
 - **2026-04-22 — Sprint 3.** Rename `group_id` → `node_id` en tablas `node_analyses` y `group_analyses` (migración `20260423_0012`). FK ahora apunta a `nodes(id)`.
 
