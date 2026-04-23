@@ -4,7 +4,12 @@
 > Complementa el PRD v2.1 y CLAUDE.md sección 12.
 > En caso de conflicto, este documento gana para decisiones de implementación del motor.
 
-> **Nota sobre el término "node" (disclaimer):** en este documento "node" se refiere conceptualmente a un respondiente individual (en el nuevo modelo: un `Node` con `type = "person"`). Las tablas `node_analyses` y `group_analyses` mantienen la columna `group_id UUID FK groups.id` por compatibilidad durante el sprint de refactor Node + Edge; los UUIDs se preservan en la migración para que los FKs sigan resolviéndose. Ver `docs/MODEL_PHILOSOPHY.md` §3 para la resolución completa de la ambigüedad de nomenclatura, y `docs/DEUDA_DOCUMENTAL.md` para la deuda técnica de renombrar estos FKs a `node_id` en un sprint posterior.
+> **Nota sobre el término "node":** en este documento "node" se refiere conceptualmente a un respondiente individual (en el modelo actual: un `Node` con `type = "person"`). Desde Sprint 3 (migración `20260423_0012`) las tablas `node_analyses` y `group_analyses` usan la columna `node_id UUID FK nodes.id`, distinguiendo semánticamente qué tipo de nodo referencia cada una:
+>
+> - `node_analyses.node_id` → `nodes` con `type = 'person'` (respondiente, Paso 1 del pipeline).
+> - `group_analyses.node_id` → `nodes` con `type = 'unit'` (grupo/área, Paso 2 del pipeline).
+>
+> Los UUIDs fueron preservados en la migración Sprint 1.2 (`Group.id → Node.id`, `Member.id → Node.id`), así que los análisis históricos siguen resolviéndose sin pérdida. Ver `docs/MODEL_PHILOSOPHY.md` §3 para la resolución completa de la ambigüedad de nomenclatura.
 
 ---
 
@@ -90,7 +95,7 @@ El motor **nunca envía datos crudos al LLM**. Siempre construye representacione
 | id | UUID PK | |
 | run_id | UUID FK analysis_runs | |
 | org_id | UUID FK organizations | |
-| group_id | UUID FK groups | |
+| node_id | UUID FK nodes | Respondiente (`nodes.type = 'person'`). Renombrada desde `group_id` en Sprint 3. |
 | signals_positive | JSONB | Lista de strings |
 | signals_tension | JSONB | Lista de strings |
 | themes | JSONB | Lista de strings |
@@ -111,7 +116,7 @@ El motor **nunca envía datos crudos al LLM**. Siempre construye representacione
 | id | UUID PK | |
 | run_id | UUID FK analysis_runs | |
 | org_id | UUID FK organizations | |
-| group_id | UUID FK groups | |
+| node_id | UUID FK nodes | Grupo/área (`nodes.type = 'unit'`). Renombrada desde `group_id` en Sprint 3. |
 | patterns_internal | JSONB | Convergencias y divergencias dentro del grupo |
 | dominant_themes | JSONB | Lista de strings |
 | tension_level | VARCHAR | `'bajo'`\|`'medio'`\|`'alto'`\|`'critico'` |
@@ -169,7 +174,7 @@ El motor **nunca envía datos crudos al LLM**. Siempre construye representacione
 | type | VARCHAR | `'observacion'`\|`'patron'`\|`'inferencia'`\|`'hipotesis'` |
 | severity | VARCHAR | `'baja'`\|`'media'`\|`'alta'`\|`'critica'` |
 | dimensions | JSONB | Lista de dimension names |
-| node_ids | JSONB | Lista de group UUIDs afectados |
+| node_ids | JSONB | Lista de `nodes.id` UUIDs afectados (units o persons según el hallazgo). UUIDs preservados desde Sprint 1.2 — siempre resolvieron contra `nodes`, la aclaración es post-Sprint 3. |
 | confidence | FLOAT | |
 | confidence_rationale | TEXT | |
 | created_at | TIMESTAMP | |
@@ -190,7 +195,7 @@ El motor **nunca envía datos crudos al LLM**. Siempre construye representacione
 | impact | VARCHAR | `'bajo'`\|`'medio'`\|`'alto'` |
 | effort | VARCHAR | `'bajo'`\|`'medio'`\|`'alto'` |
 | horizon | VARCHAR | `'inmediato'`\|`'corto'`\|`'mediano'`\|`'largo'` |
-| node_ids | JSONB | |
+| node_ids | JSONB | Lista de `nodes.id` UUIDs afectados por la recomendación (ver nota en `findings.node_ids`). |
 | created_at | TIMESTAMP | |
 
 ---
