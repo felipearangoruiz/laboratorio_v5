@@ -107,8 +107,9 @@ def test_downgrade_upgrade_idempotente(_postgres_url: str) -> None:
     cfg.set_main_option("sqlalchemy.url", _postgres_url)
 
     try:
-        # HEAD → -1 (deshace 20260423_0012)
-        command.downgrade(cfg, "-1")
+        # HEAD → antes del rename (deshace 20260423_0012 y cualquier migración
+        # posterior, independientemente de cuántas haya).
+        command.downgrade(cfg, "20260422_0011")
         from sqlalchemy import create_engine
 
         eng = create_engine(_postgres_url, future=True)

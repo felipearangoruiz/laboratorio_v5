@@ -20,6 +20,7 @@ Arquitectura:
 from __future__ import annotations
 
 import math
+import statistics
 from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Annotated, Any
@@ -130,6 +131,89 @@ def _compute_node_scores(
         for dim, vals in dim_scores.items()
         if vals
     }
+
+
+def _compute_diagnosis_scores(
+    groups: list[Group],
+    interviews_with_group: list[tuple[Interview, UUID]],
+) -> dict[str, Any]:
+    """Construye el dict `scores` que persiste DiagnosisResult.
+
+    Sprint 5.A. Shape por dimensión:
+      {
+        score: avg global normalizado [0,1],
+        avg:   alias de score (frontend pre-existente lo consume),
+        std:   desviación estándar global por dimensión,
+        node_scores: {node_id_str: avg del nodo},
+        node_stds:   {node_id_str: std heredado del bucket del nodo},
+      }
+
+    Implementa la **OPCIÓN 2** de Sprint 5.A: cada nodo hereda el std
+    del bucket al que pertenece (parent_group_id si existe, sí mismo si
+    es raíz). Esto captura variación local entre áreas — el frontend la
+    usará para modular la intensidad de borde en la capa Análisis.
+
+    `node_stds` es un campo adicional al contrato frontend histórico;
+    el typing antiguo lo ignora y los consumers nuevos (Sprint 5.B) lo
+    leen explícitamente.
+    """
+    group_parent: dict[UUID, UUID | None] = {g.id: g.parent_group_id for g in groups}
+
+    def bucket_of(gid: UUID) -> UUID:
+        return group_parent.get(gid) or gid
+
+    global_dim_scores: dict[str, list[float]] = defaultdict(list)
+    bucket_dim_scores: dict[UUID, dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    group_dim_scores: dict[UUID, dict[str, list[float]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+
+    for iv, gid in interviews_with_group:
+        # Reutilizamos _compute_node_scores para normalizar la interview
+        # individual a [0,1] por dimensión.
+        iv_scores = _compute_node_scores([iv])
+        bid = bucket_of(gid)
+        for dim, data in iv_scores.items():
+            score = data["score"]
+            global_dim_scores[dim].append(score)
+            bucket_dim_scores[bid][dim].append(score)
+            group_dim_scores[gid][dim].append(score)
+
+    result: dict[str, Any] = {}
+    for dim, vals in global_dim_scores.items():
+        global_avg = sum(vals) / len(vals) if vals else 0.0
+        global_std = statistics.stdev(vals) if len(vals) > 1 else 0.0
+
+        node_scores: dict[str, float] = {}
+        node_stds: dict[str, float] = {}
+        for g in groups:
+            # Score del nodo: promedio de sus interviews en esta dim (si las
+            # tiene; en el modelo actual cada unit respondida es proxy de
+            # 1 interview, así que el promedio es el valor único).
+            gid_scores = group_dim_scores.get(g.id, {}).get(dim)
+            if gid_scores:
+                node_scores[str(g.id)] = round(sum(gid_scores) / len(gid_scores), 4)
+
+            # Std heredado del bucket (OPCIÓN 2). Aplica a todos los nodos,
+            # incluso los que no respondieron ellos mismos, con tal de que
+            # el bucket tenga al menos 2 respuestas.
+            bucket_vals = bucket_dim_scores.get(bucket_of(g.id), {}).get(dim)
+            if bucket_vals and len(bucket_vals) > 1:
+                node_stds[str(g.id)] = round(statistics.stdev(bucket_vals), 4)
+            elif bucket_vals:
+                node_stds[str(g.id)] = 0.0
+
+        result[dim] = {
+            "score": round(global_avg, 4),
+            "avg": round(global_avg, 4),
+            "std": round(global_std, 4),
+            "node_scores": node_scores,
+            "node_stds": node_stds,
+        }
+
+    return result
 
 
 def _extract_open_responses(interviews: list[Interview]) -> list[str]:
@@ -385,6 +469,7 @@ class SubmitFindingsRequest(BaseModel):
     findings: list[FindingWithEvidence]
     recommendations: list[RecommendationIn] = []
     narrative_md: str = ""
+    narrative_sections: dict[str, Any] | None = None
     executive_summary: str = ""
 
 
@@ -501,13 +586,42 @@ def submit_findings(
         for r in saved_recs
     ]
 
+    # ── Sprint 5.A — scores con std heredado del bucket (OPCIÓN 2) ─────
+    # Poblamos el dict `scores` que históricamente quedaba vacío. El
+    # frontend de 5.B lo consumirá para renderizar intensidades por nodo
+    # por dimensión.
+    groups_for_scores = session.exec(
+        select(Group).where(Group.organization_id == run.org_id)
+    ).all()
+    completed_members_scores = session.exec(
+        select(Member).where(
+            Member.organization_id == run.org_id,
+            Member.token_status == MemberTokenStatus.COMPLETED,
+        )
+    ).all()
+    member_group_map_scores = {
+        m.id: m.group_id for m in completed_members_scores if m.group_id
+    }
+    interviews_with_group: list[tuple[Interview, UUID]] = []
+    if member_group_map_scores:
+        ivs = session.exec(
+            select(Interview).where(Interview.member_id.in_(member_group_map_scores.keys()))
+        ).all()
+        for iv in ivs:
+            gid = member_group_map_scores.get(iv.member_id)
+            if gid:
+                interviews_with_group.append((iv, gid))
+
+    scores_dict = _compute_diagnosis_scores(groups_for_scores, interviews_with_group)
+
     diag = DiagnosisResult(
         organization_id=run.org_id,
         status="ready",
-        scores={},          # populated by org_analysis dimension_scores
+        scores=scores_dict,
         findings=findings_payload,
         recommendations=recs_payload,
         narrative_md=body.narrative_md,
+        narrative_sections=body.narrative_sections,
         structure_snapshot={"run_id": str(run_id), "executive_summary": body.executive_summary},
         completed_at=now,
     )
