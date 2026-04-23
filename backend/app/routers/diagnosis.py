@@ -92,6 +92,7 @@ def create_diagnosis(
         findings=body.findings,
         recommendations=body.recommendations,
         narrative_md=body.narrative_md,
+        narrative_sections=body.narrative_sections,
         structure_snapshot=body.structure_snapshot,
         completed_at=datetime.now(timezone.utc),
     )
