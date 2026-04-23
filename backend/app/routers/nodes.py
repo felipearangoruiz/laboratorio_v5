@@ -57,6 +57,16 @@ class NodeUpdate(BaseModel):
     attrs: dict | None = None
 
 
+class NodePosition(BaseModel):
+    id: UUID
+    x: float
+    y: float
+
+
+class BulkNodePositions(BaseModel):
+    positions: list[NodePosition]
+
+
 # ─────────────────────────── Helpers ────────────────────────────
 
 def _can_access_org(user: User, org_id: UUID) -> bool:
@@ -214,6 +224,47 @@ def update_node(
     session.commit()
     session.refresh(node)
     return NodeRead.model_validate(node)
+
+
+@router.patch("/organizations/{org_id}/nodes/positions")
+def bulk_update_node_positions(
+    org_id: UUID,
+    payload: BulkNodePositions,
+    current_user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_session)],
+) -> dict:
+    """Actualiza posiciones de varios nodos de la organización en una
+    sola transacción.
+
+    Soporta tanto `type=unit` como `type=person`. Reemplaza al legacy
+    /organizations/{org_id}/groups/positions, que sólo actualizaba
+    Groups y dejaba los persons sin persistencia en DB.
+
+    Valida que cada nodo pertenezca a la organización del path. Los
+    ids que no pertenezcan a la org (o no existan / estén
+    soft-deleted) se ignoran silenciosamente; el conteo devuelto es
+    el de nodos efectivamente actualizados.
+    """
+    if not _can_access_org(current_user, org_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+
+    updated = 0
+    for pos in payload.positions:
+        node = session.get(Node, pos.id)
+        if node is None or node.deleted_at is not None:
+            continue
+        if node.organization_id != org_id:
+            continue
+        node.position_x = pos.x
+        node.position_y = pos.y
+        session.add(node)
+        updated += 1
+
+    session.commit()
+    return {"updated": updated}
 
 
 @router.delete("/nodes/{node_id}", status_code=status.HTTP_204_NO_CONTENT)
