@@ -16,6 +16,17 @@ Variables de entorno requeridas:
 
 Dependencias:
     pip install openai requests python-dotenv
+
+Encadenamiento entre pasos (Sprint 4.A — 2026-04-23):
+    Cada paso devuelve dos cosas: (a) el id persistido en BD y (b) el
+    dict completo del LLM. El dict completo se acumula en memoria local
+    (state["node_analyses_full"], state["group_analyses_full"],
+    state["org_analysis_full"]) y se inyecta íntegro en el prompt del
+    siguiente paso. Antes del Sprint 4.A solo se propagaban los IDs, lo
+    que dejaba al Paso 4 operando sobre un resumen filtrado del Paso 3.
+
+    Breaking: los state files pre-Sprint 4.A no son retrocompatibles. Un
+    run interrumpido antes del fix debe reiniciarse desde cero.
 """
 from __future__ import annotations
 
@@ -209,12 +220,21 @@ def _run_paso1(
     run_id: str,
     input_data: dict,
     state: dict,
-) -> dict[str, str]:
-    """Procesa cada nodo con entrevista completada. Devuelve {group_id: node_analysis_id}."""
+) -> tuple[dict[str, str], dict[str, dict]]:
+    """Procesa cada nodo con entrevista completada.
+
+    Devuelve:
+      - ids:  {node_uuid: node_analysis_id}           (para reanudación y persistencia)
+      - full: {node_uuid: dict_completo_del_llm}      (contenidos ricos que el Paso 2
+              inyecta íntegros en su prompt; así se cumple el contrato de
+              MOTOR_ANALISIS.md §1)
+    """
     prompt_template = _load_prompt("paso1_nodo.txt")
-    results: dict[str, str] = state.get("node_analyses", {})
+    ids: dict[str, str] = state.get("node_analyses", {})
+    full: dict[str, dict] = state.get("node_analyses_full", {})
 
     nodes = input_data["structure"]["nodes"]
+    node_map = {n["id"]: n for n in nodes}
     interviews_by_node = input_data["interviews"]["by_node"]
     docs = input_data.get("documents", [])
 
@@ -223,7 +243,7 @@ def _run_paso1(
 
     for node in nodes_with_data:
         gid = node["id"]
-        if gid in results:
+        if gid in ids and gid in full:
             _log(f"  ↷ {node['name']} (ya procesado, skip)")
             continue
 
@@ -253,10 +273,12 @@ def _run_paso1(
         _log(f"  → {node['name']} ({MODEL_PASO1})…")
         result = _call_llm(client, MODEL_PASO1, system_prompt, "Analiza este nodo y devuelve el JSON.")
 
-        body = {
-            "run_id": run_id,
-            "org_id": input_data["organization"]["id"],
-            "group_id": gid,
+        content = {
+            "node_id": gid,
+            "node_name": node.get("name"),
+            "node_role": llm_input["node_role"],
+            "node_level": llm_input["node_level"],
+            "parent_id": node.get("parent_id"),
             "signals_positive": result.get("signals_positive", []),
             "signals_tension": result.get("signals_tension", []),
             "themes": result.get("themes", []),
@@ -268,14 +290,42 @@ def _run_paso1(
             "confidence": float(result.get("confidence", 0.5)),
         }
 
+        body = {
+            "run_id": run_id,
+            "org_id": input_data["organization"]["id"],
+            "node_id": gid,
+            "signals_positive": content["signals_positive"],
+            "signals_tension": content["signals_tension"],
+            "themes": content["themes"],
+            "dimensions_touched": content["dimensions_touched"],
+            "evidence_type": content["evidence_type"],
+            "emotional_intensity": content["emotional_intensity"],
+            "key_quotes": content["key_quotes"],
+            "context_notes_used": content["context_notes_used"],
+            "confidence": content["confidence"],
+        }
+
         saved = _post(base_url, f"/analysis/runs/{run_id}/nodes/{gid}", body)
-        results[gid] = saved["id"]
-        state["node_analyses"] = results
+        ids[gid] = saved["id"]
+        content["id"] = saved["id"]
+        full[gid] = content
+        state["node_analyses"] = ids
+        state["node_analyses_full"] = full
         state["step"] = 1
         _save_state(state)
         _log(f"  ✓ {node['name']} → node_analysis {saved['id'][:8]}…")
 
-    return results
+    # Sanity check: la entrada persistida en BD debe tener contraparte en memoria
+    missing = [nid for nid in ids if nid not in full]
+    if missing:
+        # Este caso solo puede ocurrir si se resume un state file mixto
+        # (parcialmente pre-4.A). _load_state ya aborta antes, pero defensivo.
+        raise APIError(
+            f"Inconsistencia en state: {len(missing)} node_analyses sin contenido. "
+            f"Reinicia el run desde cero."
+        )
+
+    return ids, full
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -287,47 +337,44 @@ def _run_paso2(
     base_url: str,
     run_id: str,
     input_data: dict,
-    node_analyses: dict[str, dict],
+    node_analyses_full: dict[str, dict],
     state: dict,
-) -> dict[str, str]:
-    """Agrupa node_analyses por parent_group_id y sintetiza. Devuelve {group_id: group_analysis_id}."""
+) -> tuple[dict[str, str], dict[str, dict]]:
+    """Sintetiza cada grupo inyectando los node_analyses completos del Paso 1.
+
+    Devuelve:
+      - ids:  {group_uuid: group_analysis_id}
+      - full: {group_uuid: dict_completo_del_llm}    (inyectado íntegro al Paso 3)
+    """
     prompt_template = _load_prompt("paso2_grupo.txt")
-    results: dict[str, str] = state.get("group_analyses", {})
+    ids: dict[str, str] = state.get("group_analyses", {})
+    full: dict[str, dict] = state.get("group_analyses_full", {})
 
     nodes = input_data["structure"]["nodes"]
     interviews_by_node = input_data["interviews"]["by_node"]
 
-    # Agrupar nodos por su parent_group_id (o por sí mismos si no tienen parent)
-    # Un "grupo" para el Paso 2 es cualquier nodo que tenga hijos, o el nodo mismo.
-    # Simplificación: agrupamos por parent_id; los huérfanos forman su propio "grupo de 1"
+    # Agrupar nodos por su parent_id (o por sí mismos si no tienen parent)
     groups_map: dict[str, list[dict]] = {}
     for n in nodes:
         pid = n.get("parent_id") or n["id"]
         groups_map.setdefault(pid, []).append(n)
 
-    # También necesitamos los nodos raíz (que tienen hijos) como propios grupos
-    parent_ids = {n.get("parent_id") for n in nodes if n.get("parent_id")}
-    all_group_ids = set(groups_map.keys()) | parent_ids
-
-    # Construir grupos reales: un grupo = un nodo padre + sus hijos directos
-    # Para el análisis, tratamos cada nodo-área como un grupo
     node_map = {n["id"]: n for n in nodes}
 
     _log(f"Paso 2 — {len(groups_map)} grupos a sintetizar")
 
     for group_id, member_nodes in groups_map.items():
-        if group_id in results:
-            grp_name = node_map.get(group_id, {}).get("name", group_id[:8])
+        grp_name = node_map.get(group_id, {}).get("name", group_id[:8])
+
+        if group_id in ids and group_id in full:
             _log(f"  ↷ Grupo '{grp_name}' (ya procesado, skip)")
             continue
 
         group_node = node_map.get(group_id, {})
-        grp_name = group_node.get("name", group_id[:8])
 
-        # Construir node_analyses list para este grupo
         nodes_with_analysis = [
             n for n in member_nodes
-            if n["id"] in node_analyses
+            if n["id"] in node_analyses_full
         ]
 
         if not nodes_with_analysis:
@@ -354,7 +401,8 @@ def _run_paso2(
         llm_input = {
             "group_name": grp_name,
             "group_area": group_node.get("area", ""),
-            "node_analyses": [node_analyses[n["id"]] for n in nodes_with_analysis],
+            # Inyectamos los dicts completos del Paso 1 (no solo IDs).
+            "node_analyses": [node_analyses_full[n["id"]] for n in nodes_with_analysis],
             "quantitative_scores": quantitative_scores,
             "admin_notes": group_node.get("context_notes"),
             "coverage": round(coverage, 3),
@@ -365,27 +413,52 @@ def _run_paso2(
         _log(f"  → Grupo '{grp_name}' ({MODEL_PASO2}, {len(nodes_with_analysis)} nodos)…")
         result = _call_llm(client, MODEL_PASO2, system_prompt, "Sintetiza este grupo y devuelve el JSON.")
 
-        body = {
-            "run_id": run_id,
-            "org_id": input_data["organization"]["id"],
+        content = {
             "group_id": group_id,
+            "group_name": grp_name,
+            "group_area": group_node.get("area", ""),
             "patterns_internal": result.get("patterns_internal", []),
             "dominant_themes": result.get("dominant_themes", []),
             "tension_level": result.get("tension_level", "medio"),
             "scores_by_dimension": result.get("scores_by_dimension", {}),
             "gap_leader_team": result.get("gap_leader_team"),
+            "quantitative_scores": quantitative_scores,
             "coverage": round(coverage, 3),
+            "member_node_ids": [n["id"] for n in nodes_with_analysis],
             "confidence": float(result.get("confidence", 0.5)),
         }
 
+        body = {
+            "run_id": run_id,
+            "org_id": input_data["organization"]["id"],
+            "node_id": group_id,
+            "patterns_internal": content["patterns_internal"],
+            "dominant_themes": content["dominant_themes"],
+            "tension_level": content["tension_level"],
+            "scores_by_dimension": content["scores_by_dimension"],
+            "gap_leader_team": content["gap_leader_team"],
+            "coverage": content["coverage"],
+            "confidence": content["confidence"],
+        }
+
         saved = _post(base_url, f"/analysis/runs/{run_id}/groups/{group_id}", body)
-        results[group_id] = saved["id"]
-        state["group_analyses"] = results
+        ids[group_id] = saved["id"]
+        content["id"] = saved["id"]
+        full[group_id] = content
+        state["group_analyses"] = ids
+        state["group_analyses_full"] = full
         state["step"] = 2
         _save_state(state)
         _log(f"  ✓ Grupo '{grp_name}' → group_analysis {saved['id'][:8]}…")
 
-    return results
+    missing = [gid for gid in ids if gid not in full]
+    if missing:
+        raise APIError(
+            f"Inconsistencia en state: {len(missing)} group_analyses sin contenido. "
+            f"Reinicia el run desde cero."
+        )
+
+    return ids, full
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -397,17 +470,20 @@ def _run_paso3(
     base_url: str,
     run_id: str,
     input_data: dict,
-    group_analyses: dict[str, dict],
+    group_analyses_full: dict[str, dict],
     state: dict,
-) -> str:
-    """Un único prompt con todos los group_analyses. Devuelve org_analysis_id."""
-    if state.get("org_analysis_id"):
+) -> tuple[str, dict]:
+    """Un único prompt con todos los group_analyses completos.
+
+    Devuelve (org_analysis_id, dict_completo_del_llm) para que el Paso 4
+    pueda inyectar el contenido íntegro.
+    """
+    if state.get("org_analysis_id") and state.get("org_analysis_full"):
         _log("Paso 3 — ya completado, skip")
-        return state["org_analysis_id"]
+        return state["org_analysis_id"], state["org_analysis_full"]
 
     prompt_template = _load_prompt("paso3_org.txt")
     org = input_data["organization"]
-    nodes = input_data["structure"]["nodes"]
     interviews_by_node = input_data["interviews"]["by_node"]
 
     # Scores globales por dimensión con std
@@ -426,7 +502,8 @@ def _run_paso3(
     llm_input = {
         "org_name": org["name"],
         "org_structure_type": org.get("org_structure_type", "areas"),
-        "group_analyses": list(group_analyses.values()),
+        # Inyectamos los dicts completos del Paso 2 (no solo IDs).
+        "group_analyses": list(group_analyses_full.values()),
         "dimension_scores": dimension_scores,
         "network_metrics": input_data.get("network_metrics", {}),
         "document_extractions": input_data.get("documents", []),
@@ -455,12 +532,18 @@ def _run_paso3(
 
     saved = _post(base_url, f"/analysis/runs/{run_id}/org", body)
     org_analysis_id = saved["id"]
+    # Guardamos el dict completo + dimension_scores calculados por el motor,
+    # para que el Paso 4 tenga la foto completa en un solo objeto.
+    full = dict(result)
+    full["id"] = org_analysis_id
+    full["dimension_scores"] = dimension_scores
+    full["network_metrics"] = input_data.get("network_metrics", {})
     state["org_analysis_id"] = org_analysis_id
-    state["org_analysis"] = result
+    state["org_analysis_full"] = full
     state["step"] = 3
     _save_state(state)
     _log(f"✓ org_analysis {org_analysis_id[:8]}…")
-    return org_analysis_id
+    return org_analysis_id, full
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -472,27 +555,33 @@ def _run_paso4(
     base_url: str,
     run_id: str,
     input_data: dict,
-    group_analyses: dict[str, dict],
-    org_analysis: dict,
+    group_analyses_full: dict[str, dict],
+    org_analysis_full: dict,
     state: dict,
 ) -> dict:
-    """Síntesis final. Devuelve el response de submit_findings."""
+    """Síntesis final. Devuelve el response de submit_findings.
+
+    Recibe group_analyses_full y org_analysis_full íntegros (no stubs
+    de IDs). Cumple la regla de MOTOR_ANALISIS.md §1 Paso 4: el LLM solo
+    sintetiza, no puede introducir información nueva — y ahora sí tiene
+    la información de los pasos anteriores para sintetizar.
+    """
     if state.get("step", 0) >= 4 and state.get("diagnosis_id"):
         _log("Paso 4 — ya completado, skip")
         return state.get("paso4_result", {})
 
     prompt_template = _load_prompt("paso4_sintesis.txt")
 
-    cross_patterns = [p.get("pattern", "") for p in org_analysis.get("cross_patterns", [])]
+    cross_patterns = [p.get("pattern", "") for p in org_analysis_full.get("cross_patterns", [])]
     contradictions = [
         f"{c.get('formal','')} vs. {c.get('real','')}"
-        for c in org_analysis.get("contradictions", [])
+        for c in org_analysis_full.get("contradictions", [])
     ]
-    structural_risks = [r.get("risk", "") for r in org_analysis.get("structural_risks", [])]
+    structural_risks = [r.get("risk", "") for r in org_analysis_full.get("structural_risks", [])]
 
     llm_input = {
-        "org_analysis": org_analysis,
-        "group_analyses": list(group_analyses.values()),
+        "org_analysis": org_analysis_full,
+        "group_analyses": list(group_analyses_full.values()),
         "top_patterns": cross_patterns[:5],
         "top_contradictions": contradictions[:5],
         "structural_risks": structural_risks[:5],
@@ -579,6 +668,23 @@ def run_pipeline(org_id: str, base_url: str, resume_run_id: str | None = None) -
         if not state:
             print(f"ERROR: No se encontró estado para run_id={resume_run_id}", file=sys.stderr)
             sys.exit(1)
+        # Sprint 4.A — los state files pre-Sprint 4.A solo persistían IDs
+        # (sin los contenidos completos que el encadenamiento actual
+        # necesita). No hay forma segura de reanudar: el Paso 2 requiere
+        # ver los node_analyses del Paso 1 íntegros, y el único sitio donde
+        # viven sin una consulta nueva a BD es el state file.
+        has_step1_done = state.get("step", 0) >= 1 and state.get("node_analyses")
+        has_step2_done = state.get("step", 0) >= 2 and state.get("group_analyses")
+        missing_full_step1 = has_step1_done and not state.get("node_analyses_full")
+        missing_full_step2 = has_step2_done and not state.get("group_analyses_full")
+        if missing_full_step1 or missing_full_step2:
+            print(
+                "ERROR: state file con formato pre-Sprint 4.A detectado "
+                "(solo contiene IDs, sin los contenidos de pasos anteriores). "
+                "Reiniciar el run desde cero — no es retrocompatible.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         run_id = resume_run_id
         _log(f"Resumiendo corrida {run_id} desde paso {state.get('step', 0)}")
     else:
@@ -613,8 +719,11 @@ def run_pipeline(org_id: str, base_url: str, resume_run_id: str | None = None) -
             "org_id": org_id,
             "step": 0,
             "node_analyses": {},
+            "node_analyses_full": {},
             "group_analyses": {},
+            "group_analyses_full": {},
             "org_analysis_id": None,
+            "org_analysis_full": None,
         }
         _save_state(state)
         _log(f"Corrida abierta: {run_id}")
@@ -622,36 +731,33 @@ def run_pipeline(org_id: str, base_url: str, resume_run_id: str | None = None) -
     print()
 
     # ── Paso 1 ────────────────────────────────────────────────────────
-    node_analysis_ids = _run_paso1(client, base_url, run_id, input_data, state)
-    # Reconstruir objetos para pasar al paso 2
-    node_analysis_objs: dict[str, dict] = {}
-    for gid, na_id in node_analysis_ids.items():
-        node_analysis_objs[gid] = {"id": na_id, "group_id": gid}
+    node_analysis_ids, node_analyses_full = _run_paso1(
+        client, base_url, run_id, input_data, state
+    )
 
     print()
 
     # ── Paso 2 ────────────────────────────────────────────────────────
-    # Para el paso 2 necesitamos pasar los objetos completos de node_analysis
-    # Los recuperamos del estado (se guardaron como IDs; construimos objetos mínimos)
-    group_analysis_ids = _run_paso2(
-        client, base_url, run_id, input_data, node_analysis_objs, state
+    # Inyecta node_analyses completos (no IDs).
+    group_analysis_ids, group_analyses_full = _run_paso2(
+        client, base_url, run_id, input_data, node_analyses_full, state
     )
-    group_analysis_objs: dict[str, dict] = {
-        gid: {"id": ga_id, "group_id": gid}
-        for gid, ga_id in group_analysis_ids.items()
-    }
 
     print()
 
     # ── Paso 3 ────────────────────────────────────────────────────────
-    _run_paso3(client, base_url, run_id, input_data, group_analysis_objs, state)
-    org_analysis = state.get("org_analysis", {})
+    # Inyecta group_analyses completos (no IDs).
+    _, org_analysis_full = _run_paso3(
+        client, base_url, run_id, input_data, group_analyses_full, state
+    )
 
     print()
 
     # ── Paso 4 ────────────────────────────────────────────────────────
+    # Inyecta group_analyses_full y org_analysis_full íntegros.
     final = _run_paso4(
-        client, base_url, run_id, input_data, group_analysis_objs, org_analysis, state
+        client, base_url, run_id, input_data,
+        group_analyses_full, org_analysis_full, state,
     )
 
     print()
