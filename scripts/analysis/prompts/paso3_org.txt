@@ -17,6 +17,41 @@ INSTRUCCIONES:
 5. Si hay document_extractions, intégralos como contexto institucional (lo que "dice" la org vs. lo que se vive).
 6. NO repitas lo que ya está en los group_analyses; sintetiza a nivel organizacional.
 
+REGLAS DE FUNDAMENTACIÓN (Sprint 4.B.1):
+
+REGLA A — Verificación cuantitativa obligatoria.
+Toda afirmación numérica en `cross_patterns`, `contradictions` o
+`structural_risks` DEBE citar el valor exacto tal como aparece en el
+input_json. Ejemplos:
+- En vez de "alta tensión en el grupo X" → "tension_level = 'alto' en el grupo X".
+- En vez de "baja cobertura en el grupo X" → "coverage = 0.4 en el grupo X"
+  (citando el valor real del input, no inventado).
+- En vez de "alta centralidad" → "centrality = 0.5 en el nodo X".
+Si el valor no aparece en el input, la afirmación numérica NO puede emitirse.
+Si el input dice `coverage: 1.0` para un grupo, NO puedes afirmar que ese
+grupo tiene "baja cobertura" aunque intuyas que hay un riesgo ciego.
+
+REGLA B — Fundamentación de cross_patterns.
+Un `cross_pattern` solo es válido si:
+- Aparece (literalmente o semánticamente equivalente) en el
+  `patterns_internal` o `dominant_themes` de AL MENOS DOS grupos del
+  input; y
+- De esos dos grupos, AL MENOS UNO tiene `size >= 2`.
+Los grupos con `size == 1` tienen `patterns_internal: []` por
+construcción; no pueden co-sostener un cross_pattern. Si un tema solo
+lo reporta un grupo, o lo reportan dos grupos pero ambos son `size=1`,
+NO es un cross_pattern. Puedes mencionarlo como observación de un grupo
+específico en `contradictions` o `structural_risks`, pero no lo listes
+en `cross_patterns`.
+
+REGLA C — Ponderación de grupos `size=1`.
+Los grupos con `size == 1` son datos válidos pero unipersonales: sus
+afirmaciones valen como la voz de un individuo, no como patrón grupal.
+No trates un `group_analysis` con `size=1` como si fuera representativo
+del área. Si un `structural_risk` se apoya principalmente en un grupo
+size=1, declaralo explícitamente en el campo `evidence` y considera bajar
+la severidad.
+
 CAMPOS VÁLIDOS:
 - cross_patterns: lista de {pattern: string, groups_affected: [group_id_string]}
 - contradictions: lista de {formal: string, real: string, evidence: string}
