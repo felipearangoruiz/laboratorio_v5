@@ -5,16 +5,16 @@ Prueba CRÍTICA: el motor de análisis (pipeline externo + endpoints
 
 Por qué es crítica
 ──────────────────
-`NodeAnalysis.group_id` es un FK a `groups.id`. La migración preserva los
-UUIDs (Group.id → Node.id), por lo que ese mismo UUID también existe en
-la nueva tabla `nodes`. Este test ejecuta el pipeline COMPLETO sobre datos
-recién migrados y valida que:
+`NodeAnalysis.node_id` (renombrada desde `group_id` en Sprint 3) es un
+FK a `nodes.id`. La migración Sprint 1.2 preserva los UUIDs (Group.id →
+Node.id), por lo que los análisis históricos siguen resolviendo. Este
+test ejecuta el pipeline COMPLETO sobre datos recién migrados y valida:
 
-- POST /runs → POST /nodes/{group_id} → POST /groups/{group_id}
+- POST /runs → POST /nodes/{node_id} → POST /groups/{node_id}
   → POST /org → POST /findings todos responden 2xx.
-- `NodeAnalysis.group_id` apunta a un UUID que existe tanto en `groups`
-  como en `nodes` (invariante de UUID preservado).
-- GET /analysis/latest/nodes/{group_id} devuelve lo grabado.
+- `NodeAnalysis.node_id` apunta a un UUID que existe tanto en `nodes`
+  como en `groups` (UUID preservado Sprint 1.2).
+- GET /analysis/latest/nodes/{node_id} devuelve lo grabado.
 
 Mock del LLM
 ────────────
@@ -172,18 +172,18 @@ def test_pipeline_completo_post_migracion(
 
     # 2. Paso 1 — NodeAnalysis
     payload = _load("node_analysis.json")
-    payload.update({"run_id": run_id, "org_id": str(org.id), "group_id": str(group.id)})
+    payload.update({"run_id": run_id, "org_id": str(org.id), "node_id": str(group.id)})
     r = client.post(
         f"/analysis/runs/{run_id}/nodes/{group.id}",
         json=payload,
         headers=headers,
     )
     assert r.status_code == 201, r.text
-    assert r.json()["group_id"] == str(group.id)
+    assert r.json()["node_id"] == str(group.id)
 
     # 3. Paso 2 — GroupAnalysis
     payload = _load("group_analysis.json")
-    payload.update({"run_id": run_id, "org_id": str(org.id), "group_id": str(group.id)})
+    payload.update({"run_id": run_id, "org_id": str(org.id), "node_id": str(group.id)})
     r = client.post(
         f"/analysis/runs/{run_id}/groups/{group.id}",
         json=payload,
@@ -215,10 +215,11 @@ def test_pipeline_completo_post_migracion(
     assert body["recommendations_created"] == 1
 
 
-def test_node_analysis_group_id_existe_en_groups_y_nodes(
+def test_node_analysis_node_id_existe_en_groups_y_nodes(
     client: TestClient, session: Session, migrated_scenario: dict
 ) -> None:
-    """INVARIANTE UUID: NodeAnalysis.group_id debe existir en `groups` y `nodes`."""
+    """INVARIANTE UUID: NodeAnalysis.node_id resuelve en `nodes` y el mismo
+    UUID sigue existiendo en `groups` (mirror legacy preservado)."""
     org = migrated_scenario["org"]
     user = migrated_scenario["user"]
     group = migrated_scenario["group"]
@@ -233,23 +234,25 @@ def test_node_analysis_group_id_existe_en_groups_y_nodes(
     run_id = r.json()["run_id"]
 
     payload = _load("node_analysis.json")
-    payload.update({"run_id": run_id, "org_id": str(org.id), "group_id": str(group.id)})
+    payload.update({"run_id": run_id, "org_id": str(org.id), "node_id": str(group.id)})
     r = client.post(
         f"/analysis/runs/{run_id}/nodes/{group.id}",
         json=payload,
         headers=headers,
     )
     assert r.status_code == 201, r.text
-    saved_group_id = r.json()["group_id"]
+    saved_node_id = r.json()["node_id"]
 
-    # Comprobar que el mismo UUID existe en AMBAS tablas
+    # Comprobar que el mismo UUID existe en AMBAS tablas (invariante
+    # preservada: la FK post-Sprint 3 apunta a `nodes`, pero `groups`
+    # sigue con el mismo UUID porque es el mirror legacy).
     in_groups = session.exec(
-        text(f"SELECT 1 FROM groups WHERE id = '{saved_group_id}'")
+        text(f"SELECT 1 FROM groups WHERE id = '{saved_node_id}'")
     ).first()
     in_nodes = session.exec(
-        text(f"SELECT 1 FROM nodes WHERE id = '{saved_group_id}'")
+        text(f"SELECT 1 FROM nodes WHERE id = '{saved_node_id}'")
     ).first()
-    assert in_groups is not None, "group_id no existe en groups tras crear NodeAnalysis"
+    assert in_groups is not None, "UUID ausente en groups tras crear NodeAnalysis"
     assert in_nodes is not None, "UUID no preservado: ausente en la tabla nodes"
 
     # Y verificamos vía ORM que el Node correspondiente es un unit
@@ -261,7 +264,7 @@ def test_node_analysis_group_id_existe_en_groups_y_nodes(
 def test_get_latest_node_analysis_funciona_post_migracion(
     client: TestClient, session: Session, migrated_scenario: dict
 ) -> None:
-    """El endpoint de lectura `latest/nodes/{group_id}` consulta group_id sin romperse."""
+    """El endpoint de lectura `latest/nodes/{node_id}` consulta node_id sin romperse."""
     org = migrated_scenario["org"]
     user = migrated_scenario["user"]
     group = migrated_scenario["group"]
@@ -276,7 +279,7 @@ def test_get_latest_node_analysis_funciona_post_migracion(
     run_id = r.json()["run_id"]
 
     payload_node = _load("node_analysis.json")
-    payload_node.update({"run_id": run_id, "org_id": str(org.id), "group_id": str(group.id)})
+    payload_node.update({"run_id": run_id, "org_id": str(org.id), "node_id": str(group.id)})
     client.post(
         f"/analysis/runs/{run_id}/nodes/{group.id}",
         json=payload_node, headers=headers,
@@ -298,7 +301,7 @@ def test_get_latest_node_analysis_funciona_post_migracion(
     assert r.status_code == 200, r.text
     data = r.json()
     assert data is not None
-    assert data["group_id"] == str(group.id)
+    assert data["node_id"] == str(group.id)
     assert data["themes"] == payload_node["themes"]
 
 

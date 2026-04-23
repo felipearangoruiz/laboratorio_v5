@@ -203,6 +203,17 @@ def test_compat_delete_group_con_analisis_devuelve_409(
     admin = seeded["admin"]
     root = seeded["root"]
 
+    # El fixture crea el Group directamente en DB (sin pasar por el router),
+    # así que no hay Node espejo. Creamos uno ad-hoc con el mismo UUID para
+    # satisfacer la FK post-Sprint 3 (node_analyses.node_id → nodes.id).
+    session.execute(
+        text("""
+            INSERT INTO nodes (id, organization_id, type, name, position_x, position_y, created_at)
+            VALUES (:id, :oid, 'unit', :name, 0, 0, now())
+        """),
+        {"id": str(root.id), "oid": str(seeded["org"].id), "name": root.name},
+    )
+
     # Crear AnalysisRun + NodeAnalysis que referencian root.id
     session.execute(
         text("""
@@ -217,7 +228,7 @@ def test_compat_delete_group_con_analisis_devuelve_409(
     ).scalar_one()
     session.execute(
         text("""
-            INSERT INTO node_analyses (id, run_id, org_id, group_id, created_at)
+            INSERT INTO node_analyses (id, run_id, org_id, node_id, created_at)
             VALUES (:nid, :rid, :oid, :gid, now())
         """),
         {
@@ -278,20 +289,30 @@ def test_compat_delete_member_con_analisis_devuelve_409(
     session.commit()
     session.refresh(member)
 
-    # El motor referencia via group_id (FK a groups). Aquí emulamos creando
-    # un group fantasma con el mismo UUID del member y NodeAnalysis hacia él.
-    # Más simple: creamos NodeAnalysis cuyo group_id = member.id, pero
-    # `group_id` FK → groups, así que debemos insertar un group con ese UUID.
-    # En producción, UUIDs preservados garantizan member.id también está en
-    # `nodes` — pero NodeAnalysis.group_id apunta a `groups`. Por el FK,
-    # necesitamos insertar en groups con member.id.
+    # El Member se creó directo en DB (sin mirror al espejado por router).
+    # Post-Sprint 3 la FK node_analyses.node_id → nodes(id), así que
+    # necesitamos un Node(person) con el UUID del member para satisfacerla.
+    # También creamos el parent unit (usando root.id ≠ member.id) para no
+    # violar la invariante 3 (person requiere parent unit).
     session.execute(
         text("""
-            INSERT INTO groups (id, organization_id, name, description, node_type,
-                               position_x, position_y, created_at, tarea_general, email, area)
-            VALUES (:gid, :oid, 'ghost-for-member', '', 'area', 0, 0, now(), '', '', '')
+            INSERT INTO nodes (id, organization_id, type, name, position_x, position_y, created_at)
+            VALUES (:id, :oid, 'unit', 'root-mirror', 0, 0, now())
         """),
-        {"gid": str(member.id), "oid": str(seeded["org"].id)},
+        {"id": str(seeded["root"].id), "oid": str(seeded["org"].id)},
+    )
+    session.execute(
+        text("""
+            INSERT INTO nodes (id, organization_id, parent_node_id, type, name,
+                              position_x, position_y, created_at)
+            VALUES (:id, :oid, :parent, 'person', :name, 0, 0, now())
+        """),
+        {
+            "id": str(member.id),
+            "oid": str(seeded["org"].id),
+            "parent": str(seeded["root"].id),
+            "name": member.name,
+        },
     )
     session.execute(
         text("""
@@ -306,7 +327,7 @@ def test_compat_delete_member_con_analisis_devuelve_409(
     ).scalar_one()
     session.execute(
         text("""
-            INSERT INTO node_analyses (id, run_id, org_id, group_id, created_at)
+            INSERT INTO node_analyses (id, run_id, org_id, node_id, created_at)
             VALUES (:nid, :rid, :oid, :gid, now())
         """),
         {
