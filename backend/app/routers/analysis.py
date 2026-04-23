@@ -7,15 +7,15 @@ Arquitectura:
   Flujo de una corrida:
     1. POST /organizations/{org_id}/analysis/runs          → abre la corrida
     2. GET  /organizations/{org_id}/analysis/input         → descarga todo el contexto
-    3. POST /analysis/runs/{run_id}/nodes/{group_id}       → Paso 1 (×N nodos)
-    4. POST /analysis/runs/{run_id}/groups/{group_id}      → Paso 2 (×G grupos)
+    3. POST /analysis/runs/{run_id}/nodes/{node_id}        → Paso 1 (×N nodos)
+    4. POST /analysis/runs/{run_id}/groups/{node_id}       → Paso 2 (×G grupos)
     5. POST /analysis/runs/{run_id}/org                    → Paso 3
     6. POST /analysis/runs/{run_id}/findings               → Paso 4 + cierra corrida
 
   El frontend consulta:
     GET /organizations/{org_id}/analysis/status
-    GET /organizations/{org_id}/analysis/latest/nodes/{group_id}
-    GET /organizations/{org_id}/analysis/latest/groups/{group_id}
+    GET /organizations/{org_id}/analysis/latest/nodes/{node_id}
+    GET /organizations/{org_id}/analysis/latest/groups/{node_id}
 """
 from __future__ import annotations
 
@@ -241,14 +241,14 @@ def create_run(
 # ── 2. Guardar node_analysis (Paso 1) ────────────────────────────────────────
 
 @router.post(
-    "/analysis/runs/{run_id}/nodes/{group_id}",
+    "/analysis/runs/{run_id}/nodes/{node_id}",
     response_model=NodeAnalysisRead,
     status_code=status.HTTP_201_CREATED,
     tags=["analysis"],
 )
 def create_node_analysis(
     run_id: UUID,
-    group_id: UUID,
+    node_id: UUID,
     body: NodeAnalysisCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
@@ -261,7 +261,7 @@ def create_node_analysis(
     node = NodeAnalysis(
         run_id=run_id,
         org_id=run.org_id,
-        group_id=group_id,
+        node_id=node_id,
         signals_positive=body.signals_positive,
         signals_tension=body.signals_tension,
         themes=body.themes,
@@ -282,14 +282,14 @@ def create_node_analysis(
 # ── 3. Guardar group_analysis (Paso 2) ───────────────────────────────────────
 
 @router.post(
-    "/analysis/runs/{run_id}/groups/{group_id}",
+    "/analysis/runs/{run_id}/groups/{node_id}",
     response_model=GroupAnalysisRead,
     status_code=status.HTTP_201_CREATED,
     tags=["analysis"],
 )
 def create_group_analysis(
     run_id: UUID,
-    group_id: UUID,
+    node_id: UUID,
     body: GroupAnalysisCreate,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
@@ -302,7 +302,7 @@ def create_group_analysis(
     ga = GroupAnalysis(
         run_id=run_id,
         org_id=run.org_id,
-        group_id=group_id,
+        node_id=node_id,
         patterns_internal=body.patterns_internal,
         dominant_themes=body.dominant_themes,
         tension_level=body.tension_level,
@@ -740,16 +740,16 @@ def get_analysis_input(
     }
 
 
-# ── GET /organizations/{org_id}/analysis/latest/nodes/{group_id} ─────────────
+# ── GET /organizations/{org_id}/analysis/latest/nodes/{node_id} ──────────────
 
 @router.get(
-    "/organizations/{org_id}/analysis/latest/nodes/{group_id}",
+    "/organizations/{org_id}/analysis/latest/nodes/{node_id}",
     response_model=NodeAnalysisRead | None,
     tags=["analysis"],
 )
 def get_latest_node_analysis(
     org_id: UUID,
-    group_id: UUID,
+    node_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
 ) -> NodeAnalysisRead | None:
@@ -773,22 +773,22 @@ def get_latest_node_analysis(
 
     node = session.exec(
         select(NodeAnalysis)
-        .where(NodeAnalysis.run_id == run.id, NodeAnalysis.group_id == group_id)
+        .where(NodeAnalysis.run_id == run.id, NodeAnalysis.node_id == node_id)
     ).first()
 
     return NodeAnalysisRead.model_validate(node) if node else None
 
 
-# ── GET /organizations/{org_id}/analysis/latest/groups/{group_id} ────────────
+# ── GET /organizations/{org_id}/analysis/latest/groups/{node_id} ─────────────
 
 @router.get(
-    "/organizations/{org_id}/analysis/latest/groups/{group_id}",
+    "/organizations/{org_id}/analysis/latest/groups/{node_id}",
     response_model=GroupAnalysisRead | None,
     tags=["analysis"],
 )
 def get_latest_group_analysis(
     org_id: UUID,
-    group_id: UUID,
+    node_id: UUID,
     current_user: Annotated[User, Depends(get_current_user)],
     session: Session = Depends(get_session),
 ) -> GroupAnalysisRead | None:
@@ -810,7 +810,7 @@ def get_latest_group_analysis(
 
     ga = session.exec(
         select(GroupAnalysis)
-        .where(GroupAnalysis.run_id == run.id, GroupAnalysis.group_id == group_id)
+        .where(GroupAnalysis.run_id == run.id, GroupAnalysis.node_id == node_id)
     ).first()
 
     return GroupAnalysisRead.model_validate(ga) if ga else None

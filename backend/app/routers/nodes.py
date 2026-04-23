@@ -294,14 +294,15 @@ def delete_node(
             detail="Node has interview data in closed campaigns; cannot delete",
         )
 
-    # Step 2 — motor de análisis (UUID preservado entre groups/nodes)
+    # Step 2 — motor de análisis. Desde Sprint 3 la FK se llama `node_id`
+    # (antes `group_id`). UUIDs preservados desde Sprint 1.2.
     try:
         n_analyses = session.execute(
-            text("SELECT COUNT(*) FROM node_analyses WHERE group_id = :nid"),
+            text("SELECT COUNT(*) FROM node_analyses WHERE node_id = :nid"),
             {"nid": str(node_id)},
         ).scalar_one()
         g_analyses = session.execute(
-            text("SELECT COUNT(*) FROM group_analyses WHERE group_id = :nid"),
+            text("SELECT COUNT(*) FROM group_analyses WHERE node_id = :nid"),
             {"nid": str(node_id)},
         ).scalar_one()
     except Exception:

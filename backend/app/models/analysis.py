@@ -113,10 +113,13 @@ class NodeAnalysis(SQLModel, table=True):
             nullable=False,
         )
     )
-    group_id: UUID = Field(
+    node_id: UUID = Field(
+        # Paso 1 — referencia al respondiente (nodes.type = 'person').
+        # Renombrada desde `group_id` en Sprint 3; FK ahora apunta a
+        # `nodes(id)` (ver migración 20260423_0012).
         sa_column=Column(
             PGUUID(as_uuid=True),
-            ForeignKey("groups.id", ondelete="CASCADE"),
+            ForeignKey("nodes.id", ondelete="CASCADE"),
             nullable=False,
         )
     )
@@ -168,7 +171,7 @@ class NodeAnalysisRead(SQLModel):
     id: UUID
     run_id: UUID
     org_id: UUID
-    group_id: UUID
+    node_id: UUID
     signals_positive: list[Any]
     signals_tension: list[Any]
     themes: list[Any]
@@ -184,7 +187,7 @@ class NodeAnalysisRead(SQLModel):
 class NodeAnalysisCreate(SQLModel):
     run_id: UUID
     org_id: UUID
-    group_id: UUID
+    node_id: UUID
     signals_positive: list[str] = []
     signals_tension: list[str] = []
     themes: list[str] = []
@@ -221,10 +224,13 @@ class GroupAnalysis(SQLModel, table=True):
             nullable=False,
         )
     )
-    group_id: UUID = Field(
+    node_id: UUID = Field(
+        # Paso 2 — referencia al grupo/área (nodes.type = 'unit').
+        # Renombrada desde `group_id` en Sprint 3; FK ahora apunta a
+        # `nodes(id)` (ver migración 20260423_0012).
         sa_column=Column(
             PGUUID(as_uuid=True),
-            ForeignKey("groups.id", ondelete="CASCADE"),
+            ForeignKey("nodes.id", ondelete="CASCADE"),
             nullable=False,
         )
     )
@@ -269,7 +275,7 @@ class GroupAnalysisRead(SQLModel):
     id: UUID
     run_id: UUID
     org_id: UUID
-    group_id: UUID
+    node_id: UUID
     patterns_internal: list[Any]
     dominant_themes: list[Any]
     tension_level: str | None
@@ -283,7 +289,7 @@ class GroupAnalysisRead(SQLModel):
 class GroupAnalysisCreate(SQLModel):
     run_id: UUID
     org_id: UUID
-    group_id: UUID
+    node_id: UUID
     patterns_internal: list[Any] = []
     dominant_themes: list[str] = []
     tension_level: str | None = None
@@ -504,7 +510,8 @@ class Finding(SQLModel, table=True):
         default_factory=list,
         sa_column=Column(JSONB, nullable=False, server_default="[]"),
     )
-    # list of group UUIDs affected
+    # list of nodes.id UUIDs affected (units o persons según el hallazgo).
+    # UUIDs preservados Sprint 1.2 → coinciden con nodes.id desde siempre.
     node_ids: list[Any] = Field(
         default_factory=list,
         sa_column=Column(JSONB, nullable=False, server_default="[]"),

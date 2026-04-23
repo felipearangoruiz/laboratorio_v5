@@ -589,16 +589,18 @@ def validate_migration(
     n_states = conn.execute(text("SELECT COUNT(*) FROM node_states")).scalar_one()
     chk("(c) interviews == node_states+discarded_D2", interviews_total, n_states + interviews_discarded)
 
-    # (d) node_analyses FKs → no orphans in nodes
+    # (d) node_analyses FKs → no orphans in nodes.
+    # Desde Sprint 3 la columna se llama `node_id` (antes `group_id`);
+    # la FK apunta directamente a `nodes(id)`.
     orphans = conn.execute(
         text("""
             SELECT COUNT(*)
             FROM node_analyses na
-            LEFT JOIN nodes n ON n.id = na.group_id
+            LEFT JOIN nodes n ON n.id = na.node_id
             WHERE n.id IS NULL
         """)
     ).scalar_one()
-    chk("(d) node_analyses.group_id FKs válidas (orphans==0)", 0, orphans)
+    chk("(d) node_analyses.node_id FKs válidas (orphans==0)", 0, orphans)
 
     # (e) & (f) motor tables unchanged
     for table in MOTOR_TABLES:

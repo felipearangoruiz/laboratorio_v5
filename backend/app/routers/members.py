@@ -10,9 +10,9 @@ migrar a /nodes, /edges, /node-states, /campaigns.
 
 Eliminar este router cuando:
   - El frontend no llame a ningún endpoint legacy.
-  - El motor de análisis haya migrado sus FKs de
-    node_analyses.group_id → node_analyses.node_id
-    (deuda en DEUDA_DOCUMENTAL.md).
+  - (Sprint 3 cerrado: el motor de análisis ya apunta a
+    `node_analyses.node_id` / `group_analyses.node_id`, FKs a
+    `nodes.id`; ver migración 20260423_0012.)
 
 Política de espejado:
   - POST /members           → INSERT Member + INSERT Node (mismo UUID, person).
@@ -220,18 +220,18 @@ def _mirror_member_to_node_on_delete(session: Session, member_id: UUID) -> None:
 def _count_analyses_for_uuid(session: Session, target_id: UUID) -> int:
     """Cuenta análisis que referencian este UUID.
 
-    node_analyses.group_id acepta UUIDs tanto de Groups como de Members
-    (naming legacy — ver MOTOR_ANALISIS.md disclaimer). Ambos casos se
-    cuentan usando la misma columna `group_id` porque los UUIDs son
-    globalmente únicos.
+    Desde Sprint 3 la FK del motor se llama `node_id` (antes `group_id`).
+    UUIDs globalmente únicos: el mismo UUID puede provenir de un Group
+    legacy o de un Member legacy; ambos quedaron preservados en `nodes`
+    durante la migración Sprint 1.2.
     """
     try:
         n = session.execute(
-            text("SELECT COUNT(*) FROM node_analyses WHERE group_id = :uid"),
+            text("SELECT COUNT(*) FROM node_analyses WHERE node_id = :uid"),
             {"uid": str(target_id)},
         ).scalar_one()
         g = session.execute(
-            text("SELECT COUNT(*) FROM group_analyses WHERE group_id = :uid"),
+            text("SELECT COUNT(*) FROM group_analyses WHERE node_id = :uid"),
             {"uid": str(target_id)},
         ).scalar_one()
     except Exception:
