@@ -278,6 +278,11 @@ export default function CanvasPage() {
   // del panel para ver el top-3 pulsar en canvas sin fijar estado.
   const [hoveredDimension,  setHoveredDimension]  = useState<string | null>(null);
   const [showNarrative,     setShowNarrative]     = useState(false);
+  // Sprint 5.C feature (iii) — deep-link por finding al panel narrativo.
+  // Cuando ResultsNodePanel invoca "Ver en diagnóstico" sobre un finding
+  // específico, guardamos el id para que NarrativePanel scrollée + expanda
+  // ese finding al montarse.
+  const [narrativeTargetFindingId, setNarrativeTargetFindingId] = useState<string | null>(null);
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string> | null>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -1032,7 +1037,10 @@ export default function CanvasPage() {
               nodeName={selectedNodeData.data.label}
               diagnosis={diagnosis}
               onClose={() => setSelectedNode(null)}
-              onViewNarrative={() => setShowNarrative(true)}
+              onViewNarrative={(findingId) => {
+                setNarrativeTargetFindingId(findingId ?? null);
+                setShowNarrative(true);
+              }}
             />
           )}
 
@@ -1042,6 +1050,7 @@ export default function CanvasPage() {
           {(activeLayer === "resultados" || showNarrative) && diagnosis && (
             <NarrativePanel
               diagnosis={diagnosis}
+              targetFindingId={narrativeTargetFindingId}
               onClose={() => {
                 if (showNarrative) {
                   setShowNarrative(false);
@@ -1049,6 +1058,7 @@ export default function CanvasPage() {
                   setActiveLayer("estructura");
                 }
                 setHighlightedNodeIds(null);
+                setNarrativeTargetFindingId(null);
               }}
               onHighlightNodes={
                 showNarrative ? handleHighlightNodes : handleHighlightNodesInMap

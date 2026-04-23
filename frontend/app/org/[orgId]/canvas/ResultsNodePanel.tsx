@@ -16,7 +16,10 @@ interface Props {
   nodeName: string;
   diagnosis: DiagnosisResult;
   onClose: () => void;
-  onViewNarrative: () => void;
+  /** Sprint 5.C feature (iii) — acepta un findingId opcional para
+   *  deep-link: si se pasa, NarrativePanel abre con scroll + expand
+   *  automático hacia ese finding. Sin argumento, abre al inicio. */
+  onViewNarrative: (findingId?: string) => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -200,6 +203,17 @@ export default function ResultsNodePanel({
                             </span>
                           )}
                         </div>
+                        {/* Sprint 5.C feature (iii) — deep-link al panel
+                            narrativo expandido en este finding concreto. */}
+                        <button
+                          type="button"
+                          onClick={() => onViewNarrative(f.id)}
+                          className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-accent hover:text-accent/70 transition-colors"
+                          title="Abrir diagnóstico completo en este hallazgo"
+                        >
+                          Ver en diagnóstico
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -260,7 +274,7 @@ export default function ResultsNodePanel({
 
         {/* CTA — open full narrative */}
         <button
-          onClick={onViewNarrative}
+          onClick={() => onViewNarrative()}
           className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-warm-900 text-white text-xs font-semibold rounded-xl hover:bg-warm-800 transition-colors"
         >
           Ver diagnóstico completo

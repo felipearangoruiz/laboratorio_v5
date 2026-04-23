@@ -22,6 +22,9 @@ interface Props {
   onHighlightNodes: (nodeIds: string[]) => void;
   /** Soft highlight: highlights nodes in canvas without closing panel */
   onSoftHighlightNodes?: (nodeIds: string[]) => void;
+  /** Sprint 5.C feature (iii) — deep-link: si se pasa un findingId, el
+   *  panel hace scroll automático al finding y lo expande al montarse. */
+  targetFindingId?: string | null;
 }
 
 const DIM_LABELS: Record<string, string> = {
@@ -162,10 +165,30 @@ export default function NarrativePanel({
   onClose,
   onHighlightNodes,
   onSoftHighlightNodes,
+  targetFindingId,
 }: Props) {
-  const [expandedFinding, setExpandedFinding] = useState<string | null>(null);
+  const [expandedFinding, setExpandedFinding] = useState<string | null>(
+    targetFindingId ?? null,
+  );
   const findingRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // Sprint 5.C feature (iii) — deep-link scroll + expand al finding.
+  // Cada vez que cambia targetFindingId (el usuario abrió el panel desde
+  // el CTA "Ver en diagnóstico" de otro finding), expandimos ese id y
+  // scrolleamos su tarjeta a vista. Requiere un rAF porque las refs
+  // pueden no estar pobladas en el mismo tick del montaje.
+  useEffect(() => {
+    if (!targetFindingId) return;
+    setExpandedFinding(targetFindingId);
+    const raf = requestAnimationFrame(() => {
+      const el = findingRefs.current.get(targetFindingId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [targetFindingId]);
 
   // Escape key to close
   useEffect(() => {
