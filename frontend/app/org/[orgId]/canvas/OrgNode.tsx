@@ -24,6 +24,11 @@ export interface OrgNodeData {
    *  grosor del borde (std bajo → 1px, std alto → 5px). null si no hay
    *  datos (run pre-5.A o nodo sin entrada). */
   tensionStd?: number | null;
+  /** Sprint 5.B feature (iii) — nodo sin evidencia suficiente: no tiene
+   *  entrada en scores del run. Se renderiza en gris con tooltip, sobre-
+   *  escribiendo verde/amarillo/rojo. El grosor de borde se mantiene
+   *  (feature i) si hay std heredado del bucket. */
+  noEvidence?: boolean;
   isHighlighted?: boolean;  // false → 0.35 opacity; undefined/true → full opacity
   // Resultados layer
   findingCount?: number;    // total findings for this node
@@ -178,21 +183,41 @@ function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) 
 
   const hasTension        = showAnalysis && data.tensionScore !== undefined;
   const tc                = hasTension ? tensionColor(data.tensionScore!) : null;
+  // Sprint 5.B feature (iii) — marca de nodo sin evidencia en capa Análisis.
+  // Sobrescribe el color de tensión por gris neutro + tooltip. Se activa
+  // cuando el enrich de page.tsx no encontró el nodo en diagnosis.scores.
+  const noEvidence        = showAnalysis && data.noEvidence === true;
   const hasBadge          = showResultados && (data.findingCount ?? 0) > 0;
   const hasRing           = showResultados && data.isRingHighlighted === true;
   const opacity           = data.isHighlighted === false ? 0.35 : 1;
 
   // Sprint 5.B feature (i) — grosor de borde proporcional al std del nodo.
   // Solo aplica en capa Análisis; otras capas mantienen 1.5px / 2px.
-  const dynamicBorderWidth = hasTension ? edgeWidthFromStd(data.tensionStd) : null;
+  // Los nodos sin evidencia también tienen grosor dinámico si heredan std
+  // de su bucket (node_stds ≠ null aunque node_scores sí lo sea).
+  const dynamicBorderWidth = showAnalysis
+    ? edgeWidthFromStd(data.tensionStd)
+    : null;
+
+  // Color del borde en capa Análisis: verde/amarillo/rojo cuando hay
+  // tensión; gris neutro cuando está marcado como sin evidencia.
+  const NO_EVIDENCE_COLOR = "#9CA3AF"; // neutral-400
+  const dynamicBorderColor = noEvidence
+    ? NO_EVIDENCE_COLOR
+    : tc
+    ? tc.hex
+    : undefined;
 
   const borderClass = selected
     ? "border-[#C2410C] border-2 shadow-[0_0_0_3px_rgba(194,65,12,0.15)]"
-    : hasTension
-    ? ""  // borderWidth inline (ver dynamicBorderWidth)
+    : hasTension || noEvidence
+    ? ""  // borderWidth/borderColor inline (ver dynamicBorderWidth/Color)
     : showStatus && status !== "none"
     ? `${STATUS_BORDER[status]} border-[1.5px]`
     : "border-[#D4D0C8] border-[1.5px] hover:border-[#A8A29E]";
+
+  const noEvidenceTooltip =
+    "Sin evidencia suficiente: este nodo no tiene respondente activo, o su cobertura del instrumento es insuficiente.";
 
   return (
     <div
@@ -235,10 +260,11 @@ function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) 
       />
 
       <div
-        className={`bg-white rounded-[6px] px-4 py-3 transition-all ${borderClass}`}
+        className={`${noEvidence ? "bg-warm-50" : "bg-white"} rounded-[6px] px-4 py-3 transition-all ${borderClass}`}
+        title={noEvidence ? noEvidenceTooltip : undefined}
         style={{
           boxShadow: "0 4px 16px rgba(0,0,0,0.18)",
-          borderColor: tc ? tc.hex : undefined,
+          borderColor: dynamicBorderColor,
           borderStyle: dynamicBorderWidth !== null ? "solid" : undefined,
           borderWidth:
             dynamicBorderWidth !== null ? `${dynamicBorderWidth}px` : undefined,
@@ -272,8 +298,17 @@ function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) 
           </div>
 
           {/* Tension dot — análisis layer */}
-          {hasTension && tc && (
+          {hasTension && !noEvidence && tc && (
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${tc.dot}`} />
+          )}
+
+          {/* Sin evidencia — dot gris con tooltip (Sprint 5.B feature iii) */}
+          {noEvidence && (
+            <div
+              className="w-2 h-2 rounded-full flex-shrink-0 bg-neutral-400"
+              title={noEvidenceTooltip}
+              aria-label={noEvidenceTooltip}
+            />
           )}
 
           {/* Status dot — recoleccion layer */}

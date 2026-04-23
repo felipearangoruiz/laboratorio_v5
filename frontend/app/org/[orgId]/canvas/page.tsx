@@ -379,10 +379,29 @@ export default function CanvasPage() {
             ? new Set(topTensionNodes(diagnosis.scores, activeDimension, 3))
             : null;
 
+        // Sprint 5.B feature (iii) — precomputo nodos CON evidencia directa.
+        // Un nodo tiene evidencia si aparece en al menos una dim.node_scores
+        // del run. Nodos que solo heredan std (sin score propio) se marcan
+        // como sin evidencia: la modulación de borde por std se mantiene,
+        // pero el color de tensión se reemplaza por gris neutro con tooltip.
+        //
+        // Esto cubre pragmáticamente los tres criterios del spec: (1) nodo
+        // sin entrada en scores, (2) nodo sin node_analysis (el backend
+        // solo agrega scores de members con interview completed; nodos sin
+        // respondiente no entran), y proxy débil de (3) coverage<0.5 (si
+        // nadie respondió, el nodo no figura).
+        const nodesWithEvidence = new Set<string>();
+        for (const dimData of Object.values(diagnosis.scores || {})) {
+          for (const nid of Object.keys(dimData.node_scores || {})) {
+            nodesWithEvidence.add(nid);
+          }
+        }
+
         // Enrich with tension scores + highlighting for análisis layer
         const enriched = n.map((node) => {
           const tension = computeNodeTension(node.id, diagnosis.scores, activeDimension);
           const tensionStd = computeNodeStd(node.id, diagnosis.scores, activeDimension);
+          const hasEvidence = nodesWithEvidence.has(node.id);
           let isHighlighted: boolean | undefined = undefined;
 
           if (highlightedNodeIds !== null) {
@@ -398,7 +417,13 @@ export default function CanvasPage() {
 
           return {
             ...node,
-            data: { ...node.data, tensionScore: tension, tensionStd, isHighlighted },
+            data: {
+              ...node.data,
+              tensionScore: tension,
+              tensionStd,
+              noEvidence: !hasEvidence,
+              isHighlighted,
+            },
           };
         });
         setNodes(enriched);
