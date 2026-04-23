@@ -175,6 +175,40 @@ def _call_llm(client: OpenAI, model: str, system_prompt: str, user_content: str)
 # (aplicada a hallazgos del Paso 4, no al LLM)
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Sprint 4.B.1 — umbrales para convergencia cuanti+cuali.
+#
+# Los `dimension_scores` del org_analysis están normalizados a [0, 1] (ver
+# _compute_node_scores en backend/app/routers/analysis.py). Un score bajo
+# indica debilidad cuantitativa en esa dimensión; un std alto indica
+# divergencia entre respondentes. Si el finding toca una dimensión que
+# cumple cualquiera de los dos, la señal cualitativa tiene respaldo
+# cuantitativo → convergencia.
+CONVERGENCE_SCORE_THRESHOLD = 0.50   # score <  umbral → respaldo cuantitativo
+CONVERGENCE_STD_THRESHOLD = 0.25     # std   >  umbral → respaldo por dispersión
+
+
+def _has_quanti_quali_convergence(
+    finding_dimensions: list[str],
+    dimension_scores: dict[str, dict[str, float]],
+) -> bool:
+    """True si alguna `dimension` del finding tiene respaldo cuantitativo
+    agregado (score bajo o std alto) en el org_analysis.
+
+    Reemplaza el chequeo previo `bool(f.get("dimensions"))` que era un bug:
+    solo verificaba que la lista estuviera poblada y por eso aplicaba +0.10
+    a casi todos los findings.
+    """
+    for dim in finding_dimensions:
+        stats = dimension_scores.get(dim) or {}
+        score = stats.get("score")
+        std = stats.get("std")
+        if isinstance(score, (int, float)) and score < CONVERGENCE_SCORE_THRESHOLD:
+            return True
+        if isinstance(std, (int, float)) and std > CONVERGENCE_STD_THRESHOLD:
+            return True
+    return False
+
+
 def _compute_confidence(
     pattern_group_count: int,      # en cuántos grupos aparece este patrón
     has_quanti_quali_convergence: bool,
@@ -611,6 +645,10 @@ def _run_paso4(
     total_nodes = input_data["structure"]["total_nodes"]
     total_with_iv = input_data["structure"].get("total_with_interview", 0)
     org_coverage = total_with_iv / max(1, total_nodes)
+    # Sprint 4.B.1 — scores agregados del org_analysis para chequear
+    # convergencia cuanti+cuali real (antes era `bool(f.get("dimensions"))`,
+    # que siempre daba True si había dimensiones).
+    org_dimension_scores = org_analysis_full.get("dimension_scores", {}) or {}
 
     findings_out = []
     for f in result.get("findings", []):
@@ -618,7 +656,9 @@ def _run_paso4(
         # Confianza calculada por sistema (override la del LLM)
         sys_confidence = _compute_confidence(
             pattern_group_count=len(node_ids),
-            has_quanti_quali_convergence=bool(f.get("dimensions")),
+            has_quanti_quali_convergence=_has_quanti_quali_convergence(
+                f.get("dimensions", []), org_dimension_scores,
+            ),
             coverage=org_coverage,
             only_one_node=len(node_ids) == 1,
         )
