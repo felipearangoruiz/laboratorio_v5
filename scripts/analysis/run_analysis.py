@@ -215,6 +215,7 @@ def _compute_confidence(
     coverage: float,               # 0–1
     score_std: float | None = None,
     only_one_node: bool = False,
+    has_verified_evidence: bool = False,
 ) -> float:
     """Implementa la fórmula de confianza del contrato técnico.
 
@@ -225,6 +226,8 @@ def _compute_confidence(
     - si coverage < 40%: -0.20
     - si alta dispersión (std > 1.5): -0.10
     - si solo un nodo lo reporta: -0.20
+      (atenuado a -0.10 si el finding tiene evidence_links con quotes
+      poblados — Sprint 4.B Ronda 3: cita textual es triangulación)
     ────────────────────────────────────────────
     Máximo: 0.95   Mínimo: 0.10
     """
@@ -240,7 +243,12 @@ def _compute_confidence(
     if score_std is not None and score_std > 1.5:
         c -= 0.10
     if only_one_node:
-        c -= 0.20
+        # Sprint 4.B Ronda 3. Findings con evidence_links cuyos `quote` están
+        # poblados se consideran triangulados por evidencia textual y reciben
+        # penalty menor por single-node. La verificación textual literal contra
+        # el input se valida en smoke test (CHECK F); en runtime confiamos en
+        # que el prompt del Paso 4 fuerza quotes textuales del input.
+        c -= 0.10 if has_verified_evidence else 0.20
     return round(max(0.10, min(0.95, c)), 2)
 
 
@@ -657,6 +665,13 @@ def _run_paso4(
     findings_out = []
     for f in result.get("findings", []):
         node_ids = f.get("node_ids", [])
+        # Sprint 4.B Ronda 3 — evidencia verificada atenúa el penalty de
+        # single-node. Criterio: al menos un evidence_link con `quote` no vacío.
+        finding_evidence_links = f.get("evidence_links", []) or []
+        has_verified_evidence = any(
+            (el.get("quote") or "").strip()
+            for el in finding_evidence_links
+        )
         # Confianza calculada por sistema (override la del LLM)
         sys_confidence = _compute_confidence(
             pattern_group_count=len(node_ids),
@@ -665,6 +680,7 @@ def _run_paso4(
             ),
             coverage=org_coverage,
             only_one_node=len(node_ids) == 1,
+            has_verified_evidence=has_verified_evidence,
         )
         rationale_parts = [f"coverage_org={org_coverage:.0%}"]
         if len(node_ids) > 1:
