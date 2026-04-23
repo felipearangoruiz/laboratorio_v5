@@ -312,6 +312,24 @@ export default function CanvasPage() {
     return tops;
   }, [diagnosis]);
 
+  // ── Sprint 5.C feature (ii) — set de nodos con insights ─────────────
+  // Unión de node_ids citados en findings y recommendations del run.
+  // En capa Resultados, los nodos fuera del set se renderizan con
+  // opacity reducida (distinto del gris de "sin evidencia" de la capa
+  // Análisis — acá sí hay evidencia, solo que el motor no produjo
+  // hallazgo asociado a ese nodo).
+  const nodesWithInsights = useMemo<Set<string>>(() => {
+    if (!diagnosis) return new Set();
+    const set = new Set<string>();
+    for (const f of diagnosis.findings || []) {
+      for (const nid of f.node_ids || []) set.add(nid);
+    }
+    for (const r of diagnosis.recommendations || []) {
+      for (const nid of r.node_ids || []) set.add(nid);
+    }
+    return set;
+  }, [diagnosis]);
+
   // Load org structure type desde OrgContext (evita re-fetch).
   useEffect(() => {
     if (organization?.org_structure_type) {
@@ -488,6 +506,7 @@ export default function CanvasPage() {
         const enriched = n.map((node) => {
           const fc           = nodeFindingCounts[node.id] ?? 0;
           const topTitle     = nodeTopFinding[node.id];
+          const hasInsights  = nodesWithInsights.has(node.id);
           let isHighlighted: boolean | undefined  = undefined;
           let isRingHighlighted: boolean | undefined = undefined;
 
@@ -503,6 +522,7 @@ export default function CanvasPage() {
               ...node.data,
               findingCount:    fc,
               topFindingTitle: topTitle,
+              hasInsights,
               isHighlighted,
               isRingHighlighted,
             },
@@ -522,7 +542,7 @@ export default function CanvasPage() {
     modelNodes, modelEdges, nodeStates, activeCampaign,
     activeLayer, diagnosis,
     activeDimension, hoveredDimension, highlightedNodeIds,
-    nodeFindingCounts, nodeTopFinding,
+    nodeFindingCounts, nodeTopFinding, nodesWithInsights,
     setNodes, setEdges,
   ]);
 

@@ -33,6 +33,11 @@ export interface OrgNodeData {
   // Resultados layer
   findingCount?: number;    // total findings for this node
   topFindingTitle?: string; // tooltip text for the badge
+  /** Sprint 5.C feature (ii) — nodo que aparece en la unión
+   *  findings[*].node_ids ∪ recommendations[*].node_ids del run.
+   *  Cuando es false en capa Resultados, se renderiza con opacity
+   *  reducida para diferenciar de los nodos con hallazgos asociados. */
+  hasInsights?: boolean;
   isRingHighlighted?: boolean; // true → animated accent ring (bidirectional nav)
 }
 
@@ -193,7 +198,17 @@ function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) 
   // pertenece al top-3 de esa dimensión. El marcado sticky del top-3
   // (feature ii) usa opacity, el ring es un feedback adicional de hover.
   const hasRing           = (showResultados || showAnalysis) && data.isRingHighlighted === true;
-  const opacity           = data.isHighlighted === false ? 0.35 : 1;
+  // Sprint 5.C feature (ii) — nodos sin insights en capa Resultados se
+  // atenúan a 0.5. Si el panel fuerza un atenuado fuerte (isHighlighted
+  // === false → 0.35) ese valor gana (es intencional del filtrado
+  // activo). El atenuado por "sin insights" es un estado de base.
+  const resultsNoInsights = showResultados && data.hasInsights === false;
+  const opacity =
+    data.isHighlighted === false
+      ? 0.35
+      : resultsNoInsights
+      ? 0.5
+      : 1;
 
   // Sprint 5.B feature (i) — grosor de borde proporcional al std del nodo.
   // Solo aplica en capa Análisis; otras capas mantienen 1.5px / 2px.
