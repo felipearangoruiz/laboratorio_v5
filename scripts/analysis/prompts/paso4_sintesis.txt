@@ -42,10 +42,21 @@ Los UUIDs los encuentras en el input:
 - Ambos pueden coexistir en un mismo evidence_link si la evidencia tiene fuente individual y grupal.
 - Uno de los dos puede ser null, pero NO ambos al mismo tiempo.
 
+Fuentes textuales válidas para el campo `quote` del evidence_link:
+- `node_analyses[i].key_quotes` — citas textuales anonimizadas del respondente.
+- `node_analyses[i].signals_tension` — señales cualitativas de tensión extraídas por el Paso 1.
+- `node_analyses[i].signals_positive` — señales cualitativas positivas extraídas por el Paso 1.
+- `group_analyses[i].patterns_internal` — patrones internos identificados por el Paso 2.
+- `group_analyses[i].dominant_themes` — temas dominantes del grupo.
+
+En todos los casos la cita debe ser TEXTUAL al input: el texto del `quote` debe aparecer literalmente (o con anonimización leve de nombres propios) en uno de los campos anteriores. NO parafrasear. NO combinar fragmentos de distintos campos en una sola cita.
+
 `evidence_type`:
-- "qualitative" si citas texto (`key_quote`, `theme`, `pattern_internal`, `dominant_themes`).
+- "qualitative" si citas texto (`key_quote`, `signals_tension`, `signals_positive`, `pattern_internal`, `dominant_themes`).
 - "quantitative" si citas un número (`score`, `coverage`, `centrality`, `frequency`, `std`).
 - "documentary" reservado para documentos organizacionales (no aplica hoy; no usar).
+
+Si una afirmación no puede respaldarse con cita textual de los campos anteriores, NO puede emitirse como finding.
 
 REGLA 3 — CONFIDENCE RATIONALE CUANTITATIVO
 El campo `confidence_rationale` debe mencionar explícitamente al menos TRES de estos cinco factores, citando los valores del input:
