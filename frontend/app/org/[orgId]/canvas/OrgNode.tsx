@@ -188,7 +188,11 @@ function OrgNodeAnalysisResultsView({ data, selected }: NodeProps<OrgNodeData>) 
   // cuando el enrich de page.tsx no encontró el nodo en diagnosis.scores.
   const noEvidence        = showAnalysis && data.noEvidence === true;
   const hasBadge          = showResultados && (data.findingCount ?? 0) > 0;
-  const hasRing           = showResultados && data.isRingHighlighted === true;
+  // Sprint 5.B feature (iv) — el ring también pulsa en capa Análisis cuando
+  // el usuario hace hover sobre una fila de dimensión del panel y este nodo
+  // pertenece al top-3 de esa dimensión. El marcado sticky del top-3
+  // (feature ii) usa opacity, el ring es un feedback adicional de hover.
+  const hasRing           = (showResultados || showAnalysis) && data.isRingHighlighted === true;
   const opacity           = data.isHighlighted === false ? 0.35 : 1;
 
   // Sprint 5.B feature (i) — grosor de borde proporcional al std del nodo.

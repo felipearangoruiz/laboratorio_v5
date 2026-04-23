@@ -15,6 +15,10 @@ interface Props {
   /** Sprint 5.B feature (ii) — clic en score de dimensión: el canvas
    *  resalta top-3 de esa dimensión y atenúa el resto. */
   onDimensionClick?: (dimension: string) => void;
+  /** Sprint 5.B feature (iv) — hover efímero sobre una fila de dimensión:
+   *  el canvas pulsa el ring en el top-3 de esa dim sin fijar estado.
+   *  Se dispara con la dim al onMouseEnter y con null al onMouseLeave. */
+  onDimensionHover?: (dimension: string | null) => void;
 }
 
 const DIM_LABELS: Record<string, string> = {
@@ -67,12 +71,15 @@ function ConfidenceBar({ value }: { value: number }) {
 function DimensionScoresList({
   dimScores,
   onDimensionClick,
+  onDimensionHover,
 }: {
   dimScores: { dim: string; nodeScore: number; orgAvg: number }[];
   onDimensionClick?: (dim: string) => void;
+  onDimensionHover?: (dim: string | null) => void;
 }) {
   if (dimScores.length === 0) return null;
   const clickable = typeof onDimensionClick === "function";
+  const hoverable = typeof onDimensionHover === "function";
 
   return (
     <div>
@@ -114,13 +121,29 @@ function DimensionScoresList({
             </>
           );
 
-          if (!clickable) return <div key={dim}>{content}</div>;
+          const hoverHandlers = hoverable
+            ? {
+                onMouseEnter: () => onDimensionHover!(dim),
+                onMouseLeave: () => onDimensionHover!(null),
+                onFocus:       () => onDimensionHover!(dim),
+                onBlur:        () => onDimensionHover!(null),
+              }
+            : {};
+
+          if (!clickable) {
+            return (
+              <div key={dim} {...hoverHandlers}>
+                {content}
+              </div>
+            );
+          }
 
           return (
             <button
               key={dim}
               type="button"
               onClick={() => onDimensionClick!(dim)}
+              {...hoverHandlers}
               className="w-full text-left cursor-pointer rounded-md px-1 py-0.5 -mx-1 -my-0.5 hover:bg-warm-100 focus:bg-warm-100 focus:outline-none transition-colors"
               title={`Ver top-3 nodos con más tensión en ${dimLabel(dim)}`}
             >
@@ -141,6 +164,7 @@ export default function AnalysisNodePanel({
   onClose,
   onNavigateToResults,
   onDimensionClick,
+  onDimensionHover,
 }: Props) {
   const [nodeAnalysis, setNodeAnalysis] = useState<NodeAnalysisRead | null>(null);
   const [loading, setLoading] = useState(true);
@@ -337,6 +361,7 @@ export default function AnalysisNodePanel({
                 <DimensionScoresList
                   dimScores={dimScores}
                   onDimensionClick={onDimensionClick}
+                  onDimensionHover={onDimensionHover}
                 />
               </>
             ) : (

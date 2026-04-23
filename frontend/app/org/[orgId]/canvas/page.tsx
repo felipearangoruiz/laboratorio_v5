@@ -274,6 +274,9 @@ export default function CanvasPage() {
   }, [nodeStates, activeCampaign]);
   // Analysis layer state
   const [activeDimension,   setActiveDimension]   = useState<string | null>(null);
+  // Sprint 5.B feature (iv) — hover efímero sobre una fila de dimensión
+  // del panel para ver el top-3 pulsar en canvas sin fijar estado.
+  const [hoveredDimension,  setHoveredDimension]  = useState<string | null>(null);
   const [showNarrative,     setShowNarrative]     = useState(false);
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string> | null>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -379,6 +382,14 @@ export default function CanvasPage() {
             ? new Set(topTensionNodes(diagnosis.scores, activeDimension, 3))
             : null;
 
+        // Sprint 5.B feature (iv) — set efímero para pulse al hover del
+        // panel sobre una fila de dimensión. No afecta isHighlighted
+        // (el top-3 sticky se mantiene), solo dispara la animación ring.
+        const hoverTop3Set: Set<string> | null =
+          hoveredDimension !== null
+            ? new Set(topTensionNodes(diagnosis.scores, hoveredDimension, 3))
+            : null;
+
         // Sprint 5.B feature (iii) — precomputo nodos CON evidencia directa.
         // Un nodo tiene evidencia si aparece en al menos una dim.node_scores
         // del run. Nodos que solo heredan std (sin score propio) se marcan
@@ -415,6 +426,9 @@ export default function CanvasPage() {
             }
           }
 
+          const isRingHighlighted =
+            hoverTop3Set !== null && hoverTop3Set.has(node.id);
+
           return {
             ...node,
             data: {
@@ -423,6 +437,7 @@ export default function CanvasPage() {
               tensionStd,
               noEvidence: !hasEvidence,
               isHighlighted,
+              isRingHighlighted,
             },
           };
         });
@@ -466,7 +481,7 @@ export default function CanvasPage() {
   }, [
     modelNodes, modelEdges, nodeStates, activeCampaign,
     activeLayer, diagnosis,
-    activeDimension, highlightedNodeIds,
+    activeDimension, hoveredDimension, highlightedNodeIds,
     nodeFindingCounts, nodeTopFinding,
     setNodes, setEdges,
   ]);
@@ -933,6 +948,7 @@ export default function CanvasPage() {
                 setActiveDimension(dim);
                 setHighlightedNodeIds(null);
               }}
+              onDimensionHover={setHoveredDimension}
             />
           )}
 
