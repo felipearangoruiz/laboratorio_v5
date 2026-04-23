@@ -20,6 +20,7 @@ import {
   updateGroup,
   deleteGroup,
   updatePositions,
+  updateNodePositions,
   getCollectionStatus,
   getLatestDiagnosis,
   getAnalysisStatus,
@@ -41,7 +42,7 @@ import DiagnosisGate from "./DiagnosisGate";
 import Sidebar from "./Sidebar";
 import EmptyState from "./EmptyState";
 import LayerSelector from "./LayerSelector";
-import { Loader2, Plus, User, Users } from "lucide-react";
+import { LayoutGrid, Loader2, Plus, User, Users } from "lucide-react";
 import { useCanvasData } from "@/lib/hooks/useCanvasData";
 import { useActiveCampaign } from "@/lib/hooks/useActiveCampaign";
 import { useOrg } from "@/lib/contexts/OrgContext";
@@ -210,6 +211,12 @@ export default function CanvasPage() {
   const [showNarrative,     setShowNarrative]     = useState(false);
   const [highlightedNodeIds, setHighlightedNodeIds] = useState<Set<string> | null>(null);
   const dragTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Auto-layout explícito (botón "Reordenar automáticamente")
+  const [autoLayoutLoading, setAutoLayoutLoading] = useState(false);
+  const [autoLayoutFeedback, setAutoLayoutFeedback] = useState<
+    { kind: "ok" | "error"; message: string } | null
+  >(null);
 
   const isEmpty = !canvasLoading && modelNodes.length === 0;
 
@@ -397,6 +404,73 @@ export default function CanvasPage() {
     setSelectedNode(node.id);
   }, []);
 
+  /**
+   * "Reordenar automáticamente" — modo explícito.
+   * Recomputa layout con dagre usando los nodos visibles actuales,
+   * aplica el nuevo layout a React Flow, persiste en DB vía
+   * PATCH /nodes/positions, y refresca useCanvasData. En error,
+   * revierte las posiciones visuales al snapshot previo.
+   */
+  const handleAutoLayout = useCallback(async () => {
+    if (nodes.length === 0 || autoLayoutLoading) return;
+    setAutoLayoutFeedback(null);
+
+    const snapshot = nodes.map((n) => ({
+      id: n.id,
+      position: { x: n.position.x, y: n.position.y },
+    }));
+
+    const layout = computeAutoLayout(nodes, edges);
+    const relocated = nodes.map((n) => {
+      const pos = layout[n.id];
+      return pos ? { ...n, position: pos } : n;
+    });
+    setNodes(relocated);
+    setAutoLayoutLoading(true);
+
+    try {
+      await updateNodePositions(
+        orgId,
+        relocated.map((n) => ({
+          id: n.id,
+          x: n.position.x,
+          y: n.position.y,
+        })),
+      );
+      try {
+        await refetchCanvas();
+      } catch {
+        // Persistencia OK pero refetch falló: no revertimos.
+        setAutoLayoutFeedback({
+          kind: "ok",
+          message: "Layout aplicado (no se pudo refrescar).",
+        });
+        return;
+      }
+      setAutoLayoutFeedback({ kind: "ok", message: "Layout aplicado" });
+    } catch (err: any) {
+      // Revertir al snapshot visual.
+      setNodes((current) =>
+        current.map((n) => {
+          const prev = snapshot.find((s) => s.id === n.id);
+          return prev ? { ...n, position: prev.position } : n;
+        }),
+      );
+      setAutoLayoutFeedback({
+        kind: "error",
+        message: err?.message || "No se pudo aplicar el layout",
+      });
+    } finally {
+      setAutoLayoutLoading(false);
+    }
+  }, [nodes, edges, orgId, refetchCanvas, setNodes, autoLayoutLoading]);
+
+  useEffect(() => {
+    if (!autoLayoutFeedback) return;
+    const t = setTimeout(() => setAutoLayoutFeedback(null), 3000);
+    return () => clearTimeout(t);
+  }, [autoLayoutFeedback]);
+
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
     setShowNodeTypeSelector(false);
@@ -533,7 +607,8 @@ export default function CanvasPage() {
         />
 
         {/* Sprint 2.B: indicador compacto de progreso en la capa Estructura.
-            Reemplaza la barra CollectionProgress del tab eliminado. */}
+            Reemplaza la barra CollectionProgress del tab eliminado.
+            Incluye el botón "Reordenar automáticamente" (auto-layout). */}
         {activeLayer === "estructura" && !isEmpty && (() => {
           const personNodes = modelNodes.filter((n) => n.type === "person");
           const total = personNodes.length;
@@ -545,16 +620,45 @@ export default function CanvasPage() {
                 (!activeCampaign || ns.campaign_id === activeCampaign.id),
             ),
           ).length;
-          if (total === 0) return null;
+          const canAutoLayout = nodes.length > 1;
+          if (total === 0 && !canAutoLayout) return null;
           return (
             <div
-              className="h-8 flex items-center px-4 text-[11px] text-white/50 border-b"
+              className="h-8 flex items-center justify-between px-4 text-[11px] text-white/50 border-b"
               style={{
                 background: "rgba(13,13,20,0.6)",
                 borderBottomColor: "rgba(255,255,255,0.06)",
               }}
             >
-              {completed} de {total} miembros respondieron
+              <span>
+                {total > 0 && `${completed} de ${total} miembros respondieron`}
+              </span>
+              <div className="flex items-center gap-3">
+                {autoLayoutFeedback && (
+                  <span
+                    className={
+                      autoLayoutFeedback.kind === "ok"
+                        ? "text-white/60"
+                        : "text-red-400/80"
+                    }
+                  >
+                    {autoLayoutFeedback.message}
+                  </span>
+                )}
+                <button
+                  onClick={handleAutoLayout}
+                  disabled={!canAutoLayout || autoLayoutLoading}
+                  className="inline-flex items-center gap-1.5 px-2 py-1 rounded border border-white/10 hover:border-white/20 hover:bg-white/5 text-white/70 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  title="Recomputa posiciones con un layout jerárquico"
+                >
+                  {autoLayoutLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin" strokeWidth={1.5} />
+                  ) : (
+                    <LayoutGrid className="w-3 h-3" strokeWidth={1.5} />
+                  )}
+                  <span>Reordenar automáticamente</span>
+                </button>
+              </div>
             </div>
           );
         })()}

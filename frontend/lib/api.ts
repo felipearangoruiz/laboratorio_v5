@@ -338,6 +338,24 @@ export async function updatePositions(
   );
 }
 
+/**
+ * Bulk update posiciones de nodos directamente en la tabla `nodes`.
+ * Soporta tanto units como persons (a diferencia del legacy
+ * /groups/positions, que sólo mueve Groups).
+ */
+export async function updateNodePositions(
+  orgId: string,
+  positions: { id: string; x: number; y: number }[],
+) {
+  return request<{ updated: number }>(
+    `/organizations/${orgId}/nodes/positions`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ positions }),
+    },
+  );
+}
+
 export async function getTemplates(orgId: string) {
   return request<{ id: string; name: string; description: string }[]>(
     `/organizations/${orgId}/canvas/templates`
