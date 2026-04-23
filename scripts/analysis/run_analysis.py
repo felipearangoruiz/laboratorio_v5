@@ -398,9 +398,15 @@ def _run_paso2(
         completed_in_group = sum(1 for n in member_nodes if n.get("has_interview"))
         coverage = completed_in_group / max(1, len(member_nodes))
 
+        # Sprint 4.B.1: size = número de respondentes del grupo con node_analysis.
+        # Los grupos size=1 no pueden sostener patrones internos (un patrón
+        # requiere repetición o divergencia entre al menos dos voces).
+        size = len(nodes_with_analysis)
+
         llm_input = {
             "group_name": grp_name,
             "group_area": group_node.get("area", ""),
+            "size": size,
             # Inyectamos los dicts completos del Paso 1 (no solo IDs).
             "node_analyses": [node_analyses_full[n["id"]] for n in nodes_with_analysis],
             "quantitative_scores": quantitative_scores,
@@ -413,11 +419,19 @@ def _run_paso2(
         _log(f"  → Grupo '{grp_name}' ({MODEL_PASO2}, {len(nodes_with_analysis)} nodos)…")
         result = _call_llm(client, MODEL_PASO2, system_prompt, "Sintetiza este grupo y devuelve el JSON.")
 
+        # Defensa en profundidad: el prompt instruye que size=1 → patterns_internal=[],
+        # pero el código lo fuerza aunque el LLM lo devuelva poblado.
+        if size == 1:
+            patterns_internal = []
+        else:
+            patterns_internal = result.get("patterns_internal", [])
+
         content = {
             "group_id": group_id,
             "group_name": grp_name,
             "group_area": group_node.get("area", ""),
-            "patterns_internal": result.get("patterns_internal", []),
+            "size": size,
+            "patterns_internal": patterns_internal,
             "dominant_themes": result.get("dominant_themes", []),
             "tension_level": result.get("tension_level", "medio"),
             "scores_by_dimension": result.get("scores_by_dimension", {}),

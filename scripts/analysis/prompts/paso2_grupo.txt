@@ -15,6 +15,14 @@ INSTRUCCIONES:
 7. La coverage ya viene calculada en el input; úsala para ponderar tu confianza.
 8. NO repitas los análisis individuales; sintetiza patrones del grupo.
 
+REGLA ESPECIAL — GRUPOS DE UN SOLO RESPONDENTE:
+Si el grupo tiene `size: 1` (un solo respondente en el input), NO generes
+patterns_internal. Un patrón requiere repetición o divergencia entre al
+menos dos respondentes. En ese caso devuelve `patterns_internal: []`.
+`dominant_themes` sí es válido (son los themes del único respondente).
+`tension_level`, `scores_by_dimension` y `coverage` siguen siendo válidos.
+Refleja siempre el `size` recibido en el output.
+
 CAMPOS VÁLIDOS:
 - tension_level: "bajo" | "medio" | "alto" | "critico"
   * bajo: señales positivas dominan, pocas fricciones
@@ -31,6 +39,7 @@ CAMPOS VÁLIDOS:
 
 OUTPUT (devuelve exactamente este JSON, sin campos adicionales):
 {
+  "size": 0,
   "patterns_internal": [{"pattern": "string", "frequency": 0}],
   "dominant_themes": ["string"],
   "tension_level": "bajo|medio|alto|critico",
