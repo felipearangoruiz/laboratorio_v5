@@ -30,3 +30,4 @@ frontend/tsconfig.tsbuildinfo
 .env.*.local
 scripts/analysis/.env*
 scripts/analysis/.state_*.json
+scripts/analysis/output_post_*.md

@@ -17,6 +17,8 @@
 
 El motor **nunca envía datos crudos al LLM**. Siempre construye representaciones intermedias primero.
 
+> **Encadenamiento entre pasos (Sprint 4.A — 2026-04-23).** Cada paso devuelve dos cosas: (a) el id persistido en BD y (b) el dict completo que produjo el LLM. El dict completo se acumula en memoria local del script (`state["node_analyses_full"]`, `state["group_analyses_full"]`, `state["org_analysis_full"]`) y se inyecta íntegro en el prompt del siguiente paso. Antes del Sprint 4.A el script solo propagaba los IDs, lo que dejaba al Paso 4 operando sobre un resumen filtrado del Paso 3 — los hallazgos resultantes no podían referenciar `key_quotes`, `signals_tension` o `patterns_internal` porque nunca llegaban al prompt. Los state files generados antes de 4.A no son retrocompatibles; un run interrumpido bajo el formato viejo debe reiniciarse desde cero.
+
 ### PASO 1 — Extracción por nodo (un prompt por persona/nodo)
 
 **Input:**
@@ -395,6 +397,13 @@ El motor es correcto si puede responder **sin recalcular todo desde cero**:
 4. ¿Qué tres temas afectan más de una dimensión a la vez?
 
 Si responder cualquiera de estas preguntas requiere re-ejecutar el pipeline completo, hay un problema de diseño en el schema de tablas intermedias.
+
+---
+
+## Registro de cambios
+
+- **2026-04-23 — Sprint 4.A.** Encadenamiento corregido: cada paso propaga el dict completo del LLM al siguiente, no solo su id. State file gana tres claves nuevas (`node_analyses_full`, `group_analyses_full`, `org_analysis_full`) y rompe retrocompatibilidad con state files anteriores. Payload de POST al backend en Pasos 1 y 2 pasa a usar `node_id` (antes enviaba el obsoleto `group_id`, deuda Sprint 3).
+- **2026-04-22 — Sprint 3.** Rename `group_id` → `node_id` en tablas `node_analyses` y `group_analyses` (migración `20260423_0012`). FK ahora apunta a `nodes(id)`.
 
 ---
 
