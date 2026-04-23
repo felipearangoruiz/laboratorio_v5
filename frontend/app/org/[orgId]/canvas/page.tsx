@@ -47,6 +47,10 @@ import { useActiveCampaign } from "@/lib/hooks/useActiveCampaign";
 import { useOrg } from "@/lib/contexts/OrgContext";
 import { toLegacyOrgNodeData } from "@/lib/view-models/legacyOrgNodeAdapter";
 import { computeAreaStatus } from "@/lib/view-models/areaStatus";
+import {
+  computeAutoLayout,
+  nodesNeedAutoLayout,
+} from "@/lib/canvas/autoLayout";
 import type { Node as ModelNode } from "@/lib/types";
 
 const nodeTypes = { orgNode: OrgNode };
@@ -265,13 +269,30 @@ export default function CanvasPage() {
   // Re-render ReactFlow cuando cambian Node/Edge/NodeState/capa/campaña.
   useEffect(() => {
     if (modelNodes.length > 0) {
-      const { nodes: n, edges: e } = buildFlowFromModel(
+      const built = buildFlowFromModel(
         modelNodes,
         nodeStates,
         modelEdges,
         activeCampaign?.id ?? null,
         activeLayer,
       );
+
+      // Auto-layout silencioso en capa Estructura: si los nodos vienen
+      // del backend con posiciones default (todos cerca del origen),
+      // aplicar dagre antes del primer render para que el canvas sea
+      // navegable. NO persiste; en cuanto el admin arrastre un nodo
+      // la detección dejará de disparar. Análisis y Resultados
+      // quedan afuera de este sprint.
+      if (activeLayer === "estructura" && nodesNeedAutoLayout(built.nodes)) {
+        const layout = computeAutoLayout(built.nodes, built.edges);
+        built.nodes = built.nodes.map((node) => {
+          const pos = layout[node.id];
+          return pos ? { ...node, position: pos } : node;
+        });
+      }
+
+      const n = built.nodes;
+      const e = built.edges;
 
       if (activeLayer === "analisis" && diagnosis?.status === "ready") {
         // Enrich with tension scores + highlighting for análisis layer
